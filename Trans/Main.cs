@@ -90,35 +90,6 @@ namespace Trans
                 );
             }
 
-            /*foreach (var i in Enumerable.Repeat(0, 5))
-            {
-                var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded<int>(n)).ToArray();
-                transactionCounter = 0;
-                mtTest("shielded write", 1000, _ =>
-                {
-                    var rnd = randomizr.Next(100);
-                    return Task.Factory.StartNew(() =>
-                    {
-                        Shield.InTransaction(() =>  
-                        {
-                            Interlocked.Increment(ref transactionCounter);
-                            int v = shx[rnd].Read;
-                            Thread.Sleep(10);
-                            shx[rnd].Write = v + 1;
-                        });
-                    },
-                    TaskCreationOptions.LongRunning
-                    );
-                },
-                time =>
-                {
-                    var correct = shx.Sum(s => s.Read) == 1000;
-                    Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
-                        time, transactionCounter, correct ? "correct" : "incorrect");
-                }
-                );
-            }*/
-
             foreach (var i in Enumerable.Repeat(0, 5))
             {
                 var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded<int>(n)).ToArray();
