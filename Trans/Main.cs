@@ -90,7 +90,7 @@ namespace Trans
                 );
             }
 
-            foreach (var i in Enumerable.Repeat(0, 5))
+            /*foreach (var i in Enumerable.Repeat(0, 5))
             {
                 var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded<int>(n)).ToArray();
                 transactionCounter = 0;
@@ -117,11 +117,11 @@ namespace Trans
                         time, transactionCounter, correct ? "correct" : "incorrect");
                 }
                 );
-            }
+            }*/
 
             foreach (var i in Enumerable.Repeat(0, 5))
             {
-                var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded2<int>()).ToArray();
+                var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded2<int>(n)).ToArray();
                 transactionCounter = 0;
                 mtTest("shielded2 write", 1000, _ =>
                 {
@@ -210,7 +210,7 @@ namespace Trans
                                 Shield.SideEffect(() => list.Add(
                                     new Transfer() { OtherId = acc2.Read.Id, AmountReceived = -100M }));
                             });
-                            Thread.Sleep(250);
+                            Thread.Sleep(500);
                             acc2.Modify((ref Account a) =>
                             {
                                 a.Balance = a.Balance + 100M;
@@ -264,11 +264,11 @@ namespace Trans
 
 		public static void Main(string[] args)
         {
-            //TimeTests();
+            TimeTests();
 
             //OneTransaction();
 
-            ControlledRace();
+            //ControlledRace();
         }
 	}
 }

@@ -13,7 +13,7 @@ namespace Trans
         // always spin wait, their stamp is always larger.
         bool CanCommit(bool strict, long writeStamp);
         bool Commit(long writeStamp);
-        void Rollback();
+        void Rollback(long? writeStamp = null);
         void TrimCopies(long smallestOpenTransactionId);
     }
 }

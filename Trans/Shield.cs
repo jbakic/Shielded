@@ -20,7 +20,6 @@ namespace Trans
                    new NoRepeatTransException("Requested rollback without retry."));
         }
 
-        private static HashSet<long> _openTransactions = new HashSet<long>();
         private static long _lastStamp;
 
         [ThreadStatic]
@@ -86,10 +85,10 @@ namespace Trans
 
         internal static void Enlist(IShielded item)
         {
-            _transactionItems.AddOrUpdate(
-                CurrentTransactionStartStamp,
-                new HashSet<IShielded>(new [] { item }),
-                (threadId, old) => { old.Add(item); return old; });
+            HashSet<IShielded> items;
+            // reading the current stamp throws ...
+            _transactionItems.TryGetValue(CurrentTransactionStartStamp, out items);
+            items.Add(item);
         }
 
         public static void SideEffect(Action fx, Action rollbackFx = null)
@@ -99,51 +98,44 @@ namespace Trans
 
         public static void InTransaction(Action act)
         {
+            if (_currentTransactionStartStamp.HasValue)
+                act();
+
             bool repeat;
             do
             {
                 repeat = false;
-                bool createdTransaction = false;
-                if (_currentTransactionStartStamp == null)
+                // for stable reading, numbers cannot be obtained while transaction commit is going on.
+                lock (_commitLock)
                 {
-                    // for stable reading, numbers cannot be obtained while transaction commit is going on.
-                    lock (_commitLock)
-                    {
-                        createdTransaction = true;
-                        _currentTransactionStartStamp = Interlocked.Increment(ref _lastStamp);
-                        _openTransactions.Add(_currentTransactionStartStamp.Value);
-                    }
+                    _currentTransactionStartStamp = Interlocked.Increment(ref _lastStamp);
+                    if (!_transactionItems.TryAdd(_currentTransactionStartStamp.Value,
+                            new HashSet<IShielded>()))
+                        throw new ApplicationException();
                 }
 
                 try
                 {
                     act();
-
-                    if (createdTransaction)
-                        DoCommit();
+                    if (!DoCommit())
+                        repeat = true;
                 }
                 catch (TransException ex)
                 {
-                    if (createdTransaction)
-                    {
-                        DoRollback();
-                        repeat = !(ex is NoRepeatTransException);
-                    }
-                    else
-                        throw;
+                    DoRollback();
+                    repeat = !(ex is NoRepeatTransException);
                 }
-                catch (Exception)
+                finally
                 {
-                    if (createdTransaction)
+                    if (_currentTransactionStartStamp.HasValue)
                         DoRollback();
-                    throw;
                 }
             } while (repeat);
         }
 
         private static object _commitLock = new object();
 
-        private static void DoCommit()
+        private static bool DoCommit()
         {
             // if there are items, they must all commit.
             HashSet<IShielded> items;
@@ -151,48 +143,75 @@ namespace Trans
             List<IShielded> copies = new List<IShielded>();
             long minTransaction;
 
+            bool isStrict = items.Any(s => s.HasChanges);
+            long writeStamp;
+            bool commit = true;
+            var nonFx = items.Where(i => !(i is SideEffect)).ToArray();
             lock (_commitLock)
             {
-                bool isStrict = items.Any(s => s.HasChanges);
-                foreach (var item in items)
-                    if (!item.CanCommit(isStrict))
-                        throw new TransException("Commit collision.");
+                writeStamp = Interlocked.Increment(ref _lastStamp);
+                foreach (var item in nonFx)
+                    if (!item.CanCommit(isStrict, writeStamp))
+                    {
+                        commit = false;
+                        foreach (var inner in nonFx)
+                            inner.Rollback(writeStamp);
+                        break;
+                    }
+            }
 
-                var writeStamp = Interlocked.Increment(ref _lastStamp);
-                foreach (var item in items)
+            var oldStamp = _currentTransactionStartStamp.Value;
+            _transactionItems.TryRemove(CurrentTransactionStartStamp, out items);
+            if (commit)
+            {
+                // do the commit. out of global lock! and, non side-effects first.
+                foreach (var item in nonFx)
                     if (item.Commit(writeStamp))
                         copies.Add(item);
-                _transactionItems.TryRemove(CurrentTransactionStartStamp, out items);
-                _openTransactions.Remove(CurrentTransactionStartStamp);
-                minTransaction = _openTransactions.Any() ? _openTransactions.Min() :
-                    Interlocked.Read(ref _lastStamp);
+
+                _currentTransactionStartStamp = null;
+
+                foreach (var fx in items.Except(nonFx))
+                    // caller beware.
+                    fx.Commit(writeStamp);
+            }
+            else
+            {
+                _currentTransactionStartStamp = null;
+
+                foreach (var item in items.OfType<SideEffect>())
+                    item.Rollback(writeStamp);
+            }
+
 //#if DEBUG
 //                Console.WriteLine("Stamp {0} commited with stamp {1}. Open count: {2}, item sets: {3}.",
 //                    _currentTransactionStartStamp.Value, writeStamp, _openTransactions.Count,
 //                    _transactionItems.Count);
 //#endif
-            }
-            RegisterCopies(CurrentTransactionStartStamp, copies);
+
+            var keys = _transactionItems.Keys;
+            minTransaction = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
+            RegisterCopies(oldStamp, copies);
             TrimCopies(minTransaction);
-            _currentTransactionStartStamp = null;
+
+            return commit;
         }
 
         private static void DoRollback()
         {
             long minTransaction;
-            lock (_commitLock)
-            {
-                HashSet<IShielded> items;
-                _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
-                _openTransactions.Remove(_currentTransactionStartStamp.Value);
-                foreach (var item in items)
-                    item.Rollback();
-
-                minTransaction = _openTransactions.Any() ? _openTransactions.Min() :
-                    Interlocked.Read(ref _lastStamp);
-            }
-            TrimCopies(minTransaction);
+            HashSet<IShielded> items;
+            _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
+            foreach (var item in items.Where(i => !(i is SideEffect)))
+                item.Rollback();
             _currentTransactionStartStamp = null;
+
+            foreach (var item in items.OfType<SideEffect>())
+                item.Rollback(null);
+
+            var keys = _transactionItems.Keys;
+            minTransaction = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
+            TrimCopies(minTransaction);
         }
     }
 }

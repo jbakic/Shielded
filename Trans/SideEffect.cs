@@ -14,7 +14,7 @@ namespace Trans
         }
 
 
-        public bool CanCommit(bool strict)
+        public bool CanCommit(bool strict, long writeStamp)
         {
             return true;
         }
@@ -25,7 +25,7 @@ namespace Trans
             return true;
         }
 
-        public void Rollback()
+        public void Rollback(long? writeStamp)
         {
             if (_rollbackFx != null) _rollbackFx();
         }

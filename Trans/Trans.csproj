@@ -38,13 +38,12 @@
     <Compile Include="Main.cs" />
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="Shielded.cs" />
-    <Compile Include="Shield.cs" />
     <Compile Include="TransException.cs" />
     <Compile Include="IShielded.cs" />
     <Compile Include="ShieldedDict.cs" />
     <Compile Include="Shielded2.cs" />
     <Compile Include="SideEffect.cs" />
-    <Compile Include="Shield2.cs" />
+    <Compile Include="Shield.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

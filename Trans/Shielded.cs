@@ -16,6 +16,8 @@ namespace Trans
     /// </summary>
 	public class Shielded<T> : IShielded
 	{
+        // TODO: Does not lock itself 
+
 		private class ValueKeeper
 		{
 			public readonly long Version;
@@ -142,7 +144,7 @@ namespace Trans
 			}
 		}
 		
-		bool IShielded.CanCommit(bool strict)
+		bool IShielded.CanCommit(bool strict, long writeStamp)
 		{
 			return (!strict && !((IShielded)this).HasChanges) || _current.Version < Shield.CurrentTransactionStartStamp;
 		}
@@ -161,7 +163,7 @@ namespace Trans
             return false;
 		}
 
-        void IShielded.Rollback()
+        void IShielded.Rollback(long? writeStamp)
         {
             if (_locals.IsValueCreated && _locals.Value.Version == Shield.CurrentTransactionStartStamp)
                 _locals.Value.Value = default(T);
