@@ -181,7 +181,7 @@ namespace Trans
                                 Shield.SideEffect(() => list.Add(
                                     new Transfer() { OtherId = acc2.Read.Id, AmountReceived = -100M }));
                             });
-                            Thread.Sleep(500);
+                            Thread.Sleep(250);
                             acc2.Modify((ref Account a) =>
                             {
                                 a.Balance = a.Balance + 100M;
