@@ -5,88 +5,76 @@ using System.Threading.Tasks;
 namespace Trans
 {
     /// <summary>
-    /// Makes your data thread safe, provided you respect certain rules :)
+    /// Makes your data thread safe :)
     /// 
-    /// Most importantly - the T should be a value type, or something implementing
-    /// ICloneable, otherwise this is useless!
-    /// 
-    /// Also, Read does not enforce anything. For a value type T it will
-    /// still be safe since you will get a copy, but for class types
-    /// it depends on your good behaviour.
+    /// This one works with structs, which means C# will be doing the cloning.
     /// </summary>
-	public class Shielded<T> : IShielded
+	public class Shielded2<T> : IShielded where T : struct
 	{
-        // TODO: Does not lock itself 
-
 		private class ValueKeeper
-		{
-			public readonly long Version;
-			public readonly T Value;
-			public ValueKeeper Older;
-
-            public ValueKeeper(long version, T val)
-            {
-                Version = version;
-                Value = val;
-            }
-		}
-		
-		private ValueKeeper _current;
-		
-		private class CurrentItem
 		{
 			public long Version;
 			public T Value;
-            public bool Dirty = false;
+			public ValueKeeper Older;
 		}
 		
-		private ThreadLocal<CurrentItem> _locals = new ThreadLocal<CurrentItem>();
+		private ValueKeeper _current;
+        // once negotiated, kept until commit or rollback
+        private long _writerStamp;
+		private ThreadLocal<ValueKeeper> _locals = new ThreadLocal<ValueKeeper>(() => new ValueKeeper());
 
-		public Shielded(T initialValue)
+		public Shielded2()
 		{
-			_current = new ValueKeeper(0, initialValue);
+			_current = new ValueKeeper();
 		}
-		
-		private T CurrentTransactionOldValue()
+
+        public Shielded2(T initial)
+        {
+            _current = new ValueKeeper();
+            _current.Value = initial;
+        }
+
+		private ValueKeeper CurrentTransactionOldValue()
 		{
+            var stamp = Shield.CurrentTransactionStartStamp;
+            SpinWait.SpinUntil(() =>
+            {
+                var w = Interlocked.Read(ref _writerStamp);
+                return w == 0 || w > stamp;
+            });
+            Shield.Enlist(this);
+
 			var point = _current;
-			if (Shield.IsInTransaction)
-			{
-				Shield.Enlist(this);
-				while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
-					point = point.Older;
-			}
+			while (point != null && point.Version > stamp)
+				point = point.Older;
 			if (point == null)
-				throw new ApplicationException("Critical error in Shielded<T> - lost data.");
-            return point.Value;
+				throw new ApplicationException("Critical error in Shielded2<T> - lost data.");
+            return point;
 		}
+
+        private bool IsLocalPrepared()
+        {
+            return _locals.IsValueCreated && _locals.Value != null &&
+                _locals.Value.Version == Shield.CurrentTransactionStartStamp;
+        }
 
 		private void PrepareForWriting()
         {
-            if (!_locals.IsValueCreated || _locals.Value.Version != Shield.CurrentTransactionStartStamp)
+            // this if test creates it if it did not exist!
+            if (!IsLocalPrepared())
             {
-                var val = CurrentTransactionOldValue();
-                if (val is ICloneable)
-                    val = (T)((ICloneable)val).Clone();
-                if (!_locals.IsValueCreated)
-                    _locals.Value = new CurrentItem();
-                _locals.Value.Value = val;
+                if (_locals.Value == null)
+                    _locals.Value = new ValueKeeper();
+                _locals.Value.Value = CurrentTransactionOldValue().Value;
                 _locals.Value.Version = Shield.CurrentTransactionStartStamp;
-                _locals.Value.Dirty = true;
-            }
-            else if (!_locals.Value.Dirty)
-            {
-                if (_locals.Value is ICloneable)
-                    _locals.Value.Value = (T)((ICloneable)_locals.Value.Value).Clone();
-                _locals.Value.Dirty = true;
             }
             else if (_current.Version > Shield.CurrentTransactionStartStamp)
                 throw new TransException("Write collision.");
 		}
 
         /// <summary>
-        /// Works out of transaction. You should not change anything, but this is not
-        /// enforced.
+        /// Since T is a value type, this returns a copy every time it's called!
+        /// Works out of transaction also.
         /// </summary>
 		public T Read
         {
@@ -95,69 +83,56 @@ namespace Trans
                 if (!Shield.IsInTransaction)
                     return _current.Value;
 
-                if (!_locals.IsValueCreated || _locals.Value.Version != Shield.CurrentTransactionStartStamp)
-                {
-                    var val = CurrentTransactionOldValue();
-                    if (val == null || val is ValueType)
-                        // caching a ValueType creates a copy, and when we return here, we make a copy
-                        // of that copy... not neccessary.
-                        return val;
-                    else
-                    {
-                        if (!_locals.IsValueCreated)
-                            _locals.Value = new CurrentItem();
-                        _locals.Value.Value = val;
-                        _locals.Value.Version = Shield.CurrentTransactionStartStamp;
-                        _locals.Value.Dirty = false;
-                    }
-                }
-                else if (_locals.Value.Dirty && _current.Version > Shield.CurrentTransactionStartStamp)
+                if (!IsLocalPrepared())
+                    return CurrentTransactionOldValue().Value;
+                else if (_current.Version > Shield.CurrentTransactionStartStamp)
                     throw new TransException("Writable read collision.");
                 return _locals.Value.Value;
             }
 		}
-		
-		/// <summary>
-		/// Getting and setting is assumed to change the value, so a copy is made. Commiting
-        /// will require saving this, and all other ops to be "current".
-		/// </summary>
-		public T Write
-		{
-			get
-			{
-				PrepareForWriting();
-				return _locals.Value.Value;
-			}
-			set
-			{
-				PrepareForWriting();
-				_locals.Value.Value = value;
-			}
-		}
-		
+
+        public delegate void ModificationDelegate(ref T value);
+
+        public void Modify(ModificationDelegate d)
+        {
+            PrepareForWriting();
+            d(ref _locals.Value.Value);
+        }
+
 		bool IShielded.HasChanges
 		{
 			get
 			{
-				return _locals.IsValueCreated && _locals.Value.Version == Shield.CurrentTransactionStartStamp &&
-                    _locals.Value.Dirty;
+				return IsLocalPrepared();
 			}
 		}
 		
 		bool IShielded.CanCommit(bool strict, long writeStamp)
 		{
-			return (!strict && !((IShielded)this).HasChanges) || _current.Version < Shield.CurrentTransactionStartStamp;
+			if (!strict && !((IShielded)this).HasChanges)
+                return true;
+            else if (Interlocked.Read(ref _writerStamp) != 0)
+                return false;
+            else if (_current.Version < Shield.CurrentTransactionStartStamp)
+            {
+                Interlocked.Exchange(ref _writerStamp, writeStamp);
+                return true;
+            }
+            return false;
 		}
 		
 		bool IShielded.Commit(long writeStamp)
         {
             if (((IShielded)this).HasChanges)
             {
-                var newCurrent = new ValueKeeper(writeStamp, _locals.Value.Value)
-                {
-    				Older = _current
-    			};
+                if (Interlocked.Read(ref _writerStamp) != writeStamp)
+                    throw new ApplicationException();
+                var newCurrent = _locals.Value;
+                newCurrent.Older = _current;
+                newCurrent.Version = writeStamp;
                 _current = newCurrent;
+                _locals.Value = null;
+                Interlocked.Exchange(ref _writerStamp, 0);
                 return true;
             }
             return false;
@@ -166,7 +141,9 @@ namespace Trans
         void IShielded.Rollback(long? writeStamp)
         {
             if (_locals.IsValueCreated && _locals.Value.Version == Shield.CurrentTransactionStartStamp)
-                _locals.Value.Value = default(T);
+                _locals.Value = null;
+            if (writeStamp.HasValue)
+                Interlocked.CompareExchange(ref _writerStamp, 0, writeStamp.Value);
         }
 		
 		void IShielded.TrimCopies(long smallestOpenTransactionId)
