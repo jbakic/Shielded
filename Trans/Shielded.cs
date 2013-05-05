@@ -48,7 +48,7 @@ namespace Trans
 			while (point != null && point.Version > stamp)
 				point = point.Older;
 			if (point == null)
-				throw new ApplicationException("Critical error in Shielded2<T> - lost data.");
+				throw new ApplicationException("Critical error in Shielded<T> - lost data.");
             return point;
 		}
 
