@@ -45,7 +45,6 @@ namespace Trans
         // the long is their current version, but being in this list indicates they have something older.
         private static List<Tuple<long, List<IShielded>>> _copiesByVersion = new List<Tuple<long, List<IShielded>>>();
 
-        // happens during commit only, so under lock.
         private static void RegisterCopies(long version, List<IShielded> copies)
         {
             int i;
@@ -57,7 +56,6 @@ namespace Trans
             }
         }
 
-        // during commit only
         private static void TrimCopies(long minTransactionNo)
         {
             lock (_copiesByVersion)
