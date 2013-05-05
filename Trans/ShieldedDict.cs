@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace Trans
 {
-    public class ShieldedDict<TKey, TItem>// : IShielded
+    public class ShieldedDict<TKey, TItem> where TItem : struct// : IShielded
     {
         private readonly ConcurrentDictionary<TKey, Shielded<TItem>> _dict;
 
@@ -26,7 +26,7 @@ namespace Trans
         {
             get
             {
-                return _dict[key].Write;
+                return _dict[key].Read;
             }
         }
 

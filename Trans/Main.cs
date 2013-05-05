@@ -121,7 +121,7 @@ namespace Trans
 
             foreach (var i in Enumerable.Repeat(0, 5))
             {
-                var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded2<int>(n)).ToArray();
+                var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded<int>(n)).ToArray();
                 transactionCounter = 0;
                 mtTest("shielded2 write", 1000, _ =>
                 {
@@ -151,7 +151,7 @@ namespace Trans
 
         static void OneTransaction()
         {
-            Shielded2<int> sh = new Shielded2<int>();
+            Shielded<int> sh = new Shielded<int>();
             Shield.InTransaction(() => 
             {
                 int x = sh.Read;
@@ -178,7 +178,7 @@ namespace Trans
 
         static void ControlledRace()
         {
-            var acc1 = new Shielded2<Account>();
+            var acc1 = new Shielded<Account>();
             Shield.InTransaction(() =>
                 acc1.Modify((ref Account a) =>
                 {
@@ -187,7 +187,7 @@ namespace Trans
                     a.Transfers = new List<Transfer>();
                 }));
 
-            var acc2 = new Shielded2<Account>();
+            var acc2 = new Shielded<Account>();
             Shield.InTransaction(() =>
                 acc2.Modify((ref Account a) =>
                 {

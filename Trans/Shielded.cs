@@ -9,7 +9,7 @@ namespace Trans
     /// 
     /// This one works with structs, which means C# will be doing the cloning.
     /// </summary>
-	public class Shielded2<T> : IShielded where T : struct
+	public class Shielded<T> : IShielded where T : struct
 	{
 		private class ValueKeeper
 		{
@@ -23,12 +23,12 @@ namespace Trans
         private long _writerStamp;
 		private ThreadLocal<ValueKeeper> _locals = new ThreadLocal<ValueKeeper>(() => new ValueKeeper());
 
-		public Shielded2()
+		public Shielded()
 		{
 			_current = new ValueKeeper();
 		}
 
-        public Shielded2(T initial)
+        public Shielded(T initial)
         {
             _current = new ValueKeeper();
             _current.Value = initial;
