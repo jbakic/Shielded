@@ -1,8 +1,11 @@
 ﻿<Properties GitUserInfo="UsingGIT">
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Shielded.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/ShieldedDict.cs">
     <Files>
-      <File FileName="Trans/Shielded.cs" Line="8" Column="39" />
+      <File FileName="Trans/Shield.cs" Line="50" Column="19" />
+      <File FileName="Trans/Shielded.cs" Line="117" Column="68" />
+      <File FileName="Trans/ShieldedDict.cs" Line="140" Column="17" />
+      <File FileName="Trans/IShielded.cs" Line="6" Column="6" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -10,15 +13,23 @@
           <Option id="ShowAllFiles" value="True" />
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="Shielded.cs" selected="True" />
+            <Node name="ShieldedDict.cs" selected="True" />
           </Node>
         </State>
       </Pad>
       <Pad Id="ClassPad">
-        <State expanded="True" selected="True" />
+        <State expanded="True" selected="True">
+          <Node name="Trans" expanded="True">
+            <Node name="References" expanded="True" />
+            <Node name="Mono" expanded="True" />
+            <Node name="Trans" expanded="True" />
+          </Node>
+        </State>
       </Pad>
       <Pad Id="MonoDevelop.Debugger.WatchPad">
-        <State />
+        <State>
+          <Value>$exception</Value>
+        </State>
       </Pad>
       <Pad Id="ConnectionManagerPad">
         <State selected="True" />

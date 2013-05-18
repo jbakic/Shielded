@@ -60,7 +60,6 @@ namespace Trans
 
 		private void PrepareForWriting()
         {
-            // this if test creates it if it did not exist!
             if (!IsLocalPrepared())
             {
                 if (_locals.Value == null)
@@ -126,7 +125,7 @@ namespace Trans
             if (((IShielded)this).HasChanges)
             {
                 if (Interlocked.Read(ref _writerStamp) != writeStamp)
-                    throw new ApplicationException();
+                    throw new ApplicationException("Commit received from unexpected transaction.");
                 var newCurrent = _locals.Value;
                 newCurrent.Older = _current;
                 newCurrent.Version = writeStamp;

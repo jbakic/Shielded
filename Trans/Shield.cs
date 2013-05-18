@@ -56,6 +56,10 @@ namespace Trans
             }
         }
 
+
+        // TODO: Improve this method to register each minTransactionNo before asking for lock, and then
+        // in the lock to ask for the largest registered transNo, and do it for him only, and removing
+        // all registrations. This would significantly improve it's performance.
         private static void TrimCopies(long minTransactionNo)
         {
             lock (_copiesByVersion)

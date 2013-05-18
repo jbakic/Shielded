@@ -233,13 +233,48 @@ namespace Trans
             });
         }
 
+        private static void DictionaryTest()
+        {
+            ShieldedDict<int, int> dict = new ShieldedDict<int, int>();
+            var transactionCounter = 0;
+            var randomizr = new Random();
+            mtTest("dictionary", 1000, i =>
+            {
+                var rnd = randomizr.Next(100);
+                return Task.Factory.StartNew(() =>
+                {
+                    Shield.InTransaction(() =>
+                    {
+                        Interlocked.Increment(ref transactionCounter);
+                        var v = dict[rnd];
+                        Thread.Sleep(10);
+                        if (v == null)
+                            dict[rnd] = new Shielded<int>(0);
+                        else
+                            if (v.Read < 
+                            v.Modify((ref int a) => a++);
+                    });
+                },
+                TaskCreationOptions.LongRunning
+                );
+            },
+            time =>
+            {
+                var correct = shx.Sum(s => s.Read) == 1000;
+                Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
+                    time, transactionCounter, correct ? "correct" : "incorrect");
+            });
+        }
+
 		public static void Main(string[] args)
         {
-            TimeTests();
+            //TimeTests();
 
             //OneTransaction();
 
             //ControlledRace();
+
+            DictionaryTest();
         }
 	}
 }
