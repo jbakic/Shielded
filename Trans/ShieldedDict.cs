@@ -32,8 +32,7 @@ namespace Trans
         private ThreadLocal<LocalDict> _localDict = new ThreadLocal<LocalDict>(
             () => new LocalDict()
             {
-                Reads = new HashSet<TKey>(),
-                Items = new Dictionary<TKey, TItem>()
+                Reads = new HashSet<TKey>()
             });
 
         public ShieldedDict(Func<TItem, TKey> keySelector, IEnumerable<TItem> items)
@@ -57,16 +56,23 @@ namespace Trans
         private ItemKeeper CurrentTransactionOldValue(TKey key)
         {
             var stamp = Shield.CurrentTransactionStartStamp;
+
+//            Console.WriteLine("[{0:000000}] ShieldedDict checking write stamp of key {1}", stamp, key);
+
             SpinWait.SpinUntil(() =>
             {
-                var w = _writeStamps[key];
-                return w == 0 || w > stamp;
+                long w;
+                return !_writeStamps.TryGetValue(key, out w) || w > stamp;
             });
+
+//            Console.WriteLine("[{0:000000}] ShieldedDict reading key {1}", stamp, key);
+
             Shield.Enlist(this);
             PrepareLocal();
             _localDict.Value.Reads.Add(key);
 
-            var point = _dict[key];
+            ItemKeeper point;
+            _dict.TryGetValue(key, out point);
             while (point != null && point.Version > stamp)
                 point = point.Older;
             return point;
@@ -80,7 +86,6 @@ namespace Trans
 
         private void PrepareLocal()
         {
-            // the second part creates the value. (and the test then passes.)
             if (!IsLocalPrepared())
             {
                 _localDict.Value.Version = Shield.CurrentTransactionStartStamp;
@@ -94,16 +99,6 @@ namespace Trans
             }
         }
 
-        private void PrepareForWriting(TKey key)
-        {
-            PrepareLocal();
-            if (_localDict.Value.Items == null)
-                _localDict.Value.Items = new Dictionary<TKey, TItem>();
-
-            if (!_localDict.Value.Items.ContainsKey(key))
-                _localDict.Value.Items[key] = CurrentTransactionOldValue(key).Value;
-        }
-
         /// <summary>
         /// Never throws, just returns null if it does not have anything.
         /// </summary>
@@ -111,21 +106,26 @@ namespace Trans
         {
             get
             {
+                ItemKeeper v;
                 if (!Shield.IsInTransaction || !IsLocalPrepared() ||
                     _localDict.Value.Items == null || !_localDict.Value.Items.ContainsKey(key))
                 {
-                    var v = Shield.IsInTransaction ? CurrentTransactionOldValue(key) :
-                        _dict.ContainsKey(key) ? _dict[key]
-                        : null;
+                    if (Shield.IsInTransaction)
+                        v = CurrentTransactionOldValue(key);
+                    else if (!_dict.TryGetValue(key, out v))
+                        return null;
                     return v == null ? null : v.Value;
                 }
-                else if (_dict.ContainsKey(key) && _dict[key].Version > Shield.CurrentTransactionStartStamp)
+                else if (_dict.TryGetValue(key, out v) && v.Version > Shield.CurrentTransactionStartStamp)
                     throw new TransException("Writable read collision.");
                 return _localDict.Value.Items[key];
             }
             set
             {
-                PrepareForWriting(key);
+                Shield.Enlist(this);
+                PrepareLocal();
+                if (_localDict.Value.Items == null)
+                    _localDict.Value.Items = new Dictionary<TKey, TItem>();
                 _localDict.Value.Items[key] = value;
             }
         }
@@ -143,17 +143,24 @@ namespace Trans
             if (!strict && !((IShielded)this).HasChanges)
                 return true;
             // locals were prepared when we enlisted.
-            else if (_localDict.Value.Reads.Any(key => _writeStamps.ContainsKey(key) && _writeStamps[key] != 0))
+            else if (_localDict.Value.Reads.Any(key =>
+                        {
+                            ItemKeeper v;
+                            return _writeStamps.ContainsKey(key) ||
+                                (_dict.TryGetValue(key, out v) && v.Version > Shield.CurrentTransactionStartStamp);
+                        }))
                 return false;
-            else if (_localDict.Value.Reads.All(key =>
-                    !_dict.ContainsKey(key) || _dict[key].Version < Shield.CurrentTransactionStartStamp))
+            else
             {
                 // touch only the ones we plan to change
-                foreach (var key in _localDict.Value.Items.Keys)
-                    _writeStamps.TryAdd(key, writeStamp); // we know this succeeds.
+                if (_localDict.Value.Items != null)
+                    foreach (var key in _localDict.Value.Items.Keys)
+                    {
+                        if (!_writeStamps.TryAdd(key, writeStamp))
+                            throw new ApplicationException("Another transaction already has write lock on this key!");
+                    }
                 return true;
             }
-            return false;
         }
         
         bool IShielded.Commit(long writeStamp)
@@ -162,18 +169,19 @@ namespace Trans
             {
                 foreach (var kvp in _localDict.Value.Items)
                 {
+                    ItemKeeper v = null;
+                    _dict.TryGetValue(kvp.Key, out v);
                     var newCurrent = new ItemKeeper()
                     {
                         Value = kvp.Value,
                         Version = writeStamp,
-                        Older = _dict.ContainsKey(kvp.Key) ? _dict[kvp.Key] : null
+                        Older = v
                     };
                     // nobody is actually changing it now.
-                    _dict.AddOrUpdate(kvp.Key, newCurrent,
-                                      (key, old) => newCurrent);
+                    _dict[kvp.Key] = newCurrent;
+
                     long ourStamp;
-                    bool rem = _writeStamps.TryRemove(kvp.Key, out ourStamp);
-                    if (!rem || ourStamp != writeStamp)
+                    if (!_writeStamps.TryRemove(kvp.Key, out ourStamp) || ourStamp != writeStamp)
                         throw new ApplicationException("Commit from unexpected transaction");
                 }
                 _localDict.Value.Items = null;
@@ -193,11 +201,9 @@ namespace Trans
                 if (writeStamp.HasValue)
                 {
                     long ws;
-                    foreach (var kvp in _localDict.Value.Items)
-                        if (_writeStamps [kvp.Key] == writeStamp.Value)
-                            _writeStamps.TryRemove(kvp.Key, out ws);
-                        else
-                            throw new ApplicationException("Inconsistently locked ShieldedDict discovered on rollback.");
+                    foreach (var key in _localDict.Value.Items.Keys)
+                        if (_writeStamps.TryGetValue(key, out ws) && ws == writeStamp.Value)
+                            _writeStamps.TryRemove(key, out ws);
                 }
                 _localDict.Value.Items = null;
             }
@@ -207,9 +213,12 @@ namespace Trans
         {
             // NB the "smallest transaction" and others can freely read while
             // we're doing this.
-            foreach (var kvp in _dict.ToArray())
+            var keys = _dict.Keys.ToArray();
+            foreach (var key in keys)
             {
-                var point = kvp.Value;
+                if (!_dict.ContainsKey(key))
+                    continue;
+                var point = _dict[key];
                 ItemKeeper pointPrevious = null;
                 while (point != null && point.Version > smallestOpenTransactionId)
                 {
@@ -220,18 +229,18 @@ namespace Trans
                 {
                     // point is the last accessible - his Older is not needed.
                     point.Older = null;
-                    if (point.Value == null)
-                    {
-                        if (pointPrevious != null)
-                            pointPrevious.Older = null;
-                        else
-                            // if this returns false, some other transaction inserted something while
-                            // we were triming - to avoid complicating, just leave the point where it is, it
-                            // gets trimmed eventually.
-                            ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict).Remove(kvp);
-                    }
+//                    if (point.Value == null)
+//                    {
+//                        if (pointPrevious != null)
+//                            pointPrevious.Older = null;
+//                        else
+//                            // if this returns false, some other transaction inserted something while
+//                            // we were triming - to avoid complicating, just leave the point where it is, it
+//                            // gets trimmed eventually.
+//                            ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict).Remove(
+//                                new KeyValuePair<TKey, ItemKeeper>(key, point));
+//                    }
                 }
-                // if point were null above, data was lost, CurrentTransactionValue() might throw for some!
             }
         }
     }

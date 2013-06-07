@@ -2,10 +2,12 @@
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
   <MonoDevelop.Ide.Workbench ActiveDocument="Trans/ShieldedDict.cs">
     <Files>
-      <File FileName="Trans/Shield.cs" Line="50" Column="19" />
-      <File FileName="Trans/Shielded.cs" Line="117" Column="68" />
-      <File FileName="Trans/ShieldedDict.cs" Line="140" Column="17" />
+      <File FileName="Trans/Shield.cs" Line="152" Column="1" />
+      <File FileName="Trans/Shielded.cs" Line="68" Column="17" />
+      <File FileName="Trans/ShieldedDict.cs" Line="154" Column="14" />
       <File FileName="Trans/IShielded.cs" Line="6" Column="6" />
+      <File FileName="Trans/Main.cs" Line="274" Column="71" />
+      <File FileName="Trans/bin/Debug/out.txt" Line="48103" Column="44" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -18,10 +20,19 @@
         </State>
       </Pad>
       <Pad Id="ClassPad">
-        <State expanded="True" selected="True">
+        <State expanded="True">
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
             <Node name="Mono" expanded="True" />
+            <Node name="System" expanded="True">
+              <Node name="Collections" expanded="True">
+                <Node name="Generic" expanded="True">
+                  <Node name="System.Collections.Generic.IDictionary" expanded="True">
+                    <Node name="Keys" selected="True" />
+                  </Node>
+                </Node>
+              </Node>
+            </Node>
             <Node name="Trans" expanded="True" />
           </Node>
         </State>
@@ -29,6 +40,8 @@
       <Pad Id="MonoDevelop.Debugger.WatchPad">
         <State>
           <Value>$exception</Value>
+          <Value>nonFx[0]</Value>
+          <Value>Shield.CurrentTransactionStartStamp</Value>
         </State>
       </Pad>
       <Pad Id="ConnectionManagerPad">
@@ -76,7 +89,6 @@
       <Catchpoint exceptionName="System.IndexOutOfRangeException" />
       <Catchpoint exceptionName="System.InsufficientExecutionStackException" />
       <Catchpoint exceptionName="System.InsufficientMemoryException" />
-      <Catchpoint exceptionName="System.InvalidCastException" />
       <Catchpoint exceptionName="System.InvalidOperationException" />
       <Catchpoint exceptionName="System.InvalidProgramException" />
       <Catchpoint exceptionName="System.InvalidTimeZoneException" />

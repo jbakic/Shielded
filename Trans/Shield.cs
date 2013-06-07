@@ -162,7 +162,6 @@ namespace Trans
                     }
             }
 
-            var oldStamp = _currentTransactionStartStamp.Value;
             _transactionItems.TryRemove(CurrentTransactionStartStamp, out items);
             if (commit)
             {
@@ -170,6 +169,7 @@ namespace Trans
                 foreach (var item in nonFx)
                     if (item.Commit(writeStamp))
                         copies.Add(item);
+                RegisterCopies(CurrentTransactionStartStamp, copies);
 
                 _currentTransactionStartStamp = null;
 
@@ -193,7 +193,6 @@ namespace Trans
 
             var keys = _transactionItems.Keys;
             minTransaction = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
-            RegisterCopies(oldStamp, copies);
             TrimCopies(minTransaction);
 
             return commit;

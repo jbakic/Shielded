@@ -114,7 +114,8 @@ namespace Trans
                 return false;
             else if (_current.Version < Shield.CurrentTransactionStartStamp)
             {
-                Interlocked.Exchange(ref _writerStamp, writeStamp);
+                if (((IShielded)this).HasChanges)
+                    Interlocked.Exchange(ref _writerStamp, writeStamp);
                 return true;
             }
             return false;
@@ -139,7 +140,7 @@ namespace Trans
 
         void IShielded.Rollback(long? writeStamp)
         {
-            if (_locals.IsValueCreated && _locals.Value.Version == Shield.CurrentTransactionStartStamp)
+            if (IsLocalPrepared())
                 _locals.Value = null;
             if (writeStamp.HasValue)
                 Interlocked.CompareExchange(ref _writerStamp, 0, writeStamp.Value);

@@ -99,13 +99,26 @@ namespace Trans
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
                     {
+                        try
+                        {
                         Shield.InTransaction(() =>
                         {
                             Interlocked.Increment(ref transactionCounter);
                             int v = shx[rnd].Read;
                             Thread.Sleep(10);
                             shx[rnd].Modify((ref int a) => a = v + 1);
+
+//                            if (rnd == 45)
+//                                Shield.SideEffect(() =>
+//                                    {
+//                                        throw new InvalidCastException();
+//                                    });
                         });
+                        }
+                        catch (InvalidCastException)
+                        {
+                            Console.Write("*");
+                        }
                     },
                     TaskCreationOptions.LongRunning
                     );
@@ -166,6 +179,7 @@ namespace Trans
                     a.Balance = 1000M;
                     a.Transfers = new List<Transfer>();
                 }));
+            int transactionCount = 0;
 
             mtTest("controlled race", 20, n =>
             {
@@ -174,6 +188,7 @@ namespace Trans
                     {
                         Shield.InTransaction(() =>
                         {
+                            Interlocked.Increment(ref transactionCount);
                             acc1.Modify((ref Account a) =>
                             {
                                 a.Balance = a.Balance - 100M;
@@ -198,6 +213,7 @@ namespace Trans
                     {
                         Shield.InTransaction(() =>
                         {
+                            Interlocked.Increment(ref transactionCount);
                             acc2.Modify((ref Account a) =>
                             {
                                 a.Balance = a.Balance - 200M;
@@ -220,7 +236,8 @@ namespace Trans
             },
             time =>
             {
-                Console.WriteLine("\nAccount 1 balance: {0}", acc1.Read.Balance);
+                Console.WriteLine("\nCompleted 20 transactions in {0} total attempts.", transactionCount);
+                Console.WriteLine("Account 1 balance: {0}", acc1.Read.Balance);
                 foreach(var t in acc1.Read.Transfers)
                 {
                     Console.WriteLine("  {0:####,00}", t.AmountReceived);
@@ -235,35 +252,65 @@ namespace Trans
 
         private static void DictionaryTest()
         {
-            ShieldedDict<int, int> dict = new ShieldedDict<int, int>();
-            var transactionCounter = 0;
+            ShieldedDict<int, Shielded<int>> dict = new ShieldedDict<int, Shielded<int>>();
             var randomizr = new Random();
-            mtTest("dictionary", 1000, i =>
+            foreach (var _ in Enumerable.Repeat(0, 10))
             {
-                var rnd = randomizr.Next(100);
-                return Task.Factory.StartNew(() =>
+                var transactionCounter = 0;
+                mtTest("dictionary", 1000, i =>
                 {
-                    Shield.InTransaction(() =>
-                    {
-                        Interlocked.Increment(ref transactionCounter);
-                        var v = dict[rnd];
-                        Thread.Sleep(10);
-                        if (v == null)
-                            dict[rnd] = new Shielded<int>(0);
-                        else
-                            if (v.Read < 
-                            v.Modify((ref int a) => a++);
-                    });
+                    var rnd = randomizr.Next(100);
+                    if (i % 2 == 0)
+                        // adder task - 500 of these
+                        return Task.Factory.StartNew(() =>
+                        {
+                            Shield.InTransaction(() =>
+                            {
+                                Interlocked.Increment(ref transactionCounter);
+                                var v = dict [rnd];
+                                int? num = v != null ? (int?)v.Read : null;
+                                Thread.Sleep(10);
+                                if (v == null)
+                                    dict [rnd] = new Shielded<int>(1);
+                                else if (v.Read == -1)
+                                        dict [rnd] = null;
+                                    else
+                                        v.Modify((ref int a) => a = num.Value + 1);
+                            }
+                            );
+                        },
+                        TaskCreationOptions.LongRunning
+                        );
+                    else
+                        // subtractor task - 500 of these
+                        return Task.Factory.StartNew(() =>
+                        {
+                            Shield.InTransaction(() =>
+                            {
+                                Interlocked.Increment(ref transactionCounter);
+                                var v = dict [rnd];
+                                int? num = v != null ? (int?)v.Read : null;
+                                Thread.Sleep(10);
+                                if (v == null)
+                                    dict [rnd] = new Shielded<int>(-1);
+                                else if (v.Read == 1)
+                                        dict [rnd] = null;
+                                    else
+                                        v.Modify((ref int a) => a = num.Value - 1);
+                            }
+                            );
+                        },
+                        TaskCreationOptions.LongRunning
+                        );
                 },
-                TaskCreationOptions.LongRunning
+                time =>
+                {
+                    var correct = Enumerable.Range(0, 100).Sum(n => dict [n] == null ? 0 : dict [n].Read) == 0;
+                    Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
+                        time, transactionCounter, correct ? "correct" : "incorrect");
+                }
                 );
-            },
-            time =>
-            {
-                var correct = shx.Sum(s => s.Read) == 1000;
-                Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
-                    time, transactionCounter, correct ? "correct" : "incorrect");
-            });
+            }
         }
 
 		public static void Main(string[] args)
