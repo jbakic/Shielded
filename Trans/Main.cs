@@ -162,23 +162,18 @@ namespace Trans
 
         static void ControlledRace()
         {
-            var acc1 = new Shielded<Account>();
-            Shield.InTransaction(() =>
-                acc1.Modify((ref Account a) =>
-                {
-                    a.Id = 1;
-                    a.Balance = 1000M;
-                    a.Transfers = new List<Transfer>();
-                }));
-
-            var acc2 = new Shielded<Account>();
-            Shield.InTransaction(() =>
-                acc2.Modify((ref Account a) =>
-                {
-                    a.Id = 2;
-                    a.Balance = 1000M;
-                    a.Transfers = new List<Transfer>();
-                }));
+            var acc1 = new Shielded<Account>(new Account()
+            {
+                Id = 1,
+                Balance = 1000M,
+                Transfers = new List<Transfer>()
+            });
+            var acc2 = new Shielded<Account>(new Account()
+            {
+                Id = 2,
+                Balance = 1000M,
+                Transfers = new List<Transfer>()
+            });
             int transactionCount = 0;
 
             mtTest("controlled race", 20, n =>
@@ -315,11 +310,11 @@ namespace Trans
 
 		public static void Main(string[] args)
         {
-            TimeTests();
+            //TimeTests();
 
             //OneTransaction();
 
-            //ControlledRace();
+            ControlledRace();
 
             //DictionaryTest();
         }
