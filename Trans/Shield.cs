@@ -56,21 +56,20 @@ namespace Trans
             }
         }
 
-
-        // TODO: Improve this method to register each minTransactionNo before asking for lock, and then
-        // in the lock to ask for the largest registered transNo, and do it for him only, and removing
-        // all registrations. This would significantly improve it's performance.
-        private static void TrimCopies(long minTransactionNo)
+        private static void TrimCopies()
         {
             lock (_copiesByVersion)
             {
+                var keys = _transactionItems.Keys;
+                var minTransactionNo = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
+
                 int toDelete = 0;
                 for (; toDelete < _copiesByVersion.Count &&
                      _copiesByVersion[toDelete].Item1 < minTransactionNo; toDelete++)
                     ;
-                toDelete--;
-                if (toDelete > 0)
+                if (toDelete > 1)
                 {
+                    toDelete--;
                     foreach (var sh in _copiesByVersion.Take(toDelete).SelectMany(copy => copy.Item2).Distinct())
                         sh.TrimCopies(minTransactionNo);
                     _copiesByVersion.RemoveRange(0, toDelete);
@@ -191,10 +190,7 @@ namespace Trans
 //                    _transactionItems.Count);
 //#endif
 
-            var keys = _transactionItems.Keys;
-            minTransaction = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
-            TrimCopies(minTransaction);
-
+            TrimCopies();
             return commit;
         }
 
@@ -210,9 +206,7 @@ namespace Trans
             foreach (var item in items.OfType<SideEffect>())
                 item.Rollback(null);
 
-            var keys = _transactionItems.Keys;
-            minTransaction = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
-            TrimCopies(minTransaction);
+            TrimCopies();
         }
     }
 }

@@ -1,13 +1,12 @@
 ﻿<Properties GitUserInfo="UsingGIT">
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/ShieldedDict.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
     <Files>
-      <File FileName="Trans/Shield.cs" Line="152" Column="1" />
-      <File FileName="Trans/Shielded.cs" Line="68" Column="17" />
-      <File FileName="Trans/ShieldedDict.cs" Line="154" Column="14" />
+      <File FileName="Trans/Shield.cs" Line="148" Column="58" />
+      <File FileName="Trans/Shielded.cs" Line="24" Column="16" />
+      <File FileName="Trans/ShieldedDict.cs" Line="38" Column="9" />
       <File FileName="Trans/IShielded.cs" Line="6" Column="6" />
-      <File FileName="Trans/Main.cs" Line="274" Column="71" />
-      <File FileName="Trans/bin/Debug/out.txt" Line="48103" Column="44" />
+      <File FileName="Trans/Main.cs" Line="235" Column="57" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -15,7 +14,7 @@
           <Option id="ShowAllFiles" value="True" />
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="ShieldedDict.cs" selected="True" />
+            <Node name="Main.cs" selected="True" />
           </Node>
         </State>
       </Pad>
@@ -23,17 +22,11 @@
         <State expanded="True">
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="Mono" expanded="True" />
-            <Node name="System" expanded="True">
-              <Node name="Collections" expanded="True">
-                <Node name="Generic" expanded="True">
-                  <Node name="System.Collections.Generic.IDictionary" expanded="True">
-                    <Node name="Keys" selected="True" />
-                  </Node>
-                </Node>
+            <Node name="Trans" expanded="True">
+              <Node name="Trans.ShieldedDict" expanded="True">
+                <Node name=".ctor" selected="True" />
               </Node>
             </Node>
-            <Node name="Trans" expanded="True" />
           </Node>
         </State>
       </Pad>

@@ -38,14 +38,14 @@ namespace Trans
             {
                 var x = new int[100];
                 transactionCounter = 0;
-                mtTest("dirty write", 1000, _ =>
+                mtTest("dirty write", 10000, _ =>
                 {
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
                     {
                         Interlocked.Increment(ref transactionCounter);
                         int v = x [rnd];
-                        Thread.Sleep(10);
+                        Thread.Sleep(1);
                         x [rnd] = v + 1;
                     },
                     TaskCreationOptions.LongRunning
@@ -53,7 +53,7 @@ namespace Trans
                 },
                 time =>
                 {
-                    var correct = x.Sum() == 1000;
+                    var correct = x.Sum() == 10000;
                     Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
                         time, transactionCounter, correct ? "correct" : "incorrect");
                 }
@@ -65,7 +65,7 @@ namespace Trans
                 var x = new int[100];
                 transactionCounter = 0;
                 var l = Enumerable.Repeat(0, 16).Select (_ => new object()).ToArray();
-                mtTest("16 lock write", 1000, _ =>
+                mtTest("16 lock write", 10000, _ =>
                 {
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
@@ -74,7 +74,7 @@ namespace Trans
                         {
                             Interlocked.Increment(ref transactionCounter);
                             int v = x [rnd];
-                            Thread.Sleep(10);
+                            Thread.Sleep(1);
                             x [rnd] = v + 1;
                         }
                     },
@@ -83,7 +83,7 @@ namespace Trans
                 },
                 time =>
                 {
-                    var correct = x.Sum() == 1000;
+                    var correct = x.Sum() == 10000;
                     Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
                         time, transactionCounter, correct ? "correct" : "incorrect");
                 }
@@ -94,7 +94,7 @@ namespace Trans
             {
                 var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded<int>(n)).ToArray();
                 transactionCounter = 0;
-                mtTest("shielded2 write", 1000, _ =>
+                mtTest("shielded2 write", 10000, _ =>
                 {
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
@@ -105,7 +105,7 @@ namespace Trans
                         {
                             Interlocked.Increment(ref transactionCounter);
                             int v = shx[rnd].Read;
-                            Thread.Sleep(10);
+                            Thread.Sleep(1);
                             shx[rnd].Modify((ref int a) => a = v + 1);
 
 //                            if (rnd == 45)
@@ -125,7 +125,7 @@ namespace Trans
                 },
                 time =>
                 {
-                    var correct = shx.Sum(s => s.Read) == 1000;
+                    var correct = shx.Sum(s => s.Read) == 10000;
                     Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
                         time, transactionCounter, correct ? "correct" : "incorrect");
                 }
@@ -315,13 +315,13 @@ namespace Trans
 
 		public static void Main(string[] args)
         {
-            //TimeTests();
+            TimeTests();
 
             //OneTransaction();
 
             //ControlledRace();
 
-            DictionaryTest();
+            //DictionaryTest();
         }
 	}
 }
