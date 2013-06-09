@@ -2,11 +2,11 @@
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
   <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
     <Files>
-      <File FileName="Trans/Shield.cs" Line="148" Column="58" />
+      <File FileName="Trans/Shield.cs" Line="69" Column="22" />
       <File FileName="Trans/Shielded.cs" Line="24" Column="16" />
       <File FileName="Trans/ShieldedDict.cs" Line="38" Column="9" />
       <File FileName="Trans/IShielded.cs" Line="6" Column="6" />
-      <File FileName="Trans/Main.cs" Line="235" Column="57" />
+      <File FileName="Trans/Main.cs" Line="310" Column="9" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">

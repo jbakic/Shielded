@@ -140,8 +140,7 @@ namespace Trans
 
         void IShielded.Rollback(long? writeStamp)
         {
-            if (IsLocalPrepared())
-                _locals.Value = null;
+            _locals.Value = null;
             if (writeStamp.HasValue)
                 Interlocked.CompareExchange(ref _writerStamp, 0, writeStamp.Value);
         }
