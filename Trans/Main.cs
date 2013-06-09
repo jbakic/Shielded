@@ -62,17 +62,18 @@ namespace Trans
                 );
             }
 
+            var lockCount = 10;
             foreach (var i in Enumerable.Repeat(0, 5))
             {
                 var x = new int[100];
                 transactionCounter = 0;
-                var l = Enumerable.Repeat(0, 16).Select (_ => new object()).ToArray();
-                mtTest("16 lock write", taskCount, _ =>
+                var l = Enumerable.Repeat(0, lockCount).Select (_ => new object()).ToArray();
+                mtTest(string.Format("{0} lock write", lockCount), taskCount, _ =>
                 {
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
                     {
-                        lock (l[rnd % 16])
+                        lock (l[rnd % lockCount])
                         {
                             Interlocked.Increment(ref transactionCounter);
                             int v = x [rnd];
