@@ -100,7 +100,10 @@ namespace Trans
         public static void InTransaction(Action act)
         {
             if (_currentTransactionStartStamp.HasValue)
+            {
                 act();
+                return;
+            }
 
             bool repeat;
             do
@@ -142,7 +145,6 @@ namespace Trans
             HashSet<IShielded> items;
             _transactionItems.TryGetValue(CurrentTransactionStartStamp, out items);
             List<IShielded> copies = new List<IShielded>();
-            long minTransaction;
 
             bool isStrict = items.Any(s => s.HasChanges);
             long writeStamp;
@@ -196,7 +198,6 @@ namespace Trans
 
         private static void DoRollback()
         {
-            long minTransaction;
             HashSet<IShielded> items;
             _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
             foreach (var item in items.Where(i => !(i is SideEffect)))

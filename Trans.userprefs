@@ -1,12 +1,14 @@
 ﻿<Properties GitUserInfo="UsingGIT">
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/ShieldedSeq.cs">
     <Files>
-      <File FileName="Trans/Shield.cs" Line="69" Column="22" />
-      <File FileName="Trans/Shielded.cs" Line="24" Column="16" />
-      <File FileName="Trans/ShieldedDict.cs" Line="38" Column="9" />
-      <File FileName="Trans/IShielded.cs" Line="6" Column="6" />
-      <File FileName="Trans/Main.cs" Line="310" Column="9" />
+      <File FileName="Trans/ShieldedDict.cs" Line="28" Column="9" />
+      <File FileName="Trans/Main.cs" Line="320" Column="13" />
+      <File FileName="Trans/Kladionica.cs" Line="10" Column="4" />
+      <File FileName="Trans/ShieldedSeq.cs" Line="51" Column="23" />
+      <File FileName="Trans/ShieldedBase.cs" Line="6" Column="6" />
+      <File FileName="Trans/ShieldedRef.cs" Line="89" Column="27" />
+      <File FileName="Trans/Shielded.cs" Line="98" Column="1" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -14,19 +16,15 @@
           <Option id="ShowAllFiles" value="True" />
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="Main.cs" selected="True" />
+            <Node name="ShieldedSeq.cs" selected="True" />
           </Node>
         </State>
       </Pad>
       <Pad Id="ClassPad">
-        <State expanded="True">
+        <State expanded="True" selected="True">
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="Trans" expanded="True">
-              <Node name="Trans.ShieldedDict" expanded="True">
-                <Node name=".ctor" selected="True" />
-              </Node>
-            </Node>
+            <Node name="Trans" expanded="True" />
           </Node>
         </State>
       </Pad>

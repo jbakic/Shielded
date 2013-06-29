@@ -10,7 +10,7 @@ namespace Trans
     /// Protects only regarding adds or removes. Updates are unprotected unless
     /// you choose to have shielded items.
     /// </summary>
-    public class ShieldedDict<TKey, TItem> : IShielded where TItem : class
+    public class ShieldedDict<TKey, TItem> : IShielded
     {
         private class ItemKeeper
         {
@@ -113,8 +113,8 @@ namespace Trans
                     if (Shield.IsInTransaction)
                         v = CurrentTransactionOldValue(key);
                     else if (!_dict.TryGetValue(key, out v))
-                        return null;
-                    return v == null ? null : v.Value;
+                        return default(TItem);
+                    return v == null ? default(TItem) : v.Value;
                 }
                 else if (_dict.TryGetValue(key, out v) && v.Version > Shield.CurrentTransactionStartStamp)
                     throw new TransException("Writable read collision.");
@@ -162,7 +162,9 @@ namespace Trans
                 return true;
             }
         }
-        
+
+        private ConcurrentDictionary<TKey, long> _copies = new ConcurrentDictionary<TKey, long>();
+
         bool IShielded.Commit(long writeStamp)
         {
             if (((IShielded)this).HasChanges)
@@ -179,6 +181,7 @@ namespace Trans
                     };
                     // nobody is actually changing it now.
                     _dict[kvp.Key] = newCurrent;
+                    _copies[kvp.Key] = writeStamp;
 
                     long ourStamp;
                     if (!_writeStamps.TryRemove(kvp.Key, out ourStamp) || ourStamp != writeStamp)
@@ -213,34 +216,28 @@ namespace Trans
         {
             // NB the "smallest transaction" and others can freely read while
             // we're doing this.
-            var keys = _dict.Keys.ToArray();
+            var keys = _copies.Keys;
             foreach (var key in keys)
             {
-                if (!_dict.ContainsKey(key))
+                if (_copies[key] > smallestOpenTransactionId)
                     continue;
+
+//                if (!_dict.ContainsKey(key))
+//                    continue;
                 var point = _dict[key];
-                ItemKeeper pointPrevious = null;
                 while (point != null && point.Version > smallestOpenTransactionId)
                 {
-                    pointPrevious = point;
                     point = point.Older;
                 }
                 if (point != null)
                 {
                     // point is the last accessible - his Older is not needed.
                     point.Older = null;
-//                    if (point.Value == null)
-//                    {
-//                        if (pointPrevious != null)
-//                            pointPrevious.Older = null;
-//                        else
-//                            // if this returns false, some other transaction inserted something while
-//                            // we were triming - to avoid complicating, just leave the point where it is, it
-//                            // gets trimmed eventually.
-//                            ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict).Remove(
-//                                new KeyValuePair<TKey, ItemKeeper>(key, point));
-//                    }
                 }
+                long version;
+                _copies.TryRemove(key, out version);
+                if (version > smallestOpenTransactionId)
+                    _copies.TryAdd(key, version);
             }
         }
     }

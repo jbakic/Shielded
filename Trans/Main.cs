@@ -311,15 +311,56 @@ namespace Trans
             }
         }
 
+        /// <summary>
+        /// Creates a BetShop, and tries to buy a large number of random tickets. Afterwards it
+        /// checks that the rule limiting same ticket winnings is not violated.
+        /// </summary>
+        public static void BetShopTest()
+        {
+            int numEvents = 500;
+            var betShop = new BetShop(numEvents);
+            var randomizr = new Random();
+
+            mtTest("bet shop w/ " + numEvents, 10000, i =>
+            {
+                decimal payIn = randomizr.Next(9) + 1m;
+                int event1Id = randomizr.Next(numEvents) + 1;
+                int event2Id = randomizr.Next(numEvents) + 1;
+                int event3Id = randomizr.Next(numEvents) + 1;
+                int offer1Ind = randomizr.Next(3);
+                int offer2Ind = randomizr.Next(3);
+                int offer3Ind = randomizr.Next(3);
+                return Task.Factory.StartNew(() =>
+                {
+                    Shield.InTransaction(() =>
+                    {
+                        var offer1 = betShop.Events[event1Id].Read.BetOffers[offer1Ind];
+                        var offer2 = betShop.Events[event2Id].Read.BetOffers[offer2Ind];
+                        var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
+                        betShop.BuyTicket(payIn, offer1, offer2, offer3);
+                    });
+                });
+            },
+            time =>
+            {
+                int count;
+                var correct = betShop.VerifyTickets(out count);
+                Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
+                    time, count, correct ? "correct" : "incorrect");
+            });
+        }
+
 		public static void Main(string[] args)
         {
-            TimeTests();
+            //TimeTests();
 
             //OneTransaction();
 
             //ControlledRace();
 
             //DictionaryTest();
+
+            BetShopTest();
         }
 	}
 }
