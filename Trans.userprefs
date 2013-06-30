@@ -1,14 +1,14 @@
 ﻿<Properties GitUserInfo="UsingGIT">
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/BetShop.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Shield.cs">
     <Files>
       <File FileName="Trans/ShieldedDict.cs" Line="241" Column="1" />
-      <File FileName="Trans/Main.cs" Line="340" Column="37" />
-      <File FileName="Trans/BetShop.cs" Line="74" Column="14" />
-      <File FileName="Trans/ShieldedSeq.cs" Line="22" Column="1" />
+      <File FileName="Trans/Main.cs" Line="333" Column="77" />
+      <File FileName="Trans/BetShop.cs" Line="41" Column="16" />
+      <File FileName="Trans/ShieldedSeq.cs" Line="130" Column="9" />
       <File FileName="Trans/ShieldedRef.cs" Line="82" Column="74" />
       <File FileName="Trans/Shielded.cs" Line="98" Column="1" />
-      <File FileName="Trans/Shield.cs" Line="104" Column="1" />
+      <File FileName="Trans/Shield.cs" Line="147" Column="28" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -16,7 +16,7 @@
           <Option id="ShowAllFiles" value="True" />
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="BetShop.cs" selected="True" />
+            <Node name="Shield.cs" selected="True" />
           </Node>
         </State>
       </Pad>
@@ -183,6 +183,7 @@
       <Catchpoint exceptionName="System.TypeUnloadedException" />
       <Catchpoint exceptionName="System.UnauthorizedAccessException" />
       <Catchpoint exceptionName="System.UriFormatException" />
+      <Catchpoint exceptionName="System.Exception" />
     </BreakpointStore>
   </MonoDevelop.Ide.DebuggingService.Breakpoints>
   <MonoDevelop.Ide.DebuggingService.PinnedWatches />

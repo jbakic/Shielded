@@ -97,23 +97,25 @@ namespace Trans
             Enlist(new SideEffect(fx, rollbackFx));
         }
 
-        private class CommitSubscription
+        private struct CommitSubscription
         {
             public IShielded[] Items;
+            public Func<bool> Test;
             public Func<bool> Trans;
         }
-        private static ShieldedSeq<CommitSubscription> _subscriptions = new ShieldedSeq<CommitSubscription>();
+        private static ShieldedSeq<Shielded<CommitSubscription>> _subscriptions = new ShieldedSeq<Shielded<CommitSubscription>>();
 
-        private static void Subscribe(Func<bool> trans)
+        private static void Subscribe(Func<bool> test, Func<bool> trans)
         {
             HashSet<IShielded> items;
             _transactionItems.TryGetValue(CurrentTransactionStartStamp, out items);
             var itemCopy = items.ToArray();
-            _subscriptions.Append(new CommitSubscription()
+            _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
             {
                 Items = itemCopy,
+                Test = test,
                 Trans = trans
-            });
+            }));
         }
 
         private static void TriggerSubscriptions(IShielded[] changes)
@@ -125,11 +127,36 @@ namespace Trans
                 int i = 0;
                 foreach (var sub in _subscriptions.ToArray())
                 {
-                    if (sub.Items.Intersect(changes).Any())
-                        if (!sub.Trans())
+                    if (sub.Read.Items.Intersect(changes).Any())
+                    {
+                        bool test = false;
+                        Func<bool> testFunc = sub.Read.Test;
+
+                        HashSet<IShielded> oldItems;
+                        HashSet<IShielded> testItems = new HashSet<IShielded>();
+                        _transactionItems.TryGetValue(CurrentTransactionStartStamp, out oldItems);
+                        _transactionItems[CurrentTransactionStartStamp] = testItems;
+                        try
+                        {
+                            test = testFunc();
+                        }
+                        finally
+                        {
+                            foreach (var ti in testItems)
+                                oldItems.Add(ti);
+                            _transactionItems.TryUpdate(CurrentTransactionStartStamp, oldItems, testItems);
+                        }
+
+                        if (!sub.Read.Items.SequenceEqual(testItems))
+                            sub.Modify((ref CommitSubscription cs) =>
+                            {
+                                cs.Items = testItems.ToArray();
+                            });
+                        if (test && !sub.Read.Trans())
                             _subscriptions.RemoveAt(i);
                         else
                             i++;
+                    }
                 }
             });
         }
@@ -153,7 +180,7 @@ namespace Trans
                         Shield.SideEffect(() => Shield.InTransaction(oneTest));
                 }
                 else
-                    Subscribe(() => test() ? trans() : true);
+                    Subscribe(test, trans);
             };
             Shield.InTransaction(oneTest);
         }

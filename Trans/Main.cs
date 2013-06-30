@@ -330,7 +330,7 @@ namespace Trans
                 {
                     int count;
                     var correct = betShop.VerifyTickets(out count);
-                    Console.Write(" {0}{1}{0} ", correct ? "+" : "-", count);
+                    Console.Write(" {0}{1}{0}", correct ? "+" : "-", count);
                 });
                 return true;
             });
