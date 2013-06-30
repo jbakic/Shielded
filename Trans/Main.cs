@@ -317,9 +317,23 @@ namespace Trans
         /// </summary>
         public static void BetShopTest()
         {
-            int numEvents = 500;
+            int numEvents = 10;
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
+            int reportEvery = 1000;
+            Shielded<int> nextReport = new Shielded<int>(reportEvery);
+
+            Shield.Conditional(() => betShop.TicketCount.Read >= nextReport.Read, () =>
+            {
+                nextReport.Modify((ref int n) => n += reportEvery);
+                Shield.SideEffect(() =>
+                {
+                    int count;
+                    var correct = betShop.VerifyTickets(out count);
+                    Console.Write(" {0}{1}{0} ", correct ? "+" : "-", count);
+                });
+                return true;
+            });
 
             mtTest("bet shop w/ " + numEvents, 10000, i =>
             {

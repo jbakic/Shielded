@@ -1,14 +1,14 @@
 ﻿<Properties GitUserInfo="UsingGIT">
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/ShieldedSeq.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/BetShop.cs">
     <Files>
-      <File FileName="Trans/ShieldedDict.cs" Line="28" Column="9" />
-      <File FileName="Trans/Main.cs" Line="320" Column="13" />
-      <File FileName="Trans/Kladionica.cs" Line="10" Column="4" />
-      <File FileName="Trans/ShieldedSeq.cs" Line="51" Column="23" />
-      <File FileName="Trans/ShieldedBase.cs" Line="6" Column="6" />
-      <File FileName="Trans/ShieldedRef.cs" Line="89" Column="27" />
+      <File FileName="Trans/ShieldedDict.cs" Line="241" Column="1" />
+      <File FileName="Trans/Main.cs" Line="340" Column="37" />
+      <File FileName="Trans/BetShop.cs" Line="74" Column="14" />
+      <File FileName="Trans/ShieldedSeq.cs" Line="22" Column="1" />
+      <File FileName="Trans/ShieldedRef.cs" Line="82" Column="74" />
       <File FileName="Trans/Shielded.cs" Line="98" Column="1" />
+      <File FileName="Trans/Shield.cs" Line="104" Column="1" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -16,7 +16,7 @@
           <Option id="ShowAllFiles" value="True" />
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="ShieldedSeq.cs" selected="True" />
+            <Node name="BetShop.cs" selected="True" />
           </Node>
         </State>
       </Pad>
@@ -24,15 +24,20 @@
         <State expanded="True" selected="True">
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="Trans" expanded="True" />
+            <Node name="Trans" expanded="True">
+              <Node name="Trans.ShieldedDict" expanded="True" />
+            </Node>
           </Node>
         </State>
       </Pad>
       <Pad Id="MonoDevelop.Debugger.WatchPad">
         <State>
           <Value>$exception</Value>
-          <Value>nonFx[0]</Value>
-          <Value>Shield.CurrentTransactionStartStamp</Value>
+          <Value>event1Id</Value>
+          <Value>event2Id</Value>
+          <Value>event3Id</Value>
+          <Value>Tickets</Value>
+          <Value>_lastUsedId</Value>
         </State>
       </Pad>
       <Pad Id="ConnectionManagerPad">
@@ -80,6 +85,7 @@
       <Catchpoint exceptionName="System.IndexOutOfRangeException" />
       <Catchpoint exceptionName="System.InsufficientExecutionStackException" />
       <Catchpoint exceptionName="System.InsufficientMemoryException" />
+      <Catchpoint exceptionName="System.InvalidCastException" />
       <Catchpoint exceptionName="System.InvalidOperationException" />
       <Catchpoint exceptionName="System.InvalidProgramException" />
       <Catchpoint exceptionName="System.InvalidTimeZoneException" />

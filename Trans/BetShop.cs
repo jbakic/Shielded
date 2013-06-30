@@ -38,7 +38,7 @@ namespace Trans
 
     public class BetShop
     {
-        private static Shielded<int> _lastUsedId = new Shielded<int>(0);
+        public Shielded<int> TicketCount = new Shielded<int>(0);
 
         public readonly ShieldedDict<int, Shielded<Event>> Events;
 
@@ -90,7 +90,7 @@ namespace Trans
                     return;
 
                 int newId = 0;
-                _lastUsedId.Modify((ref int i) => { newId = i++; });
+                TicketCount.Modify((ref int i) => { newId = i++; });
 
                 Tickets.Append(new Shielded<Ticket>(newTicket));
                 _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.WinAmount;

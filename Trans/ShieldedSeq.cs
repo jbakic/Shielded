@@ -128,6 +128,12 @@ namespace Trans
             }
         }
 
+        public void RemoveAt(int index)
+        {
+            var r = RefToIndex(index);
+            r.Assign(r.Read.Next);
+        }
+
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
         {
             var curr = _head;
