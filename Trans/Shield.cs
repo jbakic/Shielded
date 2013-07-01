@@ -86,10 +86,8 @@ namespace Trans
 
         internal static void Enlist(IShielded item)
         {
-            HashSet<IShielded> items;
             // reading the current stamp throws ...
-            _transactionItems.TryGetValue(CurrentTransactionStartStamp, out items);
-            items.Add(item);
+            _transactionItems[CurrentTransactionStartStamp].Add(item);
         }
 
         public static void SideEffect(Action fx, Action rollbackFx = null)
@@ -99,7 +97,7 @@ namespace Trans
 
         private struct CommitSubscription
         {
-            public IShielded[] Items;
+            public HashSet<IShielded> Items;
             public Func<bool> Test;
             public Func<bool> Trans;
         }
@@ -107,9 +105,8 @@ namespace Trans
 
         private static void Subscribe(Func<bool> test, Func<bool> trans)
         {
-            HashSet<IShielded> items;
-            _transactionItems.TryGetValue(CurrentTransactionStartStamp, out items);
-            var itemCopy = items.ToArray();
+            HashSet<IShielded> items = _transactionItems[CurrentTransactionStartStamp];
+            var itemCopy = new HashSet<IShielded>(items);
             _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
             {
                 Items = itemCopy,
@@ -127,14 +124,14 @@ namespace Trans
                 int i = 0;
                 foreach (var sub in _subscriptions.ToArray())
                 {
-                    if (sub.Read.Items.Intersect(changes).Any())
+                    var subscription = sub.Read;
+                    if (subscription.Items.Intersect(changes).Any())
                     {
                         bool test = false;
-                        Func<bool> testFunc = sub.Read.Test;
+                        Func<bool> testFunc = subscription.Test;
 
-                        HashSet<IShielded> oldItems;
+                        HashSet<IShielded> oldItems = _transactionItems[CurrentTransactionStartStamp];
                         HashSet<IShielded> testItems = new HashSet<IShielded>();
-                        _transactionItems.TryGetValue(CurrentTransactionStartStamp, out oldItems);
                         _transactionItems[CurrentTransactionStartStamp] = testItems;
                         try
                         {
@@ -144,14 +141,17 @@ namespace Trans
                         {
                             foreach (var ti in testItems)
                                 oldItems.Add(ti);
-                            _transactionItems.TryUpdate(CurrentTransactionStartStamp, oldItems, testItems);
+                            _transactionItems[CurrentTransactionStartStamp] = oldItems;
                         }
 
-                        if (!sub.Read.Items.SequenceEqual(testItems))
+                        if (testItems.Count != subscription.Items.Count ||
+                            testItems.Except(subscription.Items).Any())
+                        {
                             sub.Modify((ref CommitSubscription cs) =>
                             {
-                                cs.Items = testItems.ToArray();
+                                cs.Items = testItems;
                             });
+                        }
                         if (test && !sub.Read.Trans())
                             _subscriptions.RemoveAt(i);
                         else
@@ -172,17 +172,16 @@ namespace Trans
         /// </summary>
         public static void Conditional(Func<bool> test, Func<bool> trans)
         {
-            Action oneTest = () =>
+            Shield.InTransaction(() =>
             {
                 if (test())
                 { // important brackets! :)
                     if (trans())
-                        Shield.SideEffect(() => Shield.InTransaction(oneTest));
+                        Shield.SideEffect(() => Conditional(test, trans));
                 }
                 else
                     Subscribe(test, trans);
-            };
-            Shield.InTransaction(oneTest);
+            });
         }
 
         public static void InTransaction(Action act)
@@ -201,9 +200,7 @@ namespace Trans
                 lock (_commitLock)
                 {
                     _currentTransactionStartStamp = Interlocked.Increment(ref _lastStamp);
-                    if (!_transactionItems.TryAdd(_currentTransactionStartStamp.Value,
-                            new HashSet<IShielded>()))
-                        throw new ApplicationException();
+                    _transactionItems[_currentTransactionStartStamp.Value] = new HashSet<IShielded>();
                 }
 
                 try
@@ -230,8 +227,7 @@ namespace Trans
         private static bool DoCommit()
         {
             // if there are items, they must all commit.
-            HashSet<IShielded> items;
-            _transactionItems.TryGetValue(CurrentTransactionStartStamp, out items);
+            HashSet<IShielded> items = _transactionItems[CurrentTransactionStartStamp];
             List<IShielded> copies = new List<IShielded>();
 
             var changedItems = items.Where(s => s.HasChanges).ToArray();

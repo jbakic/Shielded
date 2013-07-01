@@ -1,14 +1,14 @@
 ﻿<Properties GitUserInfo="UsingGIT">
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Shield.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
     <Files>
       <File FileName="Trans/ShieldedDict.cs" Line="241" Column="1" />
-      <File FileName="Trans/Main.cs" Line="333" Column="77" />
+      <File FileName="Trans/Main.cs" Line="325" Column="13" />
       <File FileName="Trans/BetShop.cs" Line="41" Column="16" />
       <File FileName="Trans/ShieldedSeq.cs" Line="130" Column="9" />
       <File FileName="Trans/ShieldedRef.cs" Line="82" Column="74" />
       <File FileName="Trans/Shielded.cs" Line="98" Column="1" />
-      <File FileName="Trans/Shield.cs" Line="147" Column="28" />
+      <File FileName="Trans/Shield.cs" Line="109" Column="10" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -16,7 +16,7 @@
           <Option id="ShowAllFiles" value="True" />
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="Shield.cs" selected="True" />
+            <Node name="Main.cs" selected="True" />
           </Node>
         </State>
       </Pad>
@@ -33,11 +33,7 @@
       <Pad Id="MonoDevelop.Debugger.WatchPad">
         <State>
           <Value>$exception</Value>
-          <Value>event1Id</Value>
-          <Value>event2Id</Value>
-          <Value>event3Id</Value>
-          <Value>Tickets</Value>
-          <Value>_lastUsedId</Value>
+          <Value>changes</Value>
         </State>
       </Pad>
       <Pad Id="ConnectionManagerPad">

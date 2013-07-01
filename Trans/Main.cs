@@ -337,7 +337,7 @@ namespace Trans
 
             mtTest("bet shop w/ " + numEvents, 10000, i =>
             {
-                decimal payIn = randomizr.Next(9) + 1m;
+                decimal payIn = (randomizr.Next(10) + 1m) * 2;
                 int event1Id = randomizr.Next(numEvents) + 1;
                 int event2Id = randomizr.Next(numEvents) + 1;
                 int event3Id = randomizr.Next(numEvents) + 1;
