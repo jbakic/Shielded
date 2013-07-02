@@ -317,13 +317,13 @@ namespace Trans
         /// </summary>
         public static void BetShopTest()
         {
-            int numEvents = 10;
+            int numEvents = 5;
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
             int reportEvery = 1000;
             Shielded<int> nextReport = new Shielded<int>(reportEvery);
 
-            Shield.Conditional(() => betShop.TicketCount.Read >= nextReport.Read, () =>
+            Shield.Conditional(() => betShop.TicketCount >= nextReport.Read, () =>
             {
                 nextReport.Modify((ref int n) => n += reportEvery);
                 Shield.SideEffect(() =>

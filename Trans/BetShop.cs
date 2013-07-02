@@ -38,11 +38,20 @@ namespace Trans
 
     public class BetShop
     {
-        public Shielded<int> TicketCount = new Shielded<int>(0);
+        public int TicketCount
+        {
+            get
+            {
+                return _ticketCount.Read;
+            }
+        }
+        private Shielded<int> _ticketCount = new Shielded<int>(0);
 
         public readonly ShieldedDict<int, Shielded<Event>> Events;
 
-        public readonly ShieldedSeq<Shielded<Ticket>> Tickets = new ShieldedSeq<Shielded<Ticket>>();
+        private int _idGenerator;
+        public readonly ShieldedSeq<int> TicketIdSeq = new ShieldedSeq<int>();
+        public readonly ShieldedDict<int, Shielded<Ticket>> Tickets = new ShieldedDict<int, Shielded<Ticket>>();
         private ShieldedDict<string, decimal> _sameTicketWins =
             new ShieldedDict<string, decimal>();
 
@@ -69,10 +78,10 @@ namespace Trans
 
         public int? BuyTicket(decimal payIn, params Shielded<BetOffer>[] bets)
         {
-            int? result = null;
+            int newId = Interlocked.Increment(ref _idGenerator);
+            bool bought = false;
             Shield.InTransaction(() =>
             {
-                result = null; // must reinitialize in case of repetitions
                 Ticket newTicket = new Ticket()
                 {
                     PayInAmount = payIn,
@@ -89,15 +98,17 @@ namespace Trans
                 if (!CheckAllowed(ref newTicket, out hash))
                     return;
 
-                int newId = 0;
-                TicketCount.Modify((ref int i) => { newId = i++; });
-
-                Tickets.Append(new Shielded<Ticket>(newTicket));
+                bought = true;
+                Tickets[newId] = new Shielded<Ticket>(newTicket);
                 _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.WinAmount;
 
-                result = newId;
+                Shield.SideEffect(() => Shield.InTransaction(() =>
+                {
+                    _ticketCount.Modify((ref int c) => c++);
+                    TicketIdSeq.Append(newId);
+                }));
             });
-            return result;
+            return bought ? (int?)newId : null;
         }
 
         /// <summary>
@@ -165,9 +176,9 @@ namespace Trans
             {
                 Dictionary<string, decimal> checkTable = new Dictionary<string, decimal>();
                 count = 0;
-                foreach (var shTicket in Tickets)
+                foreach (var id in TicketIdSeq)
                 {
-                    var ticket = shTicket.Read;
+                    var ticket = Tickets[id].Read;
                     var hash = GetOfferHash(ref ticket);
                     if (!checkTable.ContainsKey(hash))
                         checkTable[hash] = ticket.WinAmount;
