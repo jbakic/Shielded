@@ -337,7 +337,7 @@ namespace Trans
 
             mtTest("bet shop w/ " + numEvents, 10000, i =>
             {
-                decimal payIn = (randomizr.Next(10) + 1m) * 2;
+                decimal payIn = (randomizr.Next(10) + 1m) * 1;
                 int event1Id = randomizr.Next(numEvents) + 1;
                 int event2Id = randomizr.Next(numEvents) + 1;
                 int event3Id = randomizr.Next(numEvents) + 1;
@@ -353,7 +353,7 @@ namespace Trans
                         var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
                         betShop.BuyTicket(payIn, offer1, offer2, offer3);
                     });
-                });
+                }, TaskCreationOptions.LongRunning);
             },
             time =>
             {

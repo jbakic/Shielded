@@ -115,50 +115,60 @@ namespace Trans
             }));
         }
 
+        /// <summary>
+        /// Runs the action, and returns a set of IShieldeds that the action enlisted.
+        /// It will make sure to restore original enlisted items, merged with the ones
+        /// that the action enlisted, before returning.
+        /// </summary>
+        private static HashSet<IShielded> IsolatedRun(Action act)
+        {
+            HashSet<IShielded> oldItems = _transactionItems[CurrentTransactionStartStamp];
+            var enlisted = new HashSet<IShielded>();
+            _transactionItems[CurrentTransactionStartStamp] = enlisted;
+            try
+            {
+                act();
+            }
+            finally
+            {
+                foreach (var ti in enlisted)
+                    oldItems.Add(ti);
+                _transactionItems[CurrentTransactionStartStamp] = oldItems;
+            }
+            return enlisted;
+        }
+
         private static void TriggerSubscriptions(IShielded[] changes)
         {
             if (!changes.Any())
                 return;
+
+            Shielded<CommitSubscription>[] triggered = null;
             Shield.InTransaction(() =>
             {
-                int i = 0;
-                foreach (var sub in _subscriptions.ToArray())
-                {
-                    var subscription = sub.Read;
-                    if (subscription.Items.Intersect(changes).Any())
-                    {
-                        bool test = false;
-                        Func<bool> testFunc = subscription.Test;
-
-                        HashSet<IShielded> oldItems = _transactionItems[CurrentTransactionStartStamp];
-                        HashSet<IShielded> testItems = new HashSet<IShielded>();
-                        _transactionItems[CurrentTransactionStartStamp] = testItems;
-                        try
-                        {
-                            test = testFunc();
-                        }
-                        finally
-                        {
-                            foreach (var ti in testItems)
-                                oldItems.Add(ti);
-                            _transactionItems[CurrentTransactionStartStamp] = oldItems;
-                        }
-
-                        if (testItems.Count != subscription.Items.Count ||
-                            testItems.Except(subscription.Items).Any())
-                        {
-                            sub.Modify((ref CommitSubscription cs) =>
-                            {
-                                cs.Items = testItems;
-                            });
-                        }
-                        if (test && !sub.Read.Trans())
-                            _subscriptions.RemoveAt(i);
-                        else
-                            i++;
-                    }
-                }
+                triggered = _subscriptions.Where(s => s.Read.Items.Overlaps(changes)).ToArray();
             });
+
+            foreach (var sub in triggered)
+                Shield.InTransaction(() =>
+                {
+                    int i = _subscriptions.IndexOf(sub);
+                    if (i < 0) return; // not subscribed anymore..
+
+                    var subscription = sub.Read;
+                    bool test = false;
+                    var testItems = IsolatedRun(() => test = subscription.Test());
+
+                    if (!testItems.SetEquals(subscription.Items))
+                    {
+                        sub.Modify((ref CommitSubscription cs) =>
+                        {
+                            cs.Items = testItems;
+                        });
+                    }
+                    if (test && !sub.Read.Trans())
+                        _subscriptions.RemoveAt(i);
+                });
         }
 
         /// <summary>
@@ -199,8 +209,9 @@ namespace Trans
                 // for stable reading, numbers cannot be obtained while transaction commit is going on.
                 lock (_commitLock)
                 {
-                    _currentTransactionStartStamp = Interlocked.Increment(ref _lastStamp);
+                    _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp) + 1;
                     _transactionItems[_currentTransactionStartStamp.Value] = new HashSet<IShielded>();
+                    Interlocked.Increment(ref _lastStamp);
                 }
 
                 try

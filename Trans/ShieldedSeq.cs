@@ -134,6 +134,20 @@ namespace Trans
             r.Assign(r.Read.Next);
         }
 
+        public int IndexOf(T item, IEqualityComparer<T> comp = null)
+        {
+            if (comp == null)
+                comp = EqualityComparer<T>.Default;
+            var curr = _head;
+            int i = 0;
+            while (curr.Read != null && !comp.Equals(curr.Read.Value, item))
+            {
+                i++;
+                curr = curr.Read.Next;
+            }
+            return curr.Read == null ? -1 : i;
+        }
+
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
         {
             var curr = _head;
