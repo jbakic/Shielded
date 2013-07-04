@@ -204,6 +204,8 @@ namespace Trans
                             });
                             Shield.SideEffect(() => Console.WriteLine("Transferred 100.00 .. acc1 -> acc2"),
                                 () => Console.WriteLine("Task 1 rollback!"));
+
+//                            Shield.GiveUp();
                         });
                     }, TaskCreationOptions.LongRunning);
                 else
@@ -317,7 +319,7 @@ namespace Trans
         /// </summary>
         public static void BetShopTest()
         {
-            int numEvents = 5;
+            int numEvents = 20;
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
             int reportEvery = 1000;
@@ -353,7 +355,7 @@ namespace Trans
                         var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
                         betShop.BuyTicket(payIn, offer1, offer2, offer3);
                     });
-                }, TaskCreationOptions.LongRunning);
+                });
             },
             time =>
             {

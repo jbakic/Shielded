@@ -1,14 +1,14 @@
 ﻿<Properties GitUserInfo="UsingGIT">
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Shield.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
     <Files>
       <File FileName="Trans/ShieldedDict.cs" Line="45" Column="26" />
-      <File FileName="Trans/Main.cs" Line="325" Column="13" />
-      <File FileName="Trans/BetShop.cs" Line="111" Column="39" />
+      <File FileName="Trans/Main.cs" Line="65" Column="32" />
+      <File FileName="Trans/BetShop.cs" Line="104" Column="17" />
       <File FileName="Trans/ShieldedSeq.cs" Line="140" Column="52" />
       <File FileName="Trans/ShieldedRef.cs" Line="82" Column="74" />
       <File FileName="Trans/Shielded.cs" Line="97" Column="1" />
-      <File FileName="Trans/Shield.cs" Line="201" Column="23" />
+      <File FileName="Trans/Shield.cs" Line="252" Column="1" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -16,7 +16,7 @@
           <Option id="ShowAllFiles" value="True" />
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="Shield.cs" selected="True" />
+            <Node name="Main.cs" selected="True" />
           </Node>
         </State>
       </Pad>

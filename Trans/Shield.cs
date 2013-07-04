@@ -20,6 +20,42 @@ namespace Trans
                    new NoRepeatTransException("Requested rollback without retry."));
         }
 
+        // an object implementing IShielded..
+        private class Token : IShielded
+        {
+            public bool CanCommit(bool strict, long writeStamp)
+            {
+                return true;
+            }
+
+            public bool Commit(long writeStamp)
+            {
+                return false;
+            }
+
+            public void Rollback(long? writeStamp)
+            {
+            }
+
+            public void TrimCopies(long smallestOpenTransactionId)
+            {
+            }
+
+            public bool HasChanges
+            {
+                get
+                {
+                    return false;
+                }
+            }
+        }
+        private static readonly Token GiveUpToken = new Token();
+
+        public static void GiveUp()
+        {
+            Enlist(GiveUpToken);
+        }
+
         private static long _lastStamp;
 
         [ThreadStatic]
@@ -43,42 +79,48 @@ namespace Trans
         }
 
         // the long is their current version, but being in this list indicates they have something older.
-        private static List<Tuple<long, List<IShielded>>> _copiesByVersion = new List<Tuple<long, List<IShielded>>>();
+        private static ConcurrentQueue<Tuple<long, List<IShielded>>> _copiesByVersion =
+            new ConcurrentQueue<Tuple<long, List<IShielded>>>();
 
         private static void RegisterCopies(long version, List<IShielded> copies)
         {
-            int i;
-            lock (_copiesByVersion)
-            {
-                for (i=0; i < _copiesByVersion.Count && _copiesByVersion[i].Item1 < version; i++)
-                    ;
-                _copiesByVersion.Insert(i, new Tuple<long, List<IShielded>>(version, copies));
-            }
+            _copiesByVersion.Enqueue(new Tuple<long, List<IShielded>>(version, copies));
         }
 
+        private static int _trimFlag = 0;
         private static void TrimCopies()
         {
-            lock (_copiesByVersion)
+            if (Interlocked.CompareExchange(ref _trimFlag, 1, 0) != 0)
+                return;
+            try
             {
                 var keys = _transactionItems.Keys;
                 var minTransactionNo = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
 
-                int toDelete = 0;
-                for (; toDelete < _copiesByVersion.Count &&
-                     _copiesByVersion[toDelete].Item1 < minTransactionNo; toDelete++)
-                    ;
-                if (toDelete > 1)
+                Tuple<long, List<IShielded>> curr;
+                HashSet<IShielded> toTrim = new HashSet<IShielded>();
+                while (_copiesByVersion.TryPeek(out curr))
                 {
-                    toDelete--;
-                    foreach (var sh in _copiesByVersion.Take(toDelete).SelectMany(copy => copy.Item2).Distinct())
-                        sh.TrimCopies(minTransactionNo);
-                    _copiesByVersion.RemoveRange(0, toDelete);
+                    if (curr.Item1 < minTransactionNo)
+                    {
+                        toTrim.UnionWith(curr.Item2);
+                        _copiesByVersion.TryDequeue(out curr);
+                    }
+                    else
+                        break;
                 }
+
+                foreach (var sh in toTrim)
+                    sh.TrimCopies(minTransactionNo);
+            }
+            finally
+            {
+                _trimFlag = 0;
+            }
 //#if DEBUG
 //                Console.WriteLine("Copies trimmed for min stamp {0}. Count of lists of copies: {1}.",
 //                    minTransactionNo, _copiesByVersion.Count);
 //#endif
-            }
         }
 
         private static ConcurrentDictionary<long, HashSet<IShielded>> _transactionItems
@@ -217,13 +259,16 @@ namespace Trans
                 try
                 {
                     act();
-                    if (!DoCommit())
+                    if (_transactionItems[CurrentTransactionStartStamp].Contains(GiveUpToken))
+                        DoRollback();
+                    else if (!DoCommit())
                         repeat = true;
                 }
                 catch (TransException ex)
                 {
+                    repeat = !(ex is NoRepeatTransException) &&
+                        !_transactionItems[CurrentTransactionStartStamp].Contains(GiveUpToken);
                     DoRollback();
-                    repeat = !(ex is NoRepeatTransException);
                 }
                 finally
                 {
