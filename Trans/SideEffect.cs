@@ -19,7 +19,7 @@ namespace Trans
             return true;
         }
 
-        public bool Commit(long writeStamp)
+        public bool Commit(long? writeStamp)
         {
             if (_fx != null) _fx();
             return true;

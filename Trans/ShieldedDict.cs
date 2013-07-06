@@ -165,7 +165,7 @@ namespace Trans
 
         private ConcurrentDictionary<TKey, long> _copies = new ConcurrentDictionary<TKey, long>();
 
-        bool IShielded.Commit(long writeStamp)
+        bool IShielded.Commit(long? writeStamp)
         {
             if (((IShielded)this).HasChanges)
             {
@@ -176,12 +176,12 @@ namespace Trans
                     var newCurrent = new ItemKeeper()
                     {
                         Value = kvp.Value,
-                        Version = writeStamp,
+                        Version = writeStamp.Value,
                         Older = v
                     };
                     // nobody is actually changing it now.
                     _dict[kvp.Key] = newCurrent;
-                    _copies[kvp.Key] = writeStamp;
+                    _copies[kvp.Key] = writeStamp.Value;
 
                     long ourStamp;
                     if (!_writeStamps.TryRemove(kvp.Key, out ourStamp) || ourStamp != writeStamp)

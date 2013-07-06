@@ -119,15 +119,15 @@ namespace Trans
             return false;
         }
         
-        bool IShielded.Commit(long writeStamp)
+        bool IShielded.Commit(long? writeStamp)
         {
             if (((IShielded)this).HasChanges)
             {
-                if (Interlocked.Read(ref _writerStamp) != writeStamp)
+                if (Interlocked.Read(ref _writerStamp) != writeStamp.Value)
                     throw new ApplicationException("Commit received from unexpected transaction.");
                 var newCurrent = _locals.Value;
                 newCurrent.Older = _current;
-                newCurrent.Version = writeStamp;
+                newCurrent.Version = writeStamp.Value;
                 _current = newCurrent;
                 _locals.Value = null;
                 Interlocked.Exchange(ref _writerStamp, 0);

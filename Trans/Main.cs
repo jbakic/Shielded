@@ -33,7 +33,7 @@ namespace Trans
         {
             var randomizr = new Random();
             int transactionCounter;
-            int sleepTime = 30;
+            int sleepTime = 10;
             int taskCount = 1000;
 
             foreach (var i in Enumerable.Repeat(0, 5))
@@ -319,7 +319,7 @@ namespace Trans
         /// </summary>
         public static void BetShopTest()
         {
-            int numEvents = 20;
+            int numEvents = 10;
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
             int reportEvery = 1000;

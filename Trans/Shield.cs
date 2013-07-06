@@ -28,7 +28,7 @@ namespace Trans
                 return true;
             }
 
-            public bool Commit(long writeStamp)
+            public bool Commit(long? writeStamp)
             {
                 return false;
             }
@@ -84,7 +84,8 @@ namespace Trans
 
         private static void RegisterCopies(long version, List<IShielded> copies)
         {
-            _copiesByVersion.Enqueue(new Tuple<long, List<IShielded>>(version, copies));
+            if (copies.Any())
+                _copiesByVersion.Enqueue(new Tuple<long, List<IShielded>>(version, copies));
         }
 
         private static int _trimFlag = 0;
@@ -283,50 +284,57 @@ namespace Trans
         private static bool DoCommit()
         {
             // if there are items, they must all commit.
-            HashSet<IShielded> items = _transactionItems[CurrentTransactionStartStamp];
-            List<IShielded> copies = new List<IShielded>();
+            HashSet<IShielded> items = _transactionItems[_currentTransactionStartStamp.Value];
 
             var changedItems = items.Where(s => s.HasChanges).ToArray();
-            bool isStrict = changedItems.Any();
-            long writeStamp;
+            bool hasChanges = changedItems.Any();
+            List<IShielded> copies = hasChanges ? new List<IShielded>() : null;
+            long? writeStamp = null;
             bool commit = true;
             var nonFx = items.Where(i => !(i is SideEffect)).ToArray();
-            lock (_commitLock)
-            {
-                writeStamp = Interlocked.Increment(ref _lastStamp);
-                foreach (var item in nonFx)
-                    if (!item.CanCommit(isStrict, writeStamp))
-                    {
-                        commit = false;
-                        foreach (var inner in nonFx)
-                            inner.Rollback(writeStamp);
-                        break;
-                    }
-            }
 
-            _transactionItems.TryRemove(CurrentTransactionStartStamp, out items);
+            if (hasChanges)
+                lock (_commitLock)
+                {
+                    writeStamp = Interlocked.Increment(ref _lastStamp);
+                    foreach (var item in nonFx)
+                        if (!item.CanCommit(hasChanges, writeStamp.Value))
+                        {
+                            commit = false;
+                            foreach (var inner in nonFx)
+                                inner.Rollback(writeStamp);
+                            break;
+                        }
+                }
+
             if (commit)
             {
                 // do the commit. out of global lock! and, non side-effects first.
                 foreach (var item in nonFx)
-                    if (item.Commit(writeStamp))
+                    if (item.Commit(writeStamp) && copies != null)
                         copies.Add(item);
-                RegisterCopies(CurrentTransactionStartStamp, copies);
+                if (copies != null)
+                    RegisterCopies(writeStamp.Value, copies);
 
+                _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
                 _currentTransactionStartStamp = null;
 
                 // if committing, trigger change subscriptions.
-                TriggerSubscriptions(changedItems);
+                if (hasChanges)
+                    TriggerSubscriptions(changedItems);
 
-                foreach (var fx in items.Except(nonFx))
+                items.ExceptWith(nonFx);
+                foreach (var fx in items)
                     // caller beware.
                     fx.Commit(writeStamp);
             }
             else
             {
+                _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
                 _currentTransactionStartStamp = null;
 
-                foreach (var item in items.OfType<SideEffect>())
+                items.ExceptWith(nonFx);
+                foreach (var item in items)
                     item.Rollback(writeStamp);
             }
 
