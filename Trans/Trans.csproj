@@ -46,6 +46,7 @@
     <Compile Include="ShieldedSeq.cs" />
     <Compile Include="ShieldedRef.cs" />
     <Compile Include="BetShop.cs" />
+    <Compile Include="ShieldedTree.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

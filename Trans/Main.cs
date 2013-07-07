@@ -366,6 +366,102 @@ namespace Trans
             });
         }
 
+        class TreeItem
+        {
+            public Guid Id;
+        }
+
+        public static void TreeTest()
+        {
+            int numTasks = 30000;
+            int reportEvery = 1000;
+            bool doTree = true;
+
+            ShieldedTree<TreeItem, Guid> tree = new ShieldedTree<TreeItem, Guid>(ti => ti.Id);
+            int transactionCount = 0;
+            Shielded<int> nextReport = new Shielded<int>(reportEvery);
+            Shielded<int> countComplete = new Shielded<int>(0);
+            DateTime now = DateTime.UtcNow;
+
+            Shield.Conditional(() => countComplete.Read >= nextReport.Read, () =>
+            {
+                DateTime newNow = DateTime.UtcNow;
+                double speed = countComplete * 1000 / newNow.Subtract(now).TotalMilliseconds;
+                nextReport.Modify((ref int n) => n += reportEvery);
+                Shield.SideEffect(() =>
+                {
+                    Console.Write("\n{0} at {1} item/s", countComplete.Read, speed);
+                });
+                return true;
+            });
+
+            if (doTree)
+            {
+                mtTest("tree", numTasks, i =>
+                {
+                    return Task.Factory.StartNew(() =>
+                    {
+                        var item = new TreeItem() { Id = Guid.NewGuid() };
+                        Shield.InTransaction(() =>
+                        {
+                            Interlocked.Increment(ref transactionCount);
+                            tree.Insert(item);
+                        });
+                        Shield.InTransaction(() =>
+                                             countComplete.Modify((ref int c) => c++));
+                    });
+                },
+                time =>
+                {
+                    Guid? previous = null;
+                    bool correct = true;
+                    Shield.InTransaction(() =>
+                    {
+                        foreach (var item in tree)
+                        {
+                            if (previous != null && previous.Value.CompareTo(item.Id) > 0)
+                            {
+                                correct = false;
+                                break;
+                            }
+                            previous = item.Id;
+                        }
+                    });
+                    Console.WriteLine("\n -- {0} ms with {1} iterations and is {2}.",
+                        time, transactionCount, correct ? "correct" : "incorrect");
+                });
+                return;
+            }
+
+            ShieldedDict<Guid, TreeItem> dict = new ShieldedDict<Guid, TreeItem>();
+            transactionCount = 0;
+            Shield.InTransaction(() =>
+            {
+                countComplete.Modify((ref int c) => c = 0);
+                nextReport.Modify((ref int n) => n = reportEvery);
+            });
+
+            mtTest("dictionary", numTasks, i =>
+            {
+                return Task.Factory.StartNew(() =>
+                {
+                    var item = new TreeItem() { Id = Guid.NewGuid() };
+                    Shield.InTransaction(() =>
+                    {
+                        Interlocked.Increment(ref transactionCount);
+                        dict[item.Id] = item;
+                    });
+                    Shield.InTransaction(() =>
+                                         countComplete.Modify((ref int c) => c++));
+                });
+            },
+            time =>
+            {
+                Console.WriteLine("\n -- {0} ms with {1} iterations. Not sorted.",
+                    time, transactionCount);
+            });
+        }
+
 		public static void Main(string[] args)
         {
             //TimeTests();
@@ -376,7 +472,9 @@ namespace Trans
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
+
+            TreeTest();
         }
 	}
 }

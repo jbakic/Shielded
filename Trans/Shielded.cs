@@ -98,6 +98,17 @@ namespace Trans
             d(ref _locals.Value.Value);
         }
 
+        public void Assign(T value)
+        {
+            PrepareForWriting();
+            _locals.Value.Value = value;
+        }
+
+        public static implicit operator T(Shielded<T> obj)
+        {
+            return obj.Read;
+        }
+
 		bool IShielded.HasChanges
 		{
 			get
