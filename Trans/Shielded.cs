@@ -34,8 +34,8 @@ namespace Trans
             _current.Value = initial;
         }
 
-		private ValueKeeper CurrentTransactionOldValue()
-		{
+        private void CheckLockAndEnlist()
+        {
             var stamp = Shield.CurrentTransactionStartStamp;
             SpinWait.SpinUntil(() =>
             {
@@ -43,9 +43,14 @@ namespace Trans
                 return w == 0 || w > stamp;
             });
             Shield.Enlist(this);
+        }
+
+		private ValueKeeper CurrentTransactionOldValue()
+		{
+            CheckLockAndEnlist();
 
 			var point = _current;
-			while (point != null && point.Version > stamp)
+			while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
 				point = point.Older;
 			if (point == null)
 				throw new ApplicationException("Critical error in Shielded<T> - lost data.");
@@ -58,13 +63,18 @@ namespace Trans
                 _locals.Value.Version == Shield.CurrentTransactionStartStamp;
         }
 
-		private void PrepareForWriting()
+		private void PrepareForWriting(bool prepareOld)
         {
             if (!IsLocalPrepared())
             {
                 if (_locals.Value == null)
                     _locals.Value = new ValueKeeper();
-                _locals.Value.Value = CurrentTransactionOldValue().Value;
+
+                if (!prepareOld)
+                    CheckLockAndEnlist();
+                else
+                    _locals.Value.Value = CurrentTransactionOldValue().Value;
+
                 _locals.Value.Version = Shield.CurrentTransactionStartStamp;
             }
             else if (_current.Version > Shield.CurrentTransactionStartStamp)
@@ -94,13 +104,13 @@ namespace Trans
 
         public void Modify(ModificationDelegate d)
         {
-            PrepareForWriting();
+            PrepareForWriting(true);
             d(ref _locals.Value.Value);
         }
 
         public void Assign(T value)
         {
-            PrepareForWriting();
+            PrepareForWriting(false);
             _locals.Value.Value = value;
         }
 
