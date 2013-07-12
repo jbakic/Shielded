@@ -3,12 +3,13 @@
   <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
     <Files>
       <File FileName="Trans/ShieldedDict.cs" Line="223" Column="30" />
-      <File FileName="Trans/Main.cs" Line="392" Column="16" />
-      <File FileName="Trans/BetShop.cs" Line="99" Column="28" />
+      <File FileName="Trans/Main.cs" Line="378" Column="32" />
+      <File FileName="Trans/BetShop.cs" Line="107" Column="61" />
       <File FileName="Trans/ShieldedSeq.cs" Line="1" Column="1" />
-      <File FileName="Trans/Shield.cs" Line="241" Column="10" />
-      <File FileName="Trans/ShieldedTree.cs" Line="171" Column="36" />
-      <File FileName="Trans/ShieldedRef.cs" Line="82" Column="1" />
+      <File FileName="Trans/Shield.cs" Line="401" Column="1" />
+      <File FileName="Trans/ShieldedTree.cs" Line="238" Column="13" />
+      <File FileName="Trans/ShieldedRef.cs" Line="73" Column="9" />
+      <File FileName="Trans/Shielded.cs" Line="79" Column="22" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">

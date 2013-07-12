@@ -6,12 +6,16 @@ using System.Collections.Generic;
 
 namespace Trans
 {
+    /// <summary>
+    /// A shielded red-black tree. Each node is a Shielded struct, so parallel
+    /// operations are possible.
+    /// </summary>
     public class ShieldedTree<T, TKey> : IEnumerable<T> where T : class
     {
         private enum Color
         {
-            Black = 0,
-            Red
+            Red = 0,
+            Black
         }
 
         private struct Node
@@ -107,7 +111,7 @@ namespace Trans
                 }
                 var shN = new Shielded<Node>(new Node()
                 {
-                    Color = Color.Red,
+                    //Color = Color.Red, // the default anyway.
                     Parent = parent,
                     Value = item
                 });
@@ -222,6 +226,16 @@ namespace Trans
                 }
                 break;
             }
+        }
+
+        public void Remove(T item)
+        {
+            Remove(_keySelector(item));
+        }
+
+        public void Remove(TKey key)
+        {
+
         }
     }
 }

@@ -59,26 +59,21 @@ namespace Trans
 
         private bool IsLocalPrepared()
         {
-            return _locals.IsValueCreated && _locals.Value != null &&
-                _locals.Value.Version == Shield.CurrentTransactionStartStamp;
+            return _locals.IsValueCreated && _locals.Value != null;
         }
 
 		private void PrepareForWriting(bool prepareOld)
         {
+            if (_current.Version > Shield.CurrentTransactionStartStamp)
+                throw new TransException("Write collision.");
             if (!IsLocalPrepared())
             {
-                if (_locals.Value == null)
-                    _locals.Value = new ValueKeeper();
-
+                _locals.Value = new ValueKeeper();
                 if (!prepareOld)
                     CheckLockAndEnlist();
                 else
                     _locals.Value.Value = CurrentTransactionOldValue().Value;
-
-                _locals.Value.Version = Shield.CurrentTransactionStartStamp;
             }
-            else if (_current.Version > Shield.CurrentTransactionStartStamp)
-                throw new TransException("Write collision.");
 		}
 
         /// <summary>
@@ -156,6 +151,7 @@ namespace Trans
                 Interlocked.Exchange(ref _writerStamp, 0);
                 return true;
             }
+            _locals.Value = null;
             return false;
 		}
 

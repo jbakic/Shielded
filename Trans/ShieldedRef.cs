@@ -32,7 +32,7 @@ namespace Trans
             _current.Value = initial;
         }
 
-        private ValueKeeper CurrentTransactionOldValue()
+        private void CheckLockAndEnlist()
         {
             var stamp = Shield.CurrentTransactionStartStamp;
             SpinWait.SpinUntil(() =>
@@ -41,9 +41,14 @@ namespace Trans
                 return w == 0 || w > stamp;
             });
             Shield.Enlist(this);
+        }
+
+        private ValueKeeper CurrentTransactionOldValue()
+        {
+            CheckLockAndEnlist();
 
             var point = _current;
-            while (point != null && point.Version > stamp)
+            while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
                 point = point.Older;
             if (point == null)
                 throw new ApplicationException("Critical error in Shielded<T> - lost data.");
@@ -52,21 +57,18 @@ namespace Trans
 
         private bool IsLocalPrepared()
         {
-            return _locals.IsValueCreated && _locals.Value != null &&
-                _locals.Value.Version == Shield.CurrentTransactionStartStamp;
+            return _locals.IsValueCreated && _locals.Value != null;
         }
 
         private void PrepareForWriting()
         {
+            if (_current.Version > Shield.CurrentTransactionStartStamp)
+                throw new TransException("Write collision.");
             if (!IsLocalPrepared())
             {
-                if (_locals.Value == null)
-                    _locals.Value = new ValueKeeper();
-                //_locals.Value.Value = CurrentTransactionOldValue().Value;
-                _locals.Value.Version = Shield.CurrentTransactionStartStamp;
+                _locals.Value = new ValueKeeper();
+                CheckLockAndEnlist();
             }
-            else if (_current.Version > Shield.CurrentTransactionStartStamp)
-                throw new TransException("Write collision.");
         }
 
         public T Read
@@ -91,7 +93,6 @@ namespace Trans
 
         public void Assign(T val)
         {
-            Shield.Enlist(this);
             PrepareForWriting();
             _locals.Value.Value = val;
         }
@@ -133,6 +134,7 @@ namespace Trans
                 Interlocked.Exchange(ref _writerStamp, 0);
                 return true;
             }
+            _locals.Value = null;
             return false;
         }
 

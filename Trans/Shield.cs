@@ -124,18 +124,55 @@ namespace Trans
 //#endif
         }
 
-        private static ConcurrentDictionary<long, HashSet<IShielded>> _transactionItems
-            = new ConcurrentDictionary<long, HashSet<IShielded>>();
+        private class TransItems
+        {
+            public HashSet<IShielded> Enlisted = new HashSet<IShielded>();
+            public List<SideEffect> Fx;
+
+            public void UnionWith(TransItems other)
+            {
+                Enlisted.UnionWith(other.Enlisted);
+                if (Fx == null)
+                    Fx = other.Fx;
+                else if (other.Fx != null)
+                    Fx.AddRange(other.Fx);
+            }
+
+            private TransItems() {}
+
+            private static ConcurrentBag<TransItems> _itemPool = new ConcurrentBag<TransItems>();
+            public static TransItems BagOrNew()
+            {
+                TransItems result;
+                if (_itemPool.TryTake(out result))
+                    return result;
+                return new TransItems();
+            }
+
+            public static void Bag(TransItems items)
+            {
+                items.Enlisted.Clear();
+                items.Fx = null;
+                _itemPool.Add(items);
+            }
+        }
+
+        private static ConcurrentDictionary<long, TransItems> _transactionItems
+            = new ConcurrentDictionary<long, TransItems>();
 
         internal static void Enlist(IShielded item)
         {
             // reading the current stamp throws ...
-            _transactionItems[CurrentTransactionStartStamp].Add(item);
+            _transactionItems[CurrentTransactionStartStamp].Enlisted.Add(item);
         }
 
         public static void SideEffect(Action fx, Action rollbackFx = null)
         {
-            Enlist(new SideEffect(fx, rollbackFx));
+            //Enlist(new SideEffect(fx, rollbackFx));
+            var items = _transactionItems[CurrentTransactionStartStamp];
+            if (items.Fx == null)
+                items.Fx = new List<Trans.SideEffect>();
+            items.Fx.Add(new SideEffect(fx, rollbackFx));
         }
 
         private struct CommitSubscription
@@ -148,11 +185,9 @@ namespace Trans
 
         private static void Subscribe(Func<bool> test, Func<bool> trans)
         {
-            HashSet<IShielded> items = _transactionItems[CurrentTransactionStartStamp];
-            var itemCopy = new HashSet<IShielded>(items);
             _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
             {
-                Items = itemCopy,
+                Items = new HashSet<IShielded>(_transactionItems[CurrentTransactionStartStamp].Enlisted),
                 Test = test,
                 Trans = trans
             }));
@@ -163,22 +198,21 @@ namespace Trans
         /// It will make sure to restore original enlisted items, merged with the ones
         /// that the action enlisted, before returning.
         /// </summary>
-        private static HashSet<IShielded> IsolatedRun(Action act)
+        private static TransItems IsolatedRun(Action act)
         {
-            HashSet<IShielded> oldItems = _transactionItems[CurrentTransactionStartStamp];
-            var enlisted = new HashSet<IShielded>();
-            _transactionItems[CurrentTransactionStartStamp] = enlisted;
+            TransItems oldItems = _transactionItems[CurrentTransactionStartStamp];
+            var isolated = TransItems.BagOrNew();
+            _transactionItems[CurrentTransactionStartStamp] = isolated;
             try
             {
                 act();
             }
             finally
             {
-                foreach (var ti in enlisted)
-                    oldItems.Add(ti);
+                oldItems.UnionWith(isolated);
                 _transactionItems[CurrentTransactionStartStamp] = oldItems;
             }
-            return enlisted;
+            return isolated;
         }
 
         private static void TriggerSubscriptions(IShielded[] changes)
@@ -202,13 +236,15 @@ namespace Trans
                     bool test = false;
                     var testItems = IsolatedRun(() => test = subscription.Test());
 
-                    if (!testItems.SetEquals(subscription.Items))
+                    if (!testItems.Enlisted.SetEquals(subscription.Items))
                     {
                         sub.Modify((ref CommitSubscription cs) =>
                         {
-                            cs.Items = testItems;
+                            cs.Items = testItems.Enlisted;
                         });
                     }
+                    else
+                        TransItems.Bag(testItems);
                     if (test && !sub.Read.Trans())
                         _subscriptions.RemoveAt(i);
                 });
@@ -253,14 +289,14 @@ namespace Trans
                 lock (_commitLock)
                 {
                     _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp) + 1;
-                    _transactionItems[_currentTransactionStartStamp.Value] = new HashSet<IShielded>();
+                    _transactionItems[_currentTransactionStartStamp.Value] = TransItems.BagOrNew();
                     Interlocked.Increment(ref _lastStamp);
                 }
 
                 try
                 {
                     act();
-                    if (_transactionItems[CurrentTransactionStartStamp].Contains(GiveUpToken))
+                    if (_transactionItems[CurrentTransactionStartStamp].Enlisted.Contains(GiveUpToken))
                         DoRollback();
                     else if (!DoCommit())
                         repeat = true;
@@ -268,7 +304,7 @@ namespace Trans
                 catch (TransException ex)
                 {
                     repeat = !(ex is NoRepeatTransException) &&
-                        !_transactionItems[CurrentTransactionStartStamp].Contains(GiveUpToken);
+                        !_transactionItems[CurrentTransactionStartStamp].Enlisted.Contains(GiveUpToken);
                     DoRollback();
                 }
                 finally
@@ -284,24 +320,22 @@ namespace Trans
         private static bool DoCommit()
         {
             // if there are items, they must all commit.
-            HashSet<IShielded> items = _transactionItems[_currentTransactionStartStamp.Value];
+            var items = _transactionItems[_currentTransactionStartStamp.Value];
 
-            var changedItems = items.Where(s => s.HasChanges).ToArray();
-            bool hasChanges = changedItems.Any();
-            List<IShielded> copies = hasChanges ? new List<IShielded>() : null;
+            var enlisted = items.Enlisted.ToArray();
+            bool hasChanges = enlisted.Any(s => s.HasChanges);
             long? writeStamp = null;
             bool commit = true;
-            var nonFx = items.Where(i => !(i is SideEffect)).ToArray();
 
             if (hasChanges)
                 lock (_commitLock)
                 {
                     writeStamp = Interlocked.Increment(ref _lastStamp);
-                    foreach (var item in nonFx)
+                    foreach (var item in enlisted)
                         if (!item.CanCommit(hasChanges, writeStamp.Value))
                         {
                             commit = false;
-                            foreach (var inner in nonFx)
+                            foreach (var inner in enlisted)
                                 inner.Rollback(writeStamp);
                             break;
                         }
@@ -310,7 +344,9 @@ namespace Trans
             if (commit)
             {
                 // do the commit. out of global lock! and, non side-effects first.
-                foreach (var item in nonFx)
+                List<IShielded> copies = hasChanges ? new List<IShielded>() : null;
+                IShielded[] trigger = hasChanges ? enlisted.Where(s => s.HasChanges).ToArray() : null;
+                foreach (var item in enlisted)
                     if (item.Commit(writeStamp) && copies != null)
                         copies.Add(item);
                 if (copies != null)
@@ -320,22 +356,22 @@ namespace Trans
                 _currentTransactionStartStamp = null;
 
                 // if committing, trigger change subscriptions.
-                if (hasChanges)
-                    TriggerSubscriptions(changedItems);
+                if (trigger != null)
+                    TriggerSubscriptions(trigger);
 
-                items.ExceptWith(nonFx);
-                foreach (var fx in items)
-                    // caller beware.
-                    fx.Commit(writeStamp);
+                if (items.Fx != null)
+                    foreach (var fx in items.Fx)
+                        // caller beware.
+                        fx.Commit(writeStamp);
             }
             else
             {
                 _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
                 _currentTransactionStartStamp = null;
 
-                items.ExceptWith(nonFx);
-                foreach (var item in items)
-                    item.Rollback(writeStamp);
+                if (items.Fx != null)
+                    foreach (var item in items.Fx)
+                        item.Rollback(writeStamp);
             }
 
 //#if DEBUG
@@ -344,21 +380,24 @@ namespace Trans
 //                    _transactionItems.Count);
 //#endif
 
+            TransItems.Bag(items);
             TrimCopies();
             return commit;
         }
 
         private static void DoRollback()
         {
-            HashSet<IShielded> items;
+            TransItems items;
             _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
-            foreach (var item in items.Where(i => !(i is SideEffect)))
+            foreach (var item in items.Enlisted)
                 item.Rollback();
             _currentTransactionStartStamp = null;
 
-            foreach (var item in items.OfType<SideEffect>())
-                item.Rollback(null);
+            if (items.Fx != null)
+                foreach (var item in items.Fx)
+                    item.Rollback(null);
 
+            TransItems.Bag(items);
             TrimCopies();
         }
     }

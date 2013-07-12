@@ -33,7 +33,7 @@ namespace Trans
         {
             var randomizr = new Random();
             int transactionCounter;
-            int sleepTime = 10;
+            int sleepTime = 0;
             int taskCount = 1000;
 
             foreach (var i in Enumerable.Repeat(0, 5))
@@ -325,7 +325,7 @@ namespace Trans
             int reportEvery = 1000;
             Shielded<int> nextReport = new Shielded<int>(reportEvery);
 
-            Shield.Conditional(() => betShop.TicketCount >= nextReport.Read, () =>
+            Shield.Conditional(() => betShop.TicketCount >= nextReport, () =>
             {
                 nextReport.Modify((ref int n) => n += reportEvery);
                 Shield.SideEffect(() =>
@@ -348,13 +348,10 @@ namespace Trans
                 int offer3Ind = randomizr.Next(3);
                 return Task.Factory.StartNew(() =>
                 {
-                    Shield.InTransaction(() =>
-                    {
-                        var offer1 = betShop.Events[event1Id].Read.BetOffers[offer1Ind];
-                        var offer2 = betShop.Events[event2Id].Read.BetOffers[offer2Ind];
-                        var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
-                        betShop.BuyTicket(payIn, offer1, offer2, offer3);
-                    });
+                    var offer1 = betShop.Events[event1Id].Read.BetOffers[offer1Ind];
+                    var offer2 = betShop.Events[event2Id].Read.BetOffers[offer2Ind];
+                    var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
+                    betShop.BuyTicket(payIn, offer1, offer2, offer3);
                 });
             },
             time =>
@@ -437,8 +434,8 @@ namespace Trans
             transactionCount = 0;
             Shield.InTransaction(() =>
             {
-                countComplete.Modify((ref int c) => c = 0);
-                nextReport.Modify((ref int n) => n = reportEvery);
+                countComplete.Assign(0);
+                nextReport.Assign(reportEvery);
             });
 
             mtTest("dictionary", numTasks, i =>
@@ -472,9 +469,9 @@ namespace Trans
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
-            TreeTest();
+            //TreeTest();
         }
 	}
 }
