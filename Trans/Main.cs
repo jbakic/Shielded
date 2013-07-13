@@ -345,7 +345,7 @@ namespace Trans
 
         public static void TreeTest()
         {
-            int numTasks = 50000;
+            int numTasks = 30000;
             int reportEvery = 1000;
             bool doTree = true;
 
@@ -358,7 +358,7 @@ namespace Trans
             Shield.Conditional(() => countComplete.Read >= lastReport + reportEvery, () =>
             {
                 DateTime newNow = DateTime.UtcNow;
-                double speed = ((int)countComplete - lastReport) * 1000 / newNow.Subtract(lastTime).TotalMilliseconds;
+                double speed = (countComplete - lastReport) * 1000 / newNow.Subtract(lastTime).TotalMilliseconds;
                 lastTime.Assign(DateTime.UtcNow);
                 lastReport.Modify((ref int n) => n += reportEvery);
                 int count = countComplete.Read;
