@@ -150,6 +150,7 @@ namespace Trans
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
         {
+            var a = Shield.CurrentTransactionStartStamp;
             var curr = _head;
             while (curr.Read != null)
             {

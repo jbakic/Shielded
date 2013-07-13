@@ -370,7 +370,7 @@ namespace Trans
 
         public static void TreeTest()
         {
-            int numTasks = 30000;
+            int numTasks = 20000;
             int reportEvery = 1000;
             bool doTree = true;
 
