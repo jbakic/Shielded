@@ -117,14 +117,18 @@ namespace Trans
             do
             {
                 repeat = false;
-                // for stable reading, numbers cannot be obtained while transaction commit is going on.
-                lock (_commitLock)
+                // trimming uses lastStamp if the items are empty, so we suspend it momentarily if it's not running
+                // already. O(1)!
+                Interlocked.Increment(ref _trimFlag);
+                try
                 {
-                    // trimming uses lastStamp if the items are empty, so we must add items
-                    // before incrementing lastStamp.
-                    _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp) + 1;
+                    lock (_stampLock)
+                        _currentTransactionStartStamp = Interlocked.Increment(ref _lastStamp);
                     _transactionItems[_currentTransactionStartStamp.Value] = TransItems.BagOrNew();
-                    Interlocked.Increment(ref _lastStamp);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _trimFlag);
                 }
 
                 try
@@ -239,7 +243,7 @@ namespace Trans
 
         #region Commit & rollback
 
-        private static object _commitLock = new object();
+        private static object _stampLock = new object();
 
         private static bool DoCommit()
         {
@@ -252,27 +256,34 @@ namespace Trans
             bool commit = true;
 
             if (hasChanges)
-                lock (_commitLock)
+            {
+                int rolledBack = 0;
+                lock (_stampLock)
                 {
                     writeStamp = Interlocked.Increment(ref _lastStamp);
-                    foreach (var item in enlisted)
-                        if (!item.CanCommit(writeStamp.Value))
+                    for (int i = 0; i < enlisted.Length; i++)
+                        if (!enlisted[i].CanCommit(writeStamp.Value))
                         {
                             commit = false;
-                            foreach (var inner in enlisted)
-                                inner.Rollback(writeStamp);
+                            rolledBack = i - 1;
+                            for (int j = i - 1; j >= 0; j--)
+                                enlisted[j].Rollback(writeStamp.Value);
                             break;
                         }
                 }
+                if (!commit)
+                    for (int i = rolledBack + 1; i < enlisted.Length; i++)
+                        enlisted[i].Rollback(null);
+            }
 
             if (commit)
             {
                 // do the commit. out of global lock! and, non side-effects first.
                 List<IShielded> copies = hasChanges ? new List<IShielded>() : null;
                 IShielded[] trigger = hasChanges ? enlisted.Where(s => s.HasChanges).ToArray() : null;
-                foreach (var item in enlisted)
-                    if (item.Commit(writeStamp) && copies != null)
-                        copies.Add(item);
+                for (int i = 0; i < enlisted.Length; i++)
+                    if (enlisted[i].Commit(writeStamp) && copies != null)
+                        copies.Add(enlisted[i]);
                 if (copies != null)
                     RegisterCopies(writeStamp.Value, copies);
 
@@ -334,12 +345,17 @@ namespace Trans
         private static int _trimFlag = 0;
         private static void TrimCopies()
         {
+            // must read value before checking flag, because InTransaction raises flag
+            // while opening. it does this since there is a small period of time when
+            // _lastStamp could become bigger then his start stamp (i.e. two transactions
+            // starting simultaneously), and items don't contain his items yet.
+            var lastStamp = Interlocked.Read(ref _lastStamp);
             if (Interlocked.CompareExchange(ref _trimFlag, 1, 0) != 0)
                 return;
             try
             {
                 var keys = _transactionItems.Keys;
-                var minTransactionNo = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
+                var minTransactionNo = keys.Any() ? keys.Min() : lastStamp;
 
                 Tuple<long, List<IShielded>> curr;
                 HashSet<IShielded> toTrim = new HashSet<IShielded>();
@@ -359,7 +375,7 @@ namespace Trans
             }
             finally
             {
-                _trimFlag = 0;
+                Interlocked.Decrement(ref _trimFlag);
             }
         }
 

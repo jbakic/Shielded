@@ -345,7 +345,7 @@ namespace Trans
 
         public static void TreeTest()
         {
-            int numTasks = 20000;
+            int numTasks = 30000;
             int reportEvery = 1000;
             bool doTree = true;
 
@@ -358,11 +358,12 @@ namespace Trans
             Shield.Conditional(() => countComplete.Read >= nextReport.Read, () =>
             {
                 DateTime newNow = DateTime.UtcNow;
-                double speed = countComplete * 1000 / newNow.Subtract(now).TotalMilliseconds;
+                int count = countComplete;
+                double speed = count * 1000 / newNow.Subtract(now).TotalMilliseconds;
                 nextReport.Modify((ref int n) => n += reportEvery);
                 Shield.SideEffect(() =>
                 {
-                    Console.Write("\n{0} at {1} item/s", countComplete.Read, speed);
+                    Console.Write("\n{0} at {1} item/s", count, speed);
                 });
                 return true;
             });
@@ -379,8 +380,8 @@ namespace Trans
                             Interlocked.Increment(ref transactionCount);
                             tree.Insert(item);
                         });
-                        Shield.InTransaction(() =>
-                                             countComplete.Modify((ref int c) => c++));
+                        Shield.InTransaction(
+                            () => countComplete.Modify((ref int c) => c++));
                     });
                 });
                 Guid? previous = null;
@@ -420,8 +421,8 @@ namespace Trans
                         Interlocked.Increment(ref transactionCount);
                         dict[item.Id] = item;
                     });
-                    Shield.InTransaction(() =>
-                                         countComplete.Modify((ref int c) => c++));
+                    Shield.InTransaction(
+                        () => countComplete.Modify((ref int c) => c++));
                 });
             });
             Console.WriteLine("\n -- {0} ms with {1} iterations. Not sorted.",
