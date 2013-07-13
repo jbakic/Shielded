@@ -2,7 +2,8 @@
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Release|x86" />
   <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
     <Files>
-      <File FileName="Trans/Main.cs" Line="323" Column="62" />
+      <File FileName="Trans/Main.cs" Line="359" Column="14" />
+      <File FileName="Trans/Shield.cs" Line="9" Column="5" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -15,11 +16,12 @@
         </State>
       </Pad>
       <Pad Id="ClassPad">
-        <State expanded="True" selected="True">
+        <State expanded="True">
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
             <Node name="Trans" expanded="True">
-              <Node name="Trans.ShieldedDict" expanded="True" />
+              <Node name="Trans.Shield" selected="True" />
+              <Node name="Trans.Shielded" expanded="True" />
             </Node>
           </Node>
         </State>
