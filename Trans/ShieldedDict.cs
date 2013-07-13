@@ -23,17 +23,13 @@ namespace Trans
         {
             public long Version;
             public Dictionary<TKey, TItem> Items;
-            public HashSet<TKey> Reads;
+            public HashSet<TKey> Reads = new HashSet<TKey>();
         }
 
         private readonly ConcurrentDictionary<TKey, ItemKeeper> _dict;
         private readonly ConcurrentDictionary<TKey, long> _writeStamps
             = new ConcurrentDictionary<TKey, long>();
-        private ThreadLocal<LocalDict> _localDict = new ThreadLocal<LocalDict>(
-            () => new LocalDict()
-            {
-                Reads = new HashSet<TKey>()
-            });
+        private ThreadLocal<LocalDict> _localDict = new ThreadLocal<LocalDict>();
 
         public ShieldedDict(Func<TItem, TKey> keySelector, IEnumerable<TItem> items)
         {
@@ -53,49 +49,51 @@ namespace Trans
             _dict = new ConcurrentDictionary<TKey, ItemKeeper>();
         }
 
-        private ItemKeeper CurrentTransactionOldValue(TKey key)
+        private void CheckLockAndEnlist(TKey key)
         {
             var stamp = Shield.CurrentTransactionStartStamp;
-
-//            Console.WriteLine("[{0:000000}] ShieldedDict checking write stamp of key {1}", stamp, key);
-
             SpinWait.SpinUntil(() =>
             {
                 long w;
                 return !_writeStamps.TryGetValue(key, out w) || w > stamp;
             });
-
-//            Console.WriteLine("[{0:000000}] ShieldedDict reading key {1}", stamp, key);
-
             Shield.Enlist(this);
-            PrepareLocal();
+        }
+
+        private ItemKeeper CurrentTransactionOldValue(TKey key)
+        {
+            PrepareLocal(key);
             _localDict.Value.Reads.Add(key);
 
             ItemKeeper point;
             _dict.TryGetValue(key, out point);
-            while (point != null && point.Version > stamp)
+            while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
                 point = point.Older;
             return point;
         }
 
         private bool IsLocalPrepared()
         {
-            return _localDict.IsValueCreated && _localDict.Value.Reads != null &&
-                _localDict.Value.Version == Shield.CurrentTransactionStartStamp;
+            return _localDict.IsValueCreated && _localDict.Value.Reads != null;
         }
 
-        private void PrepareLocal()
+        private void PrepareLocal(TKey key)
         {
+            CheckLockAndEnlist(key);
             if (!IsLocalPrepared())
             {
-                _localDict.Value.Version = Shield.CurrentTransactionStartStamp;
-                if (_localDict.Value.Reads != null)
-                    _localDict.Value.Reads.Clear();
+                if (!_localDict.IsValueCreated || _localDict.Value == null)
+                    _localDict.Value = new LocalDict();
                 else
-                    _localDict.Value.Reads = new HashSet<TKey>();
+                {
+                    if (_localDict.Value.Reads != null)
+                        _localDict.Value.Reads.Clear();
+                    else
+                        _localDict.Value.Reads = new HashSet<TKey>();
 
-                if (_localDict.Value.Items != null)
-                    _localDict.Value.Items.Clear();
+                    if (_localDict.Value.Items != null)
+                        _localDict.Value.Items.Clear();
+                }
             }
         }
 
@@ -122,8 +120,7 @@ namespace Trans
             }
             set
             {
-                Shield.Enlist(this);
-                PrepareLocal();
+                PrepareLocal(key);
                 if (_localDict.Value.Items == null)
                     _localDict.Value.Items = new Dictionary<TKey, TItem>();
                 _localDict.Value.Items[key] = value;

@@ -21,7 +21,7 @@ namespace Trans
 		private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
         private long _writerStamp;
-		private ThreadLocal<ValueKeeper> _locals = new ThreadLocal<ValueKeeper>(() => new ValueKeeper());
+		private ThreadLocal<ValueKeeper> _locals = new ThreadLocal<ValueKeeper>();
 
 		public Shielded()
 		{
