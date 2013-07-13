@@ -132,10 +132,11 @@ namespace Trans
             public void UnionWith(TransItems other)
             {
                 Enlisted.UnionWith(other.Enlisted);
-                if (Fx == null)
-                    Fx = other.Fx;
-                else if (other.Fx != null)
-                    Fx.AddRange(other.Fx);
+                if (other.Fx != null)
+                    if (Fx == null)
+                        Fx = new List<SideEffect>(other.Fx);
+                    else
+                        Fx.AddRange(other.Fx);
             }
 
             private TransItems() {}
@@ -152,7 +153,8 @@ namespace Trans
             public static void Bag(TransItems items)
             {
                 items.Enlisted.Clear();
-                items.Fx = null;
+                if (items.Fx != null)
+                    items.Fx.Clear();
                 _itemPool.Add(items);
             }
         }
