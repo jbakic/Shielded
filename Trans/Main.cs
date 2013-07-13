@@ -345,22 +345,23 @@ namespace Trans
 
         public static void TreeTest()
         {
-            int numTasks = 30000;
+            int numTasks = 50000;
             int reportEvery = 1000;
             bool doTree = true;
 
             ShieldedTree<TreeItem, Guid> tree = new ShieldedTree<TreeItem, Guid>(ti => ti.Id);
             int transactionCount = 0;
-            Shielded<int> nextReport = new Shielded<int>(reportEvery);
+            Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<int> countComplete = new Shielded<int>(0);
-            DateTime now = DateTime.UtcNow;
+            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
 
-            Shield.Conditional(() => countComplete.Read >= nextReport.Read, () =>
+            Shield.Conditional(() => countComplete.Read >= lastReport + reportEvery, () =>
             {
                 DateTime newNow = DateTime.UtcNow;
-                int count = countComplete;
-                double speed = count * 1000 / newNow.Subtract(now).TotalMilliseconds;
-                nextReport.Modify((ref int n) => n += reportEvery);
+                double speed = ((int)countComplete - lastReport) * 1000 / newNow.Subtract(lastTime).TotalMilliseconds;
+                lastTime.Assign(DateTime.UtcNow);
+                lastReport.Modify((ref int n) => n += reportEvery);
+                int count = countComplete.Read;
                 Shield.SideEffect(() =>
                 {
                     Console.Write("\n{0} at {1} item/s", count, speed);
@@ -408,7 +409,7 @@ namespace Trans
             Shield.InTransaction(() =>
             {
                 countComplete.Assign(0);
-                nextReport.Assign(reportEvery);
+                lastReport.Assign(0);
             });
 
             var time = mtTest("dictionary", numTasks, i =>
@@ -439,9 +440,9 @@ namespace Trans
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
-            //TreeTest();
+            TreeTest();
         }
 	}
 }
