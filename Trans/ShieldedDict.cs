@@ -21,7 +21,6 @@ namespace Trans
 
         private class LocalDict
         {
-            public long Version;
             public Dictionary<TKey, TItem> Items;
             public HashSet<TKey> Reads = new HashSet<TKey>();
         }
@@ -86,13 +85,8 @@ namespace Trans
                     _localDict.Value = new LocalDict();
                 else
                 {
-                    if (_localDict.Value.Reads != null)
-                        _localDict.Value.Reads.Clear();
-                    else
+                    if (_localDict.Value.Reads == null)
                         _localDict.Value.Reads = new HashSet<TKey>();
-
-                    if (_localDict.Value.Items != null)
-                        _localDict.Value.Items.Clear();
                 }
             }
         }
