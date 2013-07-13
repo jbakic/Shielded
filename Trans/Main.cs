@@ -12,8 +12,7 @@ namespace Trans
 	{
         private static Stopwatch _timer;
 
-        public static void mtTest(string name, int taskCount, Func<int, Task> task,
-            Action<long> verify)
+        public static long mtTest(string name, int taskCount, Func<int, Task> task)
         {
             if (_timer == null)
                 _timer = Stopwatch.StartNew();
@@ -26,21 +25,21 @@ namespace Trans
                     .Select(task)
                     .ToArray());
             time = _timer.ElapsedMilliseconds - time;
-            verify(time);
+            return time;
         }
 
         public static void TimeTests()
         {
             var randomizr = new Random();
             int transactionCounter;
-            int sleepTime = 0;
+            int sleepTime = 10;
             int taskCount = 1000;
 
             foreach (var i in Enumerable.Repeat(0, 5))
             {
                 var x = new int[100];
                 transactionCounter = 0;
-                mtTest("dirty write", taskCount, _ =>
+                var time = mtTest("dirty write", taskCount, _ =>
                 {
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
@@ -52,14 +51,10 @@ namespace Trans
                     },
                     TaskCreationOptions.LongRunning
                     );
-                },
-                time =>
-                {
-                    var correct = x.Sum() == taskCount;
-                    Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
-                        time, transactionCounter, correct ? "correct" : "incorrect");
-                }
-                );
+                });
+                var correct = x.Sum() == taskCount;
+                Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
+                    time, transactionCounter, correct ? "correct" : "incorrect");
             }
 
             var lockCount = 10;
@@ -68,7 +63,7 @@ namespace Trans
                 var x = new int[100];
                 transactionCounter = 0;
                 var l = Enumerable.Repeat(0, lockCount).Select (_ => new object()).ToArray();
-                mtTest(string.Format("{0} lock write", lockCount), taskCount, _ =>
+                var time = mtTest(string.Format("{0} lock write", lockCount), taskCount, _ =>
                 {
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
@@ -83,21 +78,17 @@ namespace Trans
                     },
                     TaskCreationOptions.LongRunning
                     );
-                },
-                time =>
-                {
-                    var correct = x.Sum() == taskCount;
-                    Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
-                        time, transactionCounter, correct ? "correct" : "incorrect");
-                }
-                );
+                });
+                var correct = x.Sum() == taskCount;
+                Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
+                    time, transactionCounter, correct ? "correct" : "incorrect");
             }
 
             foreach (var i in Enumerable.Repeat(0, 5))
             {
                 var shx = Enumerable.Repeat(0, 100).Select(n => new Shielded<int>(n)).ToArray();
                 transactionCounter = 0;
-                mtTest("shielded2 write", taskCount, _ =>
+                var time = mtTest("shielded2 write", taskCount, _ =>
                 {
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
@@ -125,14 +116,10 @@ namespace Trans
                     },
                     TaskCreationOptions.LongRunning
                     );
-                },
-                time =>
-                {
-                    var correct = shx.Sum(s => s.Read) == taskCount;
-                    Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
-                        time, transactionCounter, correct ? "correct" : "incorrect");
-                }
-                );
+                });
+                var correct = shx.Sum(s => s.Read) == taskCount;
+                Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
+                    time, transactionCounter, correct ? "correct" : "incorrect");
             }
         }
 
@@ -187,6 +174,8 @@ namespace Trans
                         Shield.InTransaction(() =>
                         {
                             Interlocked.Increment(ref transactionCount);
+                            Shield.SideEffect(() => Console.WriteLine("Transferred 100.00 .. acc1 -> acc2"),
+                                () => Console.WriteLine("Task 1 rollback!"));
                             acc1.Modify((ref Account a) =>
                             {
                                 a.Balance = a.Balance - 100M;
@@ -194,7 +183,7 @@ namespace Trans
                                 Shield.SideEffect(() => list.Add(
                                     new Transfer() { OtherId = acc2.Read.Id, AmountReceived = -100M }));
                             });
-                            Thread.Sleep(250);
+                            Thread.Sleep(100);
                             acc2.Modify((ref Account a) =>
                             {
                                 a.Balance = a.Balance + 100M;
@@ -202,10 +191,6 @@ namespace Trans
                                 Shield.SideEffect(() => list.Add(
                                     new Transfer() { OtherId = acc1.Read.Id, AmountReceived = 100M }));
                             });
-                            Shield.SideEffect(() => Console.WriteLine("Transferred 100.00 .. acc1 -> acc2"),
-                                () => Console.WriteLine("Task 1 rollback!"));
-
-//                            Shield.GiveUp();
                         });
                     }, TaskCreationOptions.LongRunning);
                 else
@@ -214,6 +199,8 @@ namespace Trans
                         Shield.InTransaction(() =>
                         {
                             Interlocked.Increment(ref transactionCount);
+                            Shield.SideEffect(() => Console.WriteLine("Transferred 200.00 .. acc1 <- acc2"),
+                                () => Console.WriteLine("Task 2 rollback!"));
                             acc2.Modify((ref Account a) =>
                             {
                                 a.Balance = a.Balance - 200M;
@@ -229,25 +216,20 @@ namespace Trans
                                 Shield.SideEffect(() => list.Add(
                                     new Transfer() { OtherId = acc2.Read.Id, AmountReceived = 200M }));
                             });
-                            Shield.SideEffect(() => Console.WriteLine("Transferred 200.00 .. acc1 <- acc2"),
-                                () => Console.WriteLine("Task 2 rollback!"));
                         });
                     }, TaskCreationOptions.LongRunning);
-            },
-            time =>
-            {
-                Console.WriteLine("\nCompleted 20 transactions in {0} total attempts.", transactionCount);
-                Console.WriteLine("Account 1 balance: {0}", acc1.Read.Balance);
-                foreach(var t in acc1.Read.Transfers)
-                {
-                    Console.WriteLine("  {0:####,00}", t.AmountReceived);
-                }
-                Console.WriteLine("\nAccount 2 balance: {0}", acc2.Read.Balance);
-                foreach(var t in acc2.Read.Transfers)
-                {
-                    Console.WriteLine("  {0:####,00}", t.AmountReceived);
-                }
             });
+            Console.WriteLine("\nCompleted 20 transactions in {0} total attempts.", transactionCount);
+            Console.WriteLine("Account 1 balance: {0}", acc1.Read.Balance);
+            foreach(var t in acc1.Read.Transfers)
+            {
+                Console.WriteLine("  {0:####,00}", t.AmountReceived);
+            }
+            Console.WriteLine("\nAccount 2 balance: {0}", acc2.Read.Balance);
+            foreach(var t in acc2.Read.Transfers)
+            {
+                Console.WriteLine("  {0:####,00}", t.AmountReceived);
+            }
         }
 
         private static void DictionaryTest()
@@ -257,7 +239,7 @@ namespace Trans
             foreach (var _ in Enumerable.Repeat(0, 10))
             {
                 var transactionCounter = 0;
-                mtTest("dictionary", 1000, i =>
+                var time = mtTest("dictionary", 1000, i =>
                 {
                     var rnd = randomizr.Next(100);
                     if (i % 2 == 0)
@@ -302,14 +284,10 @@ namespace Trans
                         },
                         TaskCreationOptions.LongRunning
                         );
-                },
-                time =>
-                {
-                    var correct = Enumerable.Range(0, 100).Sum(n => dict [n] == null ? 0 : dict [n].Read) == 0;
-                    Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
-                        time, transactionCounter, correct ? "correct" : "incorrect");
-                }
-                );
+                });
+                var correct = Enumerable.Range(0, 100).Sum(n => dict [n] == null ? 0 : dict [n].Read) == 0;
+                Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
+                    time, transactionCounter, correct ? "correct" : "incorrect");
             }
         }
 
@@ -337,7 +315,7 @@ namespace Trans
                 return true;
             });
 
-            mtTest("bet shop w/ " + numEvents, 10000, i =>
+            var time = mtTest("bet shop w/ " + numEvents, 10000, i =>
             {
                 decimal payIn = (randomizr.Next(10) + 1m) * 1;
                 int event1Id = randomizr.Next(numEvents) + 1;
@@ -353,14 +331,11 @@ namespace Trans
                     var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
                     betShop.BuyTicket(payIn, offer1, offer2, offer3);
                 });
-            },
-            time =>
-            {
-                int count;
-                var correct = betShop.VerifyTickets(out count);
-                Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
-                    time, count, correct ? "correct" : "incorrect");
             });
+            int total;
+            var totalCorrect = betShop.VerifyTickets(out total);
+            Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
+                time, total, totalCorrect ? "correct" : "incorrect");
         }
 
         class TreeItem
@@ -394,7 +369,7 @@ namespace Trans
 
             if (doTree)
             {
-                mtTest("tree", numTasks, i =>
+                var treeTime = mtTest("tree", numTasks, i =>
                 {
                     return Task.Factory.StartNew(() =>
                     {
@@ -407,26 +382,23 @@ namespace Trans
                         Shield.InTransaction(() =>
                                              countComplete.Modify((ref int c) => c++));
                     });
-                },
-                time =>
-                {
-                    Guid? previous = null;
-                    bool correct = true;
-                    Shield.InTransaction(() =>
-                    {
-                        foreach (var item in tree)
-                        {
-                            if (previous != null && previous.Value.CompareTo(item.Id) > 0)
-                            {
-                                correct = false;
-                                break;
-                            }
-                            previous = item.Id;
-                        }
-                    });
-                    Console.WriteLine("\n -- {0} ms with {1} iterations and is {2}.",
-                        time, transactionCount, correct ? "correct" : "incorrect");
                 });
+                Guid? previous = null;
+                bool correct = true;
+                Shield.InTransaction(() =>
+                {
+                    foreach (var item in tree)
+                    {
+                        if (previous != null && previous.Value.CompareTo(item.Id) > 0)
+                        {
+                            correct = false;
+                            break;
+                        }
+                        previous = item.Id;
+                    }
+                });
+                Console.WriteLine("\n -- {0} ms with {1} iterations and is {2}.",
+                    treeTime, transactionCount, correct ? "correct" : "incorrect");
                 return;
             }
 
@@ -438,7 +410,7 @@ namespace Trans
                 nextReport.Assign(reportEvery);
             });
 
-            mtTest("dictionary", numTasks, i =>
+            var time = mtTest("dictionary", numTasks, i =>
             {
                 return Task.Factory.StartNew(() =>
                 {
@@ -451,12 +423,9 @@ namespace Trans
                     Shield.InTransaction(() =>
                                          countComplete.Modify((ref int c) => c++));
                 });
-            },
-            time =>
-            {
-                Console.WriteLine("\n -- {0} ms with {1} iterations. Not sorted.",
-                    time, transactionCount);
             });
+            Console.WriteLine("\n -- {0} ms with {1} iterations. Not sorted.",
+                time, transactionCount);
         }
 
 		public static void Main(string[] args)

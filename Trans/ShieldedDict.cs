@@ -138,17 +138,15 @@ namespace Trans
             }
         }
 
-        bool IShielded.CanCommit(bool strict, long writeStamp)
+        bool IShielded.CanCommit(long writeStamp)
         {
-            if (!strict && !((IShielded)this).HasChanges)
-                return true;
             // locals were prepared when we enlisted.
-            else if (_localDict.Value.Reads.Any(key =>
-                        {
-                            ItemKeeper v;
-                            return _writeStamps.ContainsKey(key) ||
-                                (_dict.TryGetValue(key, out v) && v.Version > Shield.CurrentTransactionStartStamp);
-                        }))
+            if (_localDict.Value.Reads.Any(key =>
+                    {
+                        ItemKeeper v;
+                        return _writeStamps.ContainsKey(key) ||
+                            (_dict.TryGetValue(key, out v) && v.Version > Shield.CurrentTransactionStartStamp);
+                    }))
                 return false;
             else
             {

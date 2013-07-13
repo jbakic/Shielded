@@ -122,11 +122,9 @@ namespace Trans
 			}
 		}
 		
-		bool IShielded.CanCommit(bool strict, long writeStamp)
+		bool IShielded.CanCommit(long writeStamp)
 		{
-			if (!strict && !((IShielded)this).HasChanges)
-                return true;
-            else if (Interlocked.Read(ref _writerStamp) != 0)
+			if (Interlocked.Read(ref _writerStamp) != 0)
                 return false;
             else if (_current.Version < Shield.CurrentTransactionStartStamp)
             {

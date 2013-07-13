@@ -14,7 +14,7 @@ namespace Trans
         }
 
 
-        public bool CanCommit(bool strict, long writeStamp)
+        public bool CanCommit(long writeStamp)
         {
             return true;
         }

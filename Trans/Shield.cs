@@ -8,54 +8,6 @@ namespace Trans
 {
     public static class Shield
     {
-        private class NoRepeatTransException : TransException
-        {
-            public NoRepeatTransException(string message) : base(message) {}
-        }
-
-        public static void Rollback(bool retry)
-        {
-            throw (retry ?
-                   new TransException("Requested rollback and retry.") :
-                   new NoRepeatTransException("Requested rollback without retry."));
-        }
-
-        // an object implementing IShielded..
-        private class Token : IShielded
-        {
-            public bool CanCommit(bool strict, long writeStamp)
-            {
-                return true;
-            }
-
-            public bool Commit(long? writeStamp)
-            {
-                return false;
-            }
-
-            public void Rollback(long? writeStamp)
-            {
-            }
-
-            public void TrimCopies(long smallestOpenTransactionId)
-            {
-            }
-
-            public bool HasChanges
-            {
-                get
-                {
-                    return false;
-                }
-            }
-        }
-        private static readonly Token GiveUpToken = new Token();
-
-        public static void GiveUp()
-        {
-            Enlist(GiveUpToken);
-        }
-
         private static long _lastStamp;
 
         [ThreadStatic]
@@ -76,52 +28,6 @@ namespace Trans
             {
                 return _currentTransactionStartStamp.HasValue;
             }
-        }
-
-        // the long is their current version, but being in this list indicates they have something older.
-        private static ConcurrentQueue<Tuple<long, List<IShielded>>> _copiesByVersion =
-            new ConcurrentQueue<Tuple<long, List<IShielded>>>();
-
-        private static void RegisterCopies(long version, List<IShielded> copies)
-        {
-            if (copies.Any())
-                _copiesByVersion.Enqueue(new Tuple<long, List<IShielded>>(version, copies));
-        }
-
-        private static int _trimFlag = 0;
-        private static void TrimCopies()
-        {
-            if (Interlocked.CompareExchange(ref _trimFlag, 1, 0) != 0)
-                return;
-            try
-            {
-                var keys = _transactionItems.Keys;
-                var minTransactionNo = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
-
-                Tuple<long, List<IShielded>> curr;
-                HashSet<IShielded> toTrim = new HashSet<IShielded>();
-                while (_copiesByVersion.TryPeek(out curr))
-                {
-                    if (curr.Item1 < minTransactionNo)
-                    {
-                        toTrim.UnionWith(curr.Item2);
-                        _copiesByVersion.TryDequeue(out curr);
-                    }
-                    else
-                        break;
-                }
-
-                foreach (var sh in toTrim)
-                    sh.TrimCopies(minTransactionNo);
-            }
-            finally
-            {
-                _trimFlag = 0;
-            }
-//#if DEBUG
-//                Console.WriteLine("Copies trimmed for min stamp {0}. Count of lists of copies: {1}.",
-//                    minTransactionNo, _copiesByVersion.Count);
-//#endif
         }
 
         private class TransItems
@@ -168,14 +74,91 @@ namespace Trans
             _transactionItems[CurrentTransactionStartStamp].Enlisted.Add(item);
         }
 
+        /// <summary>
+        /// Conditional transaction. If test returns true, executes immediately.
+        /// If not, test is re-executed when any of the accessed IShieldeds commits.
+        /// When test passes, executes trans. While trans returns true, subscription is maintained.
+        /// Test is executed in a normal transaction. If it changes access patterns between
+        /// calls, the subscription changes as well!
+        /// Test and trans are executed in single transaction, and if the commit fails, test
+        /// is also retried!
+        /// </summary>
+        public static void Conditional(Func<bool> test, Func<bool> trans)
+        {
+            Shield.InTransaction(() =>
+            {
+                if (test())
+                { // important brackets! :)
+                    if (trans())
+                        Shield.SideEffect(() => Conditional(test, trans));
+                }
+                else
+                    Subscribe(test, trans);
+            });
+        }
+
         public static void SideEffect(Action fx, Action rollbackFx = null)
         {
-            //Enlist(new SideEffect(fx, rollbackFx));
             var items = _transactionItems[CurrentTransactionStartStamp];
             if (items.Fx == null)
-                items.Fx = new List<Trans.SideEffect>();
+                items.Fx = new List<SideEffect>();
             items.Fx.Add(new SideEffect(fx, rollbackFx));
         }
+
+        public static void InTransaction(Action act)
+        {
+            if (_currentTransactionStartStamp.HasValue)
+            {
+                act();
+                return;
+            }
+
+            bool repeat;
+            do
+            {
+                repeat = false;
+                // for stable reading, numbers cannot be obtained while transaction commit is going on.
+                lock (_commitLock)
+                {
+                    // trimming uses lastStamp if the items are empty, so we must add items
+                    // before incrementing lastStamp.
+                    _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp) + 1;
+                    _transactionItems[_currentTransactionStartStamp.Value] = TransItems.BagOrNew();
+                    Interlocked.Increment(ref _lastStamp);
+                }
+
+                try
+                {
+                    act();
+                    if (!DoCommit())
+                        repeat = true;
+                }
+                catch (TransException ex)
+                {
+                    repeat = !(ex is NoRepeatTransException);
+                    DoRollback();
+                }
+                finally
+                {
+                    if (_currentTransactionStartStamp.HasValue)
+                        DoRollback();
+                }
+            } while (repeat);
+        }
+
+        private class NoRepeatTransException : TransException
+        {
+            public NoRepeatTransException(string message) : base(message) {}
+        }
+
+        public static void Rollback(bool retry)
+        {
+            throw (retry ?
+                   new TransException("Requested rollback and retry.") :
+                   new NoRepeatTransException("Requested rollback without retry."));
+        }
+
+        #region Conditional impl
 
         private struct CommitSubscription
         {
@@ -252,70 +235,9 @@ namespace Trans
                 });
         }
 
-        /// <summary>
-        /// Conditional transaction. If test returns true, executes immediately.
-        /// If not, test is re-executed when any of the accessed IShieldeds commits.
-        /// When test passes, executes trans. While trans returns true, subscription is maintained.
-        /// Test is executed in a normal transaction. If it changes access patterns between
-        /// calls, the subscription changes as well!
-        /// Test and trans are executed in single transaction, and if the commit fails, test
-        /// is also retried!
-        /// </summary>
-        public static void Conditional(Func<bool> test, Func<bool> trans)
-        {
-            Shield.InTransaction(() =>
-            {
-                if (test())
-                { // important brackets! :)
-                    if (trans())
-                        Shield.SideEffect(() => Conditional(test, trans));
-                }
-                else
-                    Subscribe(test, trans);
-            });
-        }
+        #endregion
 
-        public static void InTransaction(Action act)
-        {
-            if (_currentTransactionStartStamp.HasValue)
-            {
-                act();
-                return;
-            }
-
-            bool repeat;
-            do
-            {
-                repeat = false;
-                // for stable reading, numbers cannot be obtained while transaction commit is going on.
-                lock (_commitLock)
-                {
-                    _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp) + 1;
-                    _transactionItems[_currentTransactionStartStamp.Value] = TransItems.BagOrNew();
-                    Interlocked.Increment(ref _lastStamp);
-                }
-
-                try
-                {
-                    act();
-                    if (_transactionItems[CurrentTransactionStartStamp].Enlisted.Contains(GiveUpToken))
-                        DoRollback();
-                    else if (!DoCommit())
-                        repeat = true;
-                }
-                catch (TransException ex)
-                {
-                    repeat = !(ex is NoRepeatTransException) &&
-                        !_transactionItems[CurrentTransactionStartStamp].Enlisted.Contains(GiveUpToken);
-                    DoRollback();
-                }
-                finally
-                {
-                    if (_currentTransactionStartStamp.HasValue)
-                        DoRollback();
-                }
-            } while (repeat);
-        }
+        #region Commit & rollback
 
         private static object _commitLock = new object();
 
@@ -334,7 +256,7 @@ namespace Trans
                 {
                     writeStamp = Interlocked.Increment(ref _lastStamp);
                     foreach (var item in enlisted)
-                        if (!item.CanCommit(hasChanges, writeStamp.Value))
+                        if (!item.CanCommit(writeStamp.Value))
                         {
                             commit = false;
                             foreach (var inner in enlisted)
@@ -372,15 +294,9 @@ namespace Trans
                 _currentTransactionStartStamp = null;
 
                 if (items.Fx != null)
-                    foreach (var item in items.Fx)
-                        item.Rollback(writeStamp);
+                    foreach (var fx in items.Fx)
+                        fx.Rollback(writeStamp);
             }
-
-//#if DEBUG
-//                Console.WriteLine("Stamp {0} commited with stamp {1}. Open count: {2}, item sets: {3}.",
-//                    _currentTransactionStartStamp.Value, writeStamp, _openTransactions.Count,
-//                    _transactionItems.Count);
-//#endif
 
             TransItems.Bag(items);
             TrimCopies();
@@ -396,12 +312,58 @@ namespace Trans
             _currentTransactionStartStamp = null;
 
             if (items.Fx != null)
-                foreach (var item in items.Fx)
-                    item.Rollback(null);
+                foreach (var fx in items.Fx)
+                    fx.Rollback(null);
 
             TransItems.Bag(items);
             TrimCopies();
         }
+
+
+
+        // the long is their current version, but being in this list indicates they have something older.
+        private static ConcurrentQueue<Tuple<long, List<IShielded>>> _copiesByVersion =
+            new ConcurrentQueue<Tuple<long, List<IShielded>>>();
+
+        private static void RegisterCopies(long version, List<IShielded> copies)
+        {
+            if (copies.Any())
+                _copiesByVersion.Enqueue(new Tuple<long, List<IShielded>>(version, copies));
+        }
+
+        private static int _trimFlag = 0;
+        private static void TrimCopies()
+        {
+            if (Interlocked.CompareExchange(ref _trimFlag, 1, 0) != 0)
+                return;
+            try
+            {
+                var keys = _transactionItems.Keys;
+                var minTransactionNo = keys.Any() ? keys.Min() : Interlocked.Read(ref _lastStamp);
+
+                Tuple<long, List<IShielded>> curr;
+                HashSet<IShielded> toTrim = new HashSet<IShielded>();
+                while (_copiesByVersion.TryPeek(out curr))
+                {
+                    if (curr.Item1 < minTransactionNo)
+                    {
+                        toTrim.UnionWith(curr.Item2);
+                        _copiesByVersion.TryDequeue(out curr);
+                    }
+                    else
+                        break;
+                }
+
+                foreach (var sh in toTrim)
+                    sh.TrimCopies(minTransactionNo);
+            }
+            finally
+            {
+                _trimFlag = 0;
+            }
+        }
+
+        #endregion
     }
 }
 
