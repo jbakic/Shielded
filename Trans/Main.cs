@@ -304,7 +304,7 @@ namespace Trans
 
             var time = mtTest("bet shop w/ " + numEvents, 20000, i =>
             {
-                decimal payIn = (randomizr.Next(10) + 1m) * 10;
+                decimal payIn = (randomizr.Next(10) + 1m) * 1;
                 int event1Id = randomizr.Next(numEvents) + 1;
                 int event2Id = randomizr.Next(numEvents) + 1;
                 int event3Id = randomizr.Next(numEvents) + 1;

@@ -65,13 +65,15 @@ namespace Trans
             }
         }
 
-        private static ConcurrentDictionary<long, TransItems> _transactionItems
-            = new ConcurrentDictionary<long, TransItems>();
+        private static ConcurrentDictionary<long, int> _transactions
+            = new ConcurrentDictionary<long, int>();
+        [ThreadStatic]
+        private static TransItems _localItems;
 
         internal static void Enlist(IShielded item)
         {
             // reading the current stamp throws ...
-            _transactionItems[CurrentTransactionStartStamp].Enlisted.Add(item);
+            _localItems.Enlisted.Add(item);
         }
 
         /// <summary>
@@ -99,10 +101,9 @@ namespace Trans
 
         public static void SideEffect(Action fx, Action rollbackFx = null)
         {
-            var items = _transactionItems[CurrentTransactionStartStamp];
-            if (items.Fx == null)
-                items.Fx = new List<SideEffect>();
-            items.Fx.Add(new SideEffect(fx, rollbackFx));
+            if (_localItems.Fx == null)
+                _localItems.Fx = new List<SideEffect>();
+            _localItems.Fx.Add(new SideEffect(fx, rollbackFx));
         }
 
         public static void InTransaction(Action act)
@@ -122,9 +123,9 @@ namespace Trans
                 Interlocked.Increment(ref _trimFlag);
                 try
                 {
-                    lock (_stampLock)
-                        _currentTransactionStartStamp = Interlocked.Increment(ref _lastStamp);
-                    _transactionItems[_currentTransactionStartStamp.Value] = TransItems.BagOrNew();
+                    _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
+                    _localItems = TransItems.BagOrNew();
+                    _transactions.AddOrUpdate(_currentTransactionStartStamp.Value, 1, (_, i) => i + 1);
                 }
                 finally
                 {
@@ -176,7 +177,7 @@ namespace Trans
         {
             _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
             {
-                Items = new HashSet<IShielded>(_transactionItems[CurrentTransactionStartStamp].Enlisted),
+                Items = new HashSet<IShielded>(_localItems.Enlisted),
                 Test = test,
                 Trans = trans
             }));
@@ -189,9 +190,9 @@ namespace Trans
         /// </summary>
         private static TransItems IsolatedRun(Action act)
         {
-            TransItems oldItems = _transactionItems[CurrentTransactionStartStamp];
+            TransItems oldItems = _localItems;
             var isolated = TransItems.BagOrNew();
-            _transactionItems[CurrentTransactionStartStamp] = isolated;
+            _localItems = isolated;
             try
             {
                 act();
@@ -199,7 +200,7 @@ namespace Trans
             finally
             {
                 oldItems.UnionWith(isolated);
-                _transactionItems[CurrentTransactionStartStamp] = oldItems;
+                _localItems = oldItems;
             }
             return isolated;
         }
@@ -245,10 +246,20 @@ namespace Trans
 
         private static object _stampLock = new object();
 
+        private static void Unregister(long stamp)
+        {
+            int n;
+            do
+            {
+                n = _transactions[stamp];
+            }
+            while (!_transactions.TryUpdate(stamp, n-1, n));
+        }
+
         private static bool DoCommit()
         {
             // if there are items, they must all commit.
-            var items = _transactionItems[_currentTransactionStartStamp.Value];
+            var items = _localItems;
 
             var enlisted = items.Enlisted.ToArray();
             bool hasChanges = enlisted.Any(s => s.HasChanges);
@@ -260,7 +271,7 @@ namespace Trans
                 int rolledBack = 0;
                 lock (_stampLock)
                 {
-                    writeStamp = Interlocked.Increment(ref _lastStamp);
+                    writeStamp = Interlocked.Read(ref _lastStamp) + 1;
                     for (int i = 0; i < enlisted.Length; i++)
                         if (!enlisted[i].CanCommit(writeStamp.Value))
                         {
@@ -270,6 +281,7 @@ namespace Trans
                                 enlisted[j].Rollback(writeStamp.Value);
                             break;
                         }
+                    Interlocked.Increment(ref _lastStamp);
                 }
                 if (!commit)
                     for (int i = rolledBack + 1; i < enlisted.Length; i++)
@@ -287,8 +299,9 @@ namespace Trans
                 if (copies != null)
                     RegisterCopies(writeStamp.Value, copies);
 
-                _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
+                Unregister(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;
+                _localItems = null;
 
                 // if committing, trigger change subscriptions.
                 if (trigger != null)
@@ -301,8 +314,9 @@ namespace Trans
             }
             else
             {
-                _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
+                Unregister(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;
+                _localItems = null;
 
                 if (items.Fx != null)
                     foreach (var fx in items.Fx)
@@ -316,8 +330,9 @@ namespace Trans
 
         private static void DoRollback()
         {
-            TransItems items;
-            _transactionItems.TryRemove(_currentTransactionStartStamp.Value, out items);
+            Unregister(_currentTransactionStartStamp.Value);
+            var items = _localItems;
+            _localItems = null;
             foreach (var item in items.Enlisted)
                 item.Rollback();
             _currentTransactionStartStamp = null;
@@ -354,7 +369,7 @@ namespace Trans
                 return;
             try
             {
-                var keys = _transactionItems.Keys;
+                var keys = _transactions.Keys;
                 var minTransactionNo = keys.Any() ? keys.Min() : lastStamp;
 
                 Tuple<long, List<IShielded>> curr;

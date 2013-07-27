@@ -126,7 +126,7 @@ namespace Trans
 		{
 			if (Interlocked.Read(ref _writerStamp) != 0)
                 return false;
-            else if (_current.Version < Shield.CurrentTransactionStartStamp)
+            else if (_current.Version <= Shield.CurrentTransactionStartStamp)
             {
                 if (((IShielded)this).HasChanges)
                     Interlocked.Exchange(ref _writerStamp, writeStamp);

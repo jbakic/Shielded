@@ -47,6 +47,7 @@
     <Compile Include="ShieldedRef.cs" />
     <Compile Include="BetShop.cs" />
     <Compile Include="ShieldedTree.cs" />
+    <Compile Include="HeapList.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>
