@@ -21,7 +21,7 @@ namespace Trans
 		private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
         private long _writerStamp;
-		private ThreadLocal<ValueKeeper> _locals = new ThreadLocal<ValueKeeper>();
+        private LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
 
 		public Shielded()
 		{
@@ -57,22 +57,18 @@ namespace Trans
             return point;
 		}
 
-        private bool IsLocalPrepared()
-        {
-            return _locals.IsValueCreated && _locals.Value != null;
-        }
-
 		private void PrepareForWriting(bool prepareOld)
         {
             if (_current.Version > Shield.CurrentTransactionStartStamp)
                 throw new TransException("Write collision.");
-            if (!IsLocalPrepared())
+            if (!_locals.HasValue)
             {
-                _locals.Value = new ValueKeeper();
+                var v = new ValueKeeper();
                 if (!prepareOld)
                     CheckLockAndEnlist();
                 else
-                    _locals.Value.Value = CurrentTransactionOldValue().Value;
+                    v.Value = CurrentTransactionOldValue().Value;
+                _locals.Value = v;
             }
 		}
 
@@ -87,7 +83,7 @@ namespace Trans
                 if (!Shield.IsInTransaction)
                     return _current.Value;
 
-                if (!IsLocalPrepared())
+                if (!_locals.HasValue)
                     return CurrentTransactionOldValue().Value;
                 else if (_current.Version > Shield.CurrentTransactionStartStamp)
                     throw new TransException("Writable read collision.");
@@ -118,7 +114,7 @@ namespace Trans
 		{
 			get
 			{
-				return IsLocalPrepared();
+                return _locals.HasValue;
 			}
 		}
 		

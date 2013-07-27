@@ -474,9 +474,9 @@ namespace Trans
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
-            TreeTest();
+            //TreeTest();
 
             //SkewTest();
         }

@@ -28,7 +28,7 @@ namespace Trans
         private readonly ConcurrentDictionary<TKey, ItemKeeper> _dict;
         private readonly ConcurrentDictionary<TKey, long> _writeStamps
             = new ConcurrentDictionary<TKey, long>();
-        private ThreadLocal<LocalDict> _localDict = new ThreadLocal<LocalDict>();
+        private LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
 
         public ShieldedDict(Func<TItem, TKey> keySelector, IEnumerable<TItem> items)
         {
@@ -73,7 +73,7 @@ namespace Trans
 
         private bool IsLocalPrepared()
         {
-            return _localDict.IsValueCreated && _localDict.Value.Reads != null;
+            return _localDict.HasValue && _localDict.Value.Reads != null;
         }
 
         private void PrepareLocal(TKey key)
@@ -81,7 +81,7 @@ namespace Trans
             CheckLockAndEnlist(key);
             if (!IsLocalPrepared())
             {
-                if (!_localDict.IsValueCreated || _localDict.Value == null)
+                if (!_localDict.HasValue)
                     _localDict.Value = new LocalDict();
                 else
                 {
