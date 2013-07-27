@@ -22,18 +22,18 @@ namespace Trans
         public decimal Odds;
     }
 
-    public struct Bet
-    {
-        public Shielded<BetOffer> Offer;
-        public decimal Odds;
-    }
-
     public struct Ticket
     {
         public decimal PayInAmount;
         public decimal WinAmount;
         // readonly
         public Bet[] Bets;
+    }
+
+    public struct Bet
+    {
+        public Shielded<BetOffer> Offer;
+        public decimal Odds;
     }
 
     public class BetShop
@@ -82,6 +82,7 @@ namespace Trans
             bool bought = false;
             Shield.InTransaction(() =>
             {
+                bought = false;
                 Ticket newTicket = new Ticket()
                 {
                     PayInAmount = payIn,

@@ -93,26 +93,13 @@ namespace Trans
                     var rnd = randomizr.Next(100);
                     return Task.Factory.StartNew(() =>
                     {
-                        try
-                        {
                         Shield.InTransaction(() =>
                         {
                             Interlocked.Increment(ref transactionCounter);
-                            int v = shx[rnd].Read;
+                            int v = shx[rnd];
                             Thread.Sleep(sleepTime);
                             shx[rnd].Modify((ref int a) => a = v + 1);
-
-//                            if (rnd == 45)
-//                                Shield.SideEffect(() =>
-//                                    {
-//                                        throw new InvalidCastException();
-//                                    });
                         });
-                        }
-                        catch (InvalidCastException)
-                        {
-                            Console.Write("*");
-                        }
                     },
                     TaskCreationOptions.LongRunning
                     );
@@ -128,7 +115,7 @@ namespace Trans
             Shielded<int> sh = new Shielded<int>();
             Shield.InTransaction(() => 
             {
-                int x = sh.Read;
+                int x = sh;
                 Console.WriteLine("Read: {0}", x);
                 sh.Modify((ref int a) => a = x + 1);
                 Console.WriteLine("Read after increment: {0}", sh.Read);
@@ -297,7 +284,7 @@ namespace Trans
         /// </summary>
         public static void BetShopTest()
         {
-            int numEvents = 10;
+            int numEvents = 100;
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
             int reportEvery = 1000;
@@ -315,9 +302,9 @@ namespace Trans
                 return true;
             });
 
-            var time = mtTest("bet shop w/ " + numEvents, 10000, i =>
+            var time = mtTest("bet shop w/ " + numEvents, 20000, i =>
             {
-                decimal payIn = (randomizr.Next(10) + 1m) * 1;
+                decimal payIn = (randomizr.Next(10) + 1m) * 10;
                 int event1Id = randomizr.Next(numEvents) + 1;
                 int event2Id = randomizr.Next(numEvents) + 1;
                 int event3Id = randomizr.Next(numEvents) + 1;
@@ -345,7 +332,7 @@ namespace Trans
 
         public static void TreeTest()
         {
-            int numTasks = 50000;
+            int numTasks = 30000;
             int reportEvery = 1000;
             bool doTree = true;
 
@@ -355,7 +342,7 @@ namespace Trans
             Shielded<int> countComplete = new Shielded<int>(0);
             Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
 
-            Shield.Conditional(() => countComplete.Read >= lastReport + reportEvery, () =>
+            Shield.Conditional(() => countComplete >= lastReport + reportEvery, () =>
             {
                 DateTime newNow = DateTime.UtcNow;
                 int speed = (countComplete - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
@@ -430,6 +417,53 @@ namespace Trans
                 time, transactionCount);
         }
 
+        public static void SkewTest()
+        {
+            var numTasks = 1000;
+            var numFields = 10;
+            var transactionCount = 0;
+            var randomizr = new Random();
+            var shA = Enumerable.Repeat(0, numFields).Select(_ => new Shielded<int>(100)).ToArray();
+            var shB = Enumerable.Repeat(0, numFields).Select(_ => new Shielded<int>(100)).ToArray();
+
+            var time = mtTest("skew write", numTasks, i =>
+            {
+                int index = randomizr.Next(numFields << 1);
+                int amount = randomizr.Next(10) + 1;
+                return Task.Factory.StartNew(() =>
+                {
+                    Shield.InTransaction(() =>
+                    {
+                        Interlocked.Increment(ref transactionCount);
+                        // take one from one of the arrays, but only if it does not take sum under 100
+                        var sum = shA [index >> 1] + shB [index >> 1];
+                        if (sum - amount >= 100)
+                        {
+                            //Thread.Sleep(10);
+                            if ((index & 1) == 0)
+                                shA [index >> 1].Modify((ref int n) => n = n - amount);
+                            else
+                                shB [index >> 1].Modify((ref int n) => n = n - amount);
+                        }
+                    }
+                    );
+                },
+                TaskCreationOptions.LongRunning
+                );
+            }
+            );
+            // it's correct if no sum is smaller than 100
+            var correct = true;
+            for (int j = 0; j < numFields; j++)
+                if (shA [j] + shB [j] < 100)
+                {
+                    correct = false;
+                    break;
+                }
+            Console.WriteLine("\n -- {0} ms with {1} iterations and is {2}.",
+                time, transactionCount, correct ? "correct" : "incorrect");
+        }
+
 		public static void Main(string[] args)
         {
             //TimeTests();
@@ -443,6 +477,8 @@ namespace Trans
             //BetShopTest();
 
             TreeTest();
+
+            //SkewTest();
         }
 	}
 }
