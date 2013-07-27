@@ -24,6 +24,7 @@ namespace Trans
 
     public struct Ticket
     {
+        public Guid Id;
         public decimal PayInAmount;
         public decimal WinAmount;
         // readonly
@@ -49,17 +50,16 @@ namespace Trans
 
         public readonly ShieldedDict<int, Shielded<Event>> Events;
 
-        private int _idGenerator;
-        public readonly ShieldedSeq<int> TicketIdSeq = new ShieldedSeq<int>();
-        public readonly ShieldedDict<int, Shielded<Ticket>> Tickets = new ShieldedDict<int, Shielded<Ticket>>();
+        public readonly ShieldedTree<Shielded<Ticket>, Guid> Tickets =
+            new ShieldedTree<Shielded<Ticket>, Guid>(t => t.Read.Id);
         private ShieldedDict<string, decimal> _sameTicketWins =
             new ShieldedDict<string, decimal>();
 
         public decimal SameTicketWinLimit = 1000m;
 
-        static string GetOfferHash(ref Ticket newTicket)
+        static string GetOfferHash(Shielded<Ticket> newTicket)
         {
-            return newTicket.Bets.Select(b => b.Offer.Read.Id)
+            return newTicket.Read.Bets.Select(b => b.Offer.Read.Id)
                 .OrderBy(id => id)
                 .Aggregate(new StringBuilder(), (sb, next) => 
                 {
@@ -70,46 +70,49 @@ namespace Trans
                 }, sb => sb.ToString());
         }
 
-        private bool CheckAllowed(ref Ticket newTicket, out string hash)
+        private bool CheckAllowed(Shielded<Ticket> newTicket, out string hash)
         {
-            hash = GetOfferHash(ref newTicket);
-            return _sameTicketWins[hash] + newTicket.WinAmount <= SameTicketWinLimit;
+            hash = GetOfferHash(newTicket);
+            return _sameTicketWins[hash] + newTicket.Read.WinAmount <= SameTicketWinLimit;
         }
 
-        public int? BuyTicket(decimal payIn, params Shielded<BetOffer>[] bets)
+        public Guid? BuyTicket(decimal payIn, params Shielded<BetOffer>[] bets)
         {
-            int newId = Interlocked.Increment(ref _idGenerator);
+            var newId = Guid.NewGuid();
             bool bought = false;
+            var newTicket = new Shielded<Ticket>(new Ticket()
+            {
+                Id = newId,
+                PayInAmount = payIn
+            });
             Shield.InTransaction(() =>
             {
                 bought = false;
-                Ticket newTicket = new Ticket()
+                newTicket.Modify((ref Ticket t) =>
                 {
-                    PayInAmount = payIn,
-                    Bets = bets.Select(shBo => new Bet()
-                    {
-                        Offer = shBo,
-                        Odds = shBo.Read.Odds
-                    }).ToArray()
-                };
-                newTicket.WinAmount = newTicket.PayInAmount *
-                    newTicket.Bets.Aggregate(1m, (curr, nextBet) => curr * nextBet.Odds);
+                    t.Bets = bets.Select(shBo => new Bet()
+                        {
+                            Offer = shBo,
+                            Odds = shBo.Read.Odds
+                        }).ToArray();
+                    t.WinAmount = t.PayInAmount *
+                        t.Bets.Aggregate(1m, (curr, nextBet) => curr * nextBet.Odds);
+                });
 
                 string hash;
-                if (!CheckAllowed(ref newTicket, out hash))
+                if (!CheckAllowed(newTicket, out hash))
                     return;
 
                 bought = true;
-                Tickets[newId] = new Shielded<Ticket>(newTicket);
-                _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.WinAmount;
+                Tickets.Insert(newTicket);
+                _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.Read.WinAmount;
 
                 Shield.SideEffect(() => Shield.InTransaction(() =>
                 {
                     _ticketCount.Modify((ref int c) => c++);
-                    TicketIdSeq.Append(newId);
                 }));
             });
-            return bought ? (int?)newId : null;
+            return bought ? (Guid?)newId : null;
         }
 
         /// <summary>
@@ -177,14 +180,13 @@ namespace Trans
             {
                 Dictionary<string, decimal> checkTable = new Dictionary<string, decimal>();
                 count = 0;
-                foreach (var id in TicketIdSeq)
+                foreach (var t in Tickets)
                 {
-                    var ticket = Tickets[id].Read;
-                    var hash = GetOfferHash(ref ticket);
+                    var hash = GetOfferHash(t);
                     if (!checkTable.ContainsKey(hash))
-                        checkTable[hash] = ticket.WinAmount;
+                        checkTable[hash] = t.Read.WinAmount;
                     else
-                        checkTable[hash] = checkTable[hash] + ticket.WinAmount;
+                        checkTable[hash] = checkTable[hash] + t.Read.WinAmount;
                     if (checkTable[hash] > SameTicketWinLimit)
                     {
                         result = false;

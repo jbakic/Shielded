@@ -61,34 +61,24 @@ namespace Trans
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
         {
             var a = Shield.CurrentTransactionStartStamp;
-            Stack<Shielded<Node>> stack = new Stack<Shielded<Node>>();
+            Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
             var curr = _head.Read;
             while (curr != null)
             {
                 while (curr.Read.Left != null)
                 {
-                    stack.Push(curr);
+                    centerStack.Push(curr);
                     curr = curr.Read.Left;
-                    continue;
                 }
 
                 yield return curr.Read.Value;
 
-                while (true)
+                while (curr.Read.Right == null && centerStack.Count > 0)
                 {
-                    curr = stack.Any() ? stack.Pop() : null;
-                    if (curr != null)
-                    {
-                        yield return curr.Read.Value;
-                        if (curr.Read.Right != null)
-                        {
-                            curr = curr.Read.Right;
-                            break;
-                        }
-                    }
-                    else
-                        break;
+                    curr = centerStack.Pop();
+                    yield return curr.Read.Value;
                 }
+                curr = curr.Read.Right;
             }
         }
 
@@ -99,7 +89,7 @@ namespace Trans
             {
                 Shielded<Node> parent = null;
                 var targetLoc = _head.Read;
-                int comparison;
+                int comparison = 0;
                 while (targetLoc != null &&
                        (comparison = _comparer.Compare(_keySelector(targetLoc.Read.Value), itemKey)) != 0)
                 {

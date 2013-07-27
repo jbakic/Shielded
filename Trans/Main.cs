@@ -284,7 +284,7 @@ namespace Trans
         /// </summary>
         public static void BetShopTest()
         {
-            int numEvents = 100;
+            int numEvents = 10;
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
             int reportEvery = 1000;
@@ -295,14 +295,12 @@ namespace Trans
                 nextReport.Modify((ref int n) => n += reportEvery);
                 Shield.SideEffect(() =>
                 {
-                    int count;
-                    var correct = betShop.VerifyTickets(out count);
-                    Console.Write(" {0}{1}{0}", correct ? "+" : "-", count);
+                    Console.Write(" {0}..", betShop.TicketCount);
                 });
                 return true;
             });
 
-            var time = mtTest("bet shop w/ " + numEvents, 20000, i =>
+            var time = mtTest("bet shop w/ " + numEvents, 30000, i =>
             {
                 decimal payIn = (randomizr.Next(10) + 1m) * 1;
                 int event1Id = randomizr.Next(numEvents) + 1;
@@ -332,7 +330,7 @@ namespace Trans
 
         public static void TreeTest()
         {
-            int numTasks = 30000;
+            int numTasks = 100000;
             int reportEvery = 1000;
             bool doTree = true;
 
