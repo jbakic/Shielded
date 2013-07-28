@@ -2,8 +2,11 @@
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Release|x86" />
   <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
     <Files>
-      <File FileName="Trans/ShieldedDict.cs" Line="93" Column="1" />
-      <File FileName="Trans/Main.cs" Line="474" Column="13" />
+      <File FileName="Trans/BetShop.cs" Line="98" Column="36" />
+      <File FileName="Trans/Main.cs" Line="492" Column="13" />
+      <File FileName="Trans/VersionList.cs" Line="33" Column="1" />
+      <File FileName="Trans/Shielded.cs" Line="165" Column="25" />
+      <File FileName="Trans/Shield.cs" Line="122" Column="61" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -30,6 +33,7 @@
         <State>
           <Value>$exception</Value>
           <Value>tree._head</Value>
+          <Value>Shield</Value>
         </State>
       </Pad>
       <Pad Id="ConnectionManagerPad">

@@ -288,17 +288,34 @@ namespace Trans
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
             int reportEvery = 1000;
-            Shielded<int> nextReport = new Shielded<int>(reportEvery);
+            //Shielded<int> nextReport = new Shielded<int>(reportEvery);
 
-            Shield.Conditional(() => betShop.TicketCount >= nextReport, () =>
+            //Shield.Conditional(() => betShop.TicketCount >= nextReport, () =>
+            //{
+            //    nextReport.Modify((ref int n) => n += reportEvery);
+            //    Shield.SideEffect(() =>
+            //    {
+            //        Console.Write(" {0}..", betShop.TicketCount);
+            //    });
+            //    return true;
+            //});
+            Shielded<int> lastReport = new Shielded<int>(0);
+            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
+
+            Shield.Conditional(() => betShop.TicketCount >= lastReport + reportEvery, () =>
             {
-                nextReport.Modify((ref int n) => n += reportEvery);
+                DateTime newNow = DateTime.UtcNow;
+                int count = betShop.TicketCount;
+                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
+                lastTime.Assign(newNow);
+                lastReport.Modify((ref int n) => n += reportEvery);
                 Shield.SideEffect(() =>
                 {
-                    Console.Write(" {0}..", betShop.TicketCount);
+                    Console.Write("\n{0} at {1} item/s", count, speed);
                 });
                 return true;
             });
+
 
             var time = mtTest("bet shop w/ " + numEvents, 30000, i =>
             {
@@ -332,7 +349,7 @@ namespace Trans
         {
             int numTasks = 100000;
             int reportEvery = 1000;
-            bool doTree = true;
+            bool doTree = false;
 
             ShieldedTree<TreeItem, Guid> tree = new ShieldedTree<TreeItem, Guid>(ti => ti.Id);
             int transactionCount = 0;
@@ -472,9 +489,9 @@ namespace Trans
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
-            //TreeTest();
+            TreeTest();
 
             //SkewTest();
         }

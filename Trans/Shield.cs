@@ -65,8 +65,7 @@ namespace Trans
             }
         }
 
-        private static ConcurrentDictionary<long, int> _transactions
-            = new ConcurrentDictionary<long, int>();
+        private static VersionList _transactions = new VersionList();
         [ThreadStatic]
         private static TransItems _localItems;
 
@@ -118,19 +117,9 @@ namespace Trans
             do
             {
                 repeat = false;
-                // trimming uses lastStamp if the items are empty, so we suspend it momentarily if it's not running
-                // already. O(1)!
-                Interlocked.Increment(ref _trimFlag);
-                try
-                {
-                    _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
-                    _localItems = TransItems.BagOrNew();
-                    _transactions.AddOrUpdate(_currentTransactionStartStamp.Value, 1, (_, i) => i + 1);
-                }
-                finally
-                {
-                    Interlocked.Decrement(ref _trimFlag);
-                }
+                _localItems = TransItems.BagOrNew();
+                _currentTransactionStartStamp = _transactions.SafeAdd(
+                    () => Interlocked.Read(ref _lastStamp));
 
                 try
                 {
@@ -246,16 +235,6 @@ namespace Trans
 
         private static object _stampLock = new object();
 
-        private static void Unregister(long stamp)
-        {
-            int n;
-            do
-            {
-                n = _transactions[stamp];
-            }
-            while (!_transactions.TryUpdate(stamp, n-1, n));
-        }
-
         private static bool DoCommit()
         {
             // if there are items, they must all commit.
@@ -299,7 +278,7 @@ namespace Trans
                 if (copies != null)
                     RegisterCopies(writeStamp.Value, copies);
 
-                Unregister(_currentTransactionStartStamp.Value);
+                _transactions.Remove(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;
                 _localItems = null;
 
@@ -314,7 +293,7 @@ namespace Trans
             }
             else
             {
-                Unregister(_currentTransactionStartStamp.Value);
+                _transactions.Remove(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;
                 _localItems = null;
 
@@ -330,7 +309,7 @@ namespace Trans
 
         private static void DoRollback()
         {
-            Unregister(_currentTransactionStartStamp.Value);
+            _transactions.Remove(_currentTransactionStartStamp.Value);
             var items = _localItems;
             _localItems = null;
             foreach (var item in items.Enlisted)
@@ -360,17 +339,13 @@ namespace Trans
         private static int _trimFlag = 0;
         private static void TrimCopies()
         {
-            // must read value before checking flag, because InTransaction raises flag
-            // while opening. it does this since there is a small period of time when
-            // _lastStamp could become bigger then his start stamp (i.e. two transactions
-            // starting simultaneously), and items don't contain his items yet.
+            // must read value before checking Min() below
             var lastStamp = Interlocked.Read(ref _lastStamp);
             if (Interlocked.CompareExchange(ref _trimFlag, 1, 0) != 0)
                 return;
             try
             {
-                var keys = _transactions.Keys;
-                var minTransactionNo = keys.Any() ? keys.Min() : lastStamp;
+                var minTransactionNo = _transactions.Min() ?? lastStamp;
 
                 Tuple<long, List<IShielded>> curr;
                 HashSet<IShielded> toTrim = new HashSet<IShielded>();
