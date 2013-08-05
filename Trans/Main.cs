@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 using System.Diagnostics;
@@ -284,7 +285,7 @@ namespace Trans
         /// </summary>
         public static void BetShopTest()
         {
-            int numEvents = 10;
+            int numEvents = 100;
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
             int reportEvery = 1000;
@@ -317,7 +318,7 @@ namespace Trans
             });
 
 
-            var time = mtTest("bet shop w/ " + numEvents, 30000, i =>
+            var time = mtTest("bet shop w/ " + numEvents, 50000, i =>
             {
                 decimal payIn = (randomizr.Next(10) + 1m) * 1;
                 int event1Id = randomizr.Next(numEvents) + 1;
@@ -349,7 +350,6 @@ namespace Trans
         {
             int numTasks = 100000;
             int reportEvery = 1000;
-            bool doTree = false;
 
             ShieldedTree<TreeItem, Guid> tree = new ShieldedTree<TreeItem, Guid>(ti => ti.Id);
             int transactionCount = 0;
@@ -367,26 +367,33 @@ namespace Trans
                 Shield.SideEffect(() =>
                 {
                     Console.Write("\n{0} at {1} item/s", count, speed);
-                });
+                }
+                );
                 return true;
-            });
+            }
+            );
 
-            if (doTree)
+            if (true)
             {
                 var treeTime = mtTest("tree", numTasks, i =>
                 {
                     return Task.Factory.StartNew(() =>
                     {
-                        var item = new TreeItem() { Id = Guid.NewGuid() };
+                        var item1 = new TreeItem() { Id = Guid.NewGuid() };
+                        var item2 = new TreeItem() { Id = Guid.NewGuid() };
                         Shield.InTransaction(() =>
                         {
                             Interlocked.Increment(ref transactionCount);
-                            tree.Insert(item);
-                        });
+                            tree.Insert(item1);
+                            tree.Insert(item2);
+                        }
+                        );
                         Shield.InTransaction(
                             () => countComplete.Modify((ref int c) => c++));
-                    });
-                });
+                    }
+                    );
+                }
+                );
                 Guid? previous = null;
                 bool correct = true;
                 Shield.InTransaction(() =>
@@ -400,36 +407,69 @@ namespace Trans
                         }
                         previous = item.Id;
                     }
-                });
+                }
+                );
                 Console.WriteLine("\n -- {0} ms with {1} iterations and is {2}.",
                     treeTime, transactionCount, correct ? "correct" : "incorrect");
-                return;
             }
 
-            ShieldedDict<Guid, TreeItem> dict = new ShieldedDict<Guid, TreeItem>();
-            transactionCount = 0;
-            Shield.InTransaction(() =>
+            if (true)
             {
-                countComplete.Assign(0);
-                lastReport.Assign(0);
-            });
-
-            var time = mtTest("dictionary", numTasks, i =>
-            {
-                return Task.Factory.StartNew(() =>
+                ShieldedDict<Guid, TreeItem> dict = new ShieldedDict<Guid, TreeItem>();
+                transactionCount = 0;
+                Shield.InTransaction(() =>
                 {
-                    var item = new TreeItem() { Id = Guid.NewGuid() };
-                    Shield.InTransaction(() =>
+                    countComplete.Assign(0);
+                    lastReport.Assign(0);
+                }
+                );
+
+                var time = mtTest("dictionary", numTasks, i =>
+                {
+                    return Task.Factory.StartNew(() =>
                     {
-                        Interlocked.Increment(ref transactionCount);
-                        dict[item.Id] = item;
-                    });
-                    Shield.InTransaction(
+                        var item1 = new TreeItem() { Id = Guid.NewGuid() };
+                        var item2 = new TreeItem() { Id = Guid.NewGuid() };
+                        Shield.InTransaction(() =>
+                        {
+                            Interlocked.Increment(ref transactionCount);
+                            dict[item1.Id] = item1;
+                            dict[item2.Id] = item2;
+                        }
+                        );
+                        Shield.InTransaction(
                         () => countComplete.Modify((ref int c) => c++));
-                });
-            });
-            Console.WriteLine("\n -- {0} ms with {1} iterations. Not sorted.",
+                    }
+                    );
+                }
+                );
+                Console.WriteLine("\n -- {0} ms with {1} iterations. Not sorted.",
                 time, transactionCount);
+            }
+
+            if (true)
+            {
+                ConcurrentDictionary<Guid, TreeItem> dict = new ConcurrentDictionary<Guid, TreeItem>();
+
+                var time = mtTest("ConcurrentDictionary", numTasks, i =>
+                {
+                    object l = new object();
+                    var item1 = new TreeItem() { Id = Guid.NewGuid() };
+                    var item2 = new TreeItem() { Id = Guid.NewGuid() };
+                    return Task.Factory.StartNew(() =>
+                    {
+                        lock (l)
+                        {
+                            dict[item1.Id] = item1;
+                            dict[item2.Id] = item2;
+                        }
+                    }
+                    );
+                }
+                );
+                Console.WriteLine("\n -- {0} ms with {1} iterations. Not sorted.",
+                time, numTasks);
+            }
         }
 
         public static void SkewTest()

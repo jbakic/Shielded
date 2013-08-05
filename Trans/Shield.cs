@@ -196,9 +196,6 @@ namespace Trans
 
         private static void TriggerSubscriptions(IShielded[] changes)
         {
-            if (!changes.Any())
-                return;
-
             Shielded<CommitSubscription>[] triggered = null;
             Shield.InTransaction(() =>
             {

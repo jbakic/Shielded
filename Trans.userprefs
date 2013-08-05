@@ -3,10 +3,12 @@
   <MonoDevelop.Ide.Workbench ActiveDocument="Trans/Main.cs">
     <Files>
       <File FileName="Trans/BetShop.cs" Line="98" Column="36" />
-      <File FileName="Trans/Main.cs" Line="492" Column="13" />
+      <File FileName="Trans/Main.cs" Line="511" Column="14" />
       <File FileName="Trans/VersionList.cs" Line="33" Column="1" />
       <File FileName="Trans/Shielded.cs" Line="165" Column="25" />
       <File FileName="Trans/Shield.cs" Line="122" Column="61" />
+      <File FileName="Trans/ShieldedTree.cs" Line="60" Column="1" />
+      <File FileName="Trans/ShieldedDict.cs" Line="1" Column="1" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -14,7 +16,6 @@
           <Option id="ShowAllFiles" value="True" />
           <Node name="Trans" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="Main.cs" selected="True" />
           </Node>
         </State>
       </Pad>
