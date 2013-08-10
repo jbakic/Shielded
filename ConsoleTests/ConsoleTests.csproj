@@ -5,10 +5,10 @@
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
     <ProductVersion>10.0.0</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}</ProjectGuid>
+    <ProjectGuid>{C217F353-1145-4062-9D76-B0FC90854883}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>Trans</RootNamespace>
-    <AssemblyName>Trans</AssemblyName>
+    <RootNamespace>ConsoleTests</RootNamespace>
+    <AssemblyName>ConsoleTests</AssemblyName>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <DebugSymbols>true</DebugSymbols>
@@ -32,23 +32,17 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
-    <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Main.cs" />
     <Compile Include="AssemblyInfo.cs" />
-    <Compile Include="TransException.cs" />
-    <Compile Include="IShielded.cs" />
-    <Compile Include="SideEffect.cs" />
-    <Compile Include="Shield.cs" />
-    <Compile Include="Shielded.cs" />
-    <Compile Include="ShieldedDict.cs" />
-    <Compile Include="ShieldedSeq.cs" />
-    <Compile Include="ShieldedRef.cs" />
+    <Compile Include="Program.cs" />
     <Compile Include="BetShop.cs" />
-    <Compile Include="ShieldedTree.cs" />
-    <Compile Include="LocalStorage.cs" />
-    <Compile Include="VersionList.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <ItemGroup>
+    <ProjectReference Include="..\Shielded\Shielded.csproj">
+      <Project>{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}</Project>
+      <Name>Shielded</Name>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

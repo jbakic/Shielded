@@ -1,21 +1,26 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Trans", "Trans\Trans.csproj", "{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shielded", "Shielded\Shielded.csproj", "{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleTests", "ConsoleTests\ConsoleTests.csproj", "{C217F353-1145-4062-9D76-B0FC90854883}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
 		Release|x86 = Release|x86
-		Default|Any CPU = Default|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C217F353-1145-4062-9D76-B0FC90854883}.Debug|x86.ActiveCfg = Debug|x86
+		{C217F353-1145-4062-9D76-B0FC90854883}.Debug|x86.Build.0 = Debug|x86
+		{C217F353-1145-4062-9D76-B0FC90854883}.Release|x86.ActiveCfg = Release|x86
+		{C217F353-1145-4062-9D76-B0FC90854883}.Release|x86.Build.0 = Release|x86
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Debug|x86.ActiveCfg = Debug|x86
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Debug|x86.Build.0 = Debug|x86
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Release|x86.ActiveCfg = Release|x86
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(MonoDevelopProperties) = preSolution
-		StartupItem = Trans\Trans.csproj
+		StartupItem = ConsoleTests\ConsoleTests.csproj
 	EndGlobalSection
 EndGlobal

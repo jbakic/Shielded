@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 
-namespace Trans
+namespace Shielded
 {
     /// <summary>
     /// Supports adding at both ends O(1), taking from head O(1), and every other op

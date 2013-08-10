@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace Trans
+namespace Shielded
 {
     internal class SideEffect : IShielded
     {

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Linq;
 
-namespace Trans
+namespace Shielded
 {
     public static class Shield
     {

@@ -4,7 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Trans
+namespace Shielded
 {
     /// <summary>
     /// Protects only regarding adds or removes. Updates are unprotected unless

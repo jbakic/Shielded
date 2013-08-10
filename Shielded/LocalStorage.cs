@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Collections.Concurrent;
 
-namespace Trans
+namespace Shielded
 {
     public class LocalStorage<T> where T : class
     {

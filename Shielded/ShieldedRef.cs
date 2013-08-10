@@ -1,34 +1,32 @@
 using System;
 using System.Threading;
-using System.Threading.Tasks;
 
-namespace Trans
+namespace Shielded
 {
     /// <summary>
-    /// Makes your data thread safe :)
-    /// 
-    /// This one works with structs, which means C# will be doing the cloning.
+    /// Shielded reference. Very weak - only the reference itself is protected, not the
+    /// data inside the referenced object!
     /// </summary>
-	public class Shielded<T> : IShielded where T : struct
-	{
-		private class ValueKeeper
-		{
-			public long Version;
-			public T Value;
-			public ValueKeeper Older;
-		}
-		
-		private ValueKeeper _current;
+    public class ShieldedRef<T> : IShielded where T : class
+    {
+        private class ValueKeeper
+        {
+            public long Version;
+            public T Value;
+            public ValueKeeper Older;
+        }
+        
+        private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
         private long _writerStamp;
         private LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
 
-		public Shielded()
-		{
-			_current = new ValueKeeper();
-		}
+        public ShieldedRef()
+        {
+            _current = new ValueKeeper();
+        }
 
-        public Shielded(T initial)
+        public ShieldedRef(T initial)
         {
             _current = new ValueKeeper();
             _current.Value = initial;
@@ -45,38 +43,30 @@ namespace Trans
             Shield.Enlist(this);
         }
 
-		private ValueKeeper CurrentTransactionOldValue()
-		{
+        private ValueKeeper CurrentTransactionOldValue()
+        {
             CheckLockAndEnlist();
 
-			var point = _current;
-			while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
-				point = point.Older;
-			if (point == null)
-				throw new ApplicationException("Critical error in Shielded<T> - lost data.");
+            var point = _current;
+            while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
+                point = point.Older;
+            if (point == null)
+                throw new ApplicationException("Critical error in Shielded<T> - lost data.");
             return point;
-		}
+        }
 
-		private void PrepareForWriting(bool prepareOld)
+        private void PrepareForWriting()
         {
             if (_current.Version > Shield.CurrentTransactionStartStamp)
                 throw new TransException("Write collision.");
             if (!_locals.HasValue)
             {
-                var v = new ValueKeeper();
-                if (!prepareOld)
-                    CheckLockAndEnlist();
-                else
-                    v.Value = CurrentTransactionOldValue().Value;
-                _locals.Value = v;
+                _locals.Value = new ValueKeeper();
+                CheckLockAndEnlist();
             }
-		}
+        }
 
-        /// <summary>
-        /// Since T is a value type, this returns a copy every time it's called!
-        /// Works out of transaction also.
-        /// </summary>
-		public T Read
+        public T Read
         {
             get
             {
@@ -89,38 +79,30 @@ namespace Trans
                     throw new TransException("Writable read collision.");
                 return _locals.Value.Value;
             }
-		}
-
-        public delegate void ModificationDelegate(ref T value);
-
-        public void Modify(ModificationDelegate d)
-        {
-            PrepareForWriting(true);
-            d(ref _locals.Value.Value);
         }
 
-        public void Assign(T value)
+        public static implicit operator T(ShieldedRef<T> s)
         {
-            PrepareForWriting(false);
-            _locals.Value.Value = value;
+            return s.Read;
         }
 
-        public static implicit operator T(Shielded<T> obj)
+        public void Assign(T val)
         {
-            return obj.Read;
+            PrepareForWriting();
+            _locals.Value.Value = val;
         }
 
-		bool IShielded.HasChanges
-		{
-			get
-			{
+        bool IShielded.HasChanges
+        {
+            get
+            {
                 return _locals.HasValue;
-			}
-		}
-		
-		bool IShielded.CanCommit(long writeStamp)
-		{
-			if (Interlocked.Read(ref _writerStamp) != 0)
+            }
+        }
+        
+        bool IShielded.CanCommit(long writeStamp)
+        {
+            if (Interlocked.Read(ref _writerStamp) != 0)
                 return false;
             else if (_current.Version <= Shield.CurrentTransactionStartStamp)
             {
@@ -129,9 +111,9 @@ namespace Trans
                 return true;
             }
             return false;
-		}
-		
-		bool IShielded.Commit(long? writeStamp)
+        }
+        
+        bool IShielded.Commit(long? writeStamp)
         {
             if (((IShielded)this).HasChanges)
             {
@@ -147,7 +129,7 @@ namespace Trans
             }
             _locals.Value = null;
             return false;
-		}
+        }
 
         void IShielded.Rollback(long? writeStamp)
         {
@@ -155,18 +137,18 @@ namespace Trans
             if (writeStamp.HasValue)
                 Interlocked.CompareExchange(ref _writerStamp, 0, writeStamp.Value);
         }
-		
-		void IShielded.TrimCopies(long smallestOpenTransactionId)
-		{
-			// NB the "smallest transaction" and others can freely read while
-			// we're doing this.
-			var point = _current;
-			while (point != null && point.Version > smallestOpenTransactionId)
-				point = point.Older;
-			// point is the last accessible - his Older is not needed.
-			if (point != null) point.Older = null;
-			// if point were null above, data was lost, CurrentTransactionValue() might throw for some!
-		}
-	}
+        
+        void IShielded.TrimCopies(long smallestOpenTransactionId)
+        {
+            // NB the "smallest transaction" and others can freely read while
+            // we're doing this.
+            var point = _current;
+            while (point != null && point.Version > smallestOpenTransactionId)
+                point = point.Older;
+            // point is the last accessible - his Older is not needed.
+            if (point != null) point.Older = null;
+            // if point were null above, data was lost, CurrentTransactionValue() might throw for some!
+        }
+    }
 }
 

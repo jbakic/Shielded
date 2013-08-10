@@ -1,6 +1,6 @@
 using System;
 
-namespace Trans
+namespace Shielded
 {
     internal class TransException : Exception
     {

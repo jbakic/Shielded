@@ -4,7 +4,7 @@ using System.Linq.Expressions;
 using System.Collections;
 using System.Collections.Generic;
 
-namespace Trans
+namespace Shielded
 {
     /// <summary>
     /// A shielded red-black tree. Each node is a Shielded struct, so parallel
