@@ -34,7 +34,7 @@ namespace ConsoleTests
         {
             var randomizr = new Random();
             int transactionCounter;
-            int sleepTime = 10;
+            int sleepTime = 1;
             int taskCount = 1000;
 
             foreach (var i in Enumerable.Repeat(0, 5))
@@ -48,10 +48,10 @@ namespace ConsoleTests
                     {
                         Interlocked.Increment(ref transactionCounter);
                         int v = x[rnd];
-                        Thread.Sleep(sleepTime);
+                        if (sleepTime > 0) Thread.Sleep(sleepTime);
                         x[rnd] = v + 1;
                     },
-                    TaskCreationOptions.LongRunning
+                    sleepTime > 0 ? TaskCreationOptions.LongRunning : TaskCreationOptions.None
                     );
                 });
                 var correct = x.Sum() == taskCount;
@@ -74,11 +74,11 @@ namespace ConsoleTests
                         {
                             Interlocked.Increment(ref transactionCounter);
                             int v = x[rnd];
-                            Thread.Sleep(sleepTime);
+                            if (sleepTime > 0) Thread.Sleep(sleepTime);
                             x[rnd] = v + 1;
                         }
                     },
-                    TaskCreationOptions.LongRunning
+                    sleepTime > 0 ? TaskCreationOptions.LongRunning : TaskCreationOptions.None
                     );
                 });
                 var correct = x.Sum() == taskCount;
@@ -99,11 +99,11 @@ namespace ConsoleTests
                         {
                             Interlocked.Increment(ref transactionCounter);
                             int v = shx[rnd];
-                            Thread.Sleep(sleepTime);
+                            if (sleepTime > 0) Thread.Sleep(sleepTime);
                             shx[rnd].Modify((ref int a) => a = v + 1);
                         });
                     },
-                    TaskCreationOptions.LongRunning
+                    sleepTime > 0 ? TaskCreationOptions.LongRunning : TaskCreationOptions.None
                     );
                 });
                 var correct = shx.Sum(s => s.Read) == taskCount;
@@ -381,12 +381,10 @@ namespace ConsoleTests
                     return Task.Factory.StartNew(() =>
                     {
                         var item1 = new TreeItem();
-                        var item2 = new TreeItem();
                         Shield.InTransaction(() =>
                         {
                             Interlocked.Increment(ref transactionCount);
                             tree.Insert(item1);
-                            tree.Insert(item2);
                         }
                         );
                         //Shield.InTransaction(
@@ -399,8 +397,10 @@ namespace ConsoleTests
                 bool correct = true;
                 Shield.InTransaction(() =>
                 {
+                    int count = 0;
                     foreach (var item in tree)
                     {
+                        count++;
                         if (previous != null && previous.Value.CompareTo(item.Id) > 0)
                         {
                             correct = false;
@@ -408,6 +408,7 @@ namespace ConsoleTests
                         }
                         previous = item.Id;
                     }
+                    correct = correct && (count == numTasks);
                 }
                 );
                 Console.WriteLine("\n -- {0} ms with {1} iterations and is {2}.",
@@ -430,12 +431,10 @@ namespace ConsoleTests
                     return Task.Factory.StartNew(() =>
                     {
                         var item1 = new TreeItem();
-                        var item2 = new TreeItem();
                         Shield.InTransaction(() =>
                         {
                             Interlocked.Increment(ref transactionCount);
                             dict[item1.Id] = item1;
-                            dict[item2.Id] = item2;
                         }
                         );
                         //Shield.InTransaction(
@@ -454,16 +453,10 @@ namespace ConsoleTests
 
                 var time = mtTest("ConcurrentDictionary", numTasks, i =>
                 {
-                    object l = new object();
                     return Task.Factory.StartNew(() =>
                     {
                         var item1 = new TreeItem();
-                        var item2 = new TreeItem();
-                        lock (l)
-                        {
-                            dict[item1.Id] = item1;
-                            dict[item2.Id] = item2;
-                        }
+                        dict[item1.Id] = item1;
                     }
                     );
                 }
@@ -520,6 +513,36 @@ namespace ConsoleTests
                 time, transactionCount, correct ? "correct" : "incorrect");
         }
 
+        private class Dummy
+        {
+            public int Value;
+        }
+
+        public static void SimpleTreeTest()
+        {
+            ShieldedTree<Dummy, int> tree = new ShieldedTree<Dummy, int>(d => d.Value);
+            Shield.InTransaction(() =>
+            {
+                foreach (int i in Enumerable.Range(1, 2000))
+                {
+                    tree.Insert(new Dummy() { Value = 1000 - i });
+                    tree.Insert(new Dummy() { Value = 1000 - i });
+                }
+            });
+            Shield.InTransaction(() =>
+            {
+                foreach (int i in Enumerable.Range(1, 1000).Select(x => x << 1))
+                {
+                    tree.Remove(1000 - i);
+                }
+            });
+            Shield.InTransaction(() =>
+            {
+                foreach (Dummy d in tree.Range(100, 110))
+                    Console.WriteLine("Item: {0}", d.Value);
+            });
+        }
+
         public static void Main(string[] args)
         {
             //TimeTests();
@@ -530,11 +553,13 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
             //TreeTest();
 
             //SkewTest();
+
+            SimpleTreeTest();
         }
     }
 }
