@@ -5,12 +5,18 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shielded", "Shielded\Shield
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleTests", "ConsoleTests\ConsoleTests.csproj", "{C217F353-1145-4062-9D76-B0FC90854883}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShieldedTests", "ShieldedTests\ShieldedTests.csproj", "{7BBF29FE-3683-4290-B39D-485E7DEE5388}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Debug|x86.Build.0 = Debug|Any CPU
+		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Release|x86.ActiveCfg = Release|Any CPU
+		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Release|x86.Build.0 = Release|Any CPU
 		{C217F353-1145-4062-9D76-B0FC90854883}.Debug|x86.ActiveCfg = Debug|x86
 		{C217F353-1145-4062-9D76-B0FC90854883}.Debug|x86.Build.0 = Debug|x86
 		{C217F353-1145-4062-9D76-B0FC90854883}.Release|x86.ActiveCfg = Release|x86

@@ -555,11 +555,11 @@ namespace ConsoleTests
 
             //BetShopTest();
 
-            //TreeTest();
+            TreeTest();
 
             //SkewTest();
 
-            SimpleTreeTest();
+            //SimpleTreeTest();
         }
     }
 }
