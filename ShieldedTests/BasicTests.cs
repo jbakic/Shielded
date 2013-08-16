@@ -115,15 +115,11 @@ namespace ShieldedTests
                     // this perhaps should not work :D but it does. prevents repetition.
                     Shield.Rollback(false);
                 });
-                // this is in case Assign() becomes commutative. then it would never conflict if not read.
-                var temp = x.Read;
-                x.Assign(DateTime.UtcNow);
-                var t = new Thread(() => {
-                    Shield.InTransaction(() => {
-                        var temp2 = x.Read;
-                        x.Assign(DateTime.UtcNow);
-                    });
-                });
+                // in case Assign() becomes commutative, we use Modify() to ensure conflict.
+                x.Modify((ref DateTime d) => d = DateTime.UtcNow);
+                var t = new Thread(() =>
+                    Shield.InTransaction(() =>
+                        x.Modify((ref DateTime d) => d = DateTime.UtcNow)));
                 t.Start();
                 t.Join();
             });

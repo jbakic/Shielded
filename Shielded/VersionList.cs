@@ -15,11 +15,12 @@ namespace Shielded
             if (generator == null)
                 throw new ArgumentNullException();
 
-            SpinWait.SpinUntil(() =>
-                               Interlocked.CompareExchange(ref _busy, 1, 0) == 0);
             long i;
+            bool gotBusy = false;
             try
             {
+                SpinWait.SpinUntil(() =>
+                    gotBusy = Interlocked.CompareExchange(ref _busy, 1, 0) == 0);
                 i = generator();
                 if (_items.ContainsKey(i))
                     _items [i] = _items [i] + 1;
@@ -28,33 +29,45 @@ namespace Shielded
             }
             finally
             {
-                Interlocked.Exchange(ref _busy, 0);
+                if (gotBusy) Interlocked.Exchange(ref _busy, 0);
             }
             return i;
         }
 
         public void Remove(long i)
         {
-            SpinWait.SpinUntil(() =>
-                               Interlocked.CompareExchange(ref _busy, 1, 0) == 0
-            );
-            if (_items.ContainsKey(i))
+            bool gotBusy = false;
+            try
             {
-                if (_items[i] > 1)
-                    _items[i] = _items[i] - 1;
-                else
-                    _items.Remove(i);
+                SpinWait.SpinUntil(() =>
+                    gotBusy = Interlocked.CompareExchange(ref _busy, 1, 0) == 0);
+                if (_items.ContainsKey(i))
+                {
+                    if (_items [i] > 1)
+                        _items [i] = _items [i] - 1;
+                    else
+                        _items.Remove(i);
+                }
             }
-            Interlocked.Exchange(ref _busy, 0);
+            finally
+            {
+                if (gotBusy) Interlocked.Exchange(ref _busy, 0);
+            }
         }
 
         public long? Min()
         {
-            SpinWait.SpinUntil(() =>
-                               Interlocked.CompareExchange(ref _busy, 1, 0) == 0);
-            var res = _items.Any() ? _items.First().Key : (long?) null;
-            Interlocked.Exchange(ref _busy, 0);
-            return res;
+            bool gotBusy = false;
+            try
+            {
+                SpinWait.SpinUntil(() =>
+                    gotBusy = Interlocked.CompareExchange(ref _busy, 1, 0) == 0);
+                return _items.Any() ? _items.First().Key : (long?)null;
+            }
+            finally
+            {
+                if (gotBusy) Interlocked.Exchange(ref _busy, 0);
+            }
         }
     }
 }
