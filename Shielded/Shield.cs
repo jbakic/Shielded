@@ -129,8 +129,11 @@ namespace Shielded
                 }
                 catch (TransException ex)
                 {
-                    repeat = !(ex is NoRepeatTransException);
-                    DoRollback();
+                    if (_currentTransactionStartStamp.HasValue)
+                    {
+                        repeat = !(ex is NoRepeatTransException);
+                        DoRollback();
+                    }
                 }
                 finally
                 {

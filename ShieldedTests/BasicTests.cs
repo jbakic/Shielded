@@ -10,10 +10,10 @@ using Shielded;
 namespace ShieldedTests
 {
     [TestFixture()]
-    public class Test
+    public class BasicTests
     {
         [Test()]
-        public void BasicTest()
+        public void TransactionSafetyTest()
         {
             Shielded<int> a = new Shielded<int>(5);
             Assert.AreEqual(5, a);
@@ -99,6 +99,74 @@ namespace ShieldedTests
                     });
                 }, TaskCreationOptions.LongRunning)).ToArray());
             Assert.AreEqual(3, cats + dogs);
+        }
+
+        [Test]
+        public void SideEffectTest()
+        {
+            var x = new Shielded<DateTime>(DateTime.UtcNow);
+            // this transaction commits suicide by running a parallel one to conflict with.
+            Shield.InTransaction(() =>
+            {
+                Shield.SideEffect(() => {
+                    Assert.Fail("Suicide transaction has committed.");
+                },
+                () => {
+                    // this perhaps should not work :D but it does. prevents repetition.
+                    Shield.Rollback(false);
+                });
+                // this is in case Assign() becomes commutative. then it would never conflict if not read.
+                var temp = x.Read;
+                x.Assign(DateTime.UtcNow);
+                var t = new Thread(() => {
+                    Shield.InTransaction(() => {
+                        var temp2 = x.Read;
+                        x.Assign(DateTime.UtcNow);
+                    });
+                });
+                t.Start();
+                t.Join();
+            });
+
+            bool commitFx = false;
+            Shield.InTransaction(() => {
+                Shield.SideEffect(() => {
+                    Assert.IsFalse(commitFx);
+                    commitFx = true;
+                });
+            });
+            Assert.IsTrue(commitFx);
+        }
+
+        [Test]
+        public void ConditionalTest()
+        {
+            var x = new Shielded<int>();
+            var testCounter = 0;
+            var triggerCommits = 0;
+
+            Shield.Conditional(() => {
+                Interlocked.Increment(ref testCounter);
+                return x > 0 && (x & 2) == 0;
+            },
+            () => {
+                Shield.SideEffect(() =>
+                    Interlocked.Increment(ref triggerCommits));
+                Assert.IsTrue(x > 0 && (x & 2) == 0);
+                return true;
+            });
+
+            const int count = 1000;
+            ParallelEnumerable.Repeat(1, count).ForAll(i =>
+                Shield.InTransaction(() => x.Modify((ref int n) => n++)));
+
+            // one more, for the first call to Conditional()! btw, if this conditional were to
+            // write anywhere, he might conflict, and an interlocked counter would give more due to
+            // repetitions. so, this confirms reader progress too.
+            Assert.AreEqual(count + 1, testCounter);
+            // every change triggers it, but by the time it starts, another transaction might have
+            // committed, so this is not a fixed number.
+            Assert.Greater(triggerCommits, 0);
         }
     }
 }
