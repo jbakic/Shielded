@@ -1,12 +1,35 @@
 ﻿<Properties GitUserInfo="UsingGIT">
-  <MonoDevelop.Ide.Workspace ActiveConfiguration="Release|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="ConsoleTests/Program.cs">
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
+  <MonoDevelop.Ide.Workbench ActiveDocument="ShieldedTests/Test.cs">
     <Files>
-      <File FileName="ConsoleTests/Program.cs" Line="558" Column="13" />
+      <File FileName="ConsoleTests/Program.cs" Line="545" Column="9" />
       <File FileName="ConsoleTests/BetShop.cs" Line="1" Column="1" />
-      <File FileName="Shielded/AssemblyInfo.cs" Line="19" Column="1" />
-      <File FileName="Shielded/Shield.cs" Line="240" Column="1" />
+      <File FileName="Shielded/Shield.cs" Line="239" Column="1" />
+      <File FileName="ShieldedTests/Test.cs" Line="32" Column="40" />
     </Files>
+    <Pads>
+      <Pad Id="ProjectPad">
+        <State expanded="True">
+          <Node name="ConsoleTests" expanded="True" />
+          <Node name="Shielded" expanded="True" />
+          <Node name="ShieldedTests" expanded="True">
+            <Node name="Test.cs" selected="True" />
+          </Node>
+        </State>
+      </Pad>
+      <Pad Id="ClassPad">
+        <State expanded="True" selected="True" />
+      </Pad>
+      <Pad Id="MonoDevelop.NUnit.TestPad">
+        <State expanded="True" selected="True" />
+      </Pad>
+      <Pad Id="MonoDevelop.Debugger.WatchPad">
+        <State />
+      </Pad>
+      <Pad Id="ConnectionManagerPad">
+        <State selected="True" />
+      </Pad>
+    </Pads>
   </MonoDevelop.Ide.Workbench>
   <MonoDevelop.Ide.DebuggingService.Breakpoints>
     <BreakpointStore />
