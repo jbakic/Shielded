@@ -83,11 +83,12 @@ namespace ShieldedTests
         {
             var cats = new Shielded<int>(1);
             var dogs = new Shielded<int>(1);
+            int transactionCount = 0;
             Task.WaitAll(
                 Enumerable.Range(1, 2).Select(i => Task.Factory.StartNew(() =>
-                {
                     Shield.InTransaction(() =>
                     {
+                        Interlocked.Increment(ref transactionCount);
                         if (cats + dogs < 3)
                         {
                             Thread.Sleep(200);
@@ -96,16 +97,15 @@ namespace ShieldedTests
                             else
                                 dogs.Modify((ref int n) => n++);
                         }
-                    });
-                }, TaskCreationOptions.LongRunning)).ToArray());
+                    }), TaskCreationOptions.LongRunning)).ToArray());
             Assert.AreEqual(3, cats + dogs);
+            Assert.AreEqual(3, transactionCount);
         }
 
         [Test]
         public void SideEffectTest()
         {
             var x = new Shielded<DateTime>(DateTime.UtcNow);
-            // this transaction commits suicide by running a parallel one to conflict with.
             Shield.InTransaction(() =>
             {
                 Shield.SideEffect(() => {
