@@ -1,18 +1,15 @@
 ﻿<Properties GitUserInfo="UsingGIT">
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Release|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="ConsoleTests/Program.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="ShieldedTests/BasicTests.cs">
     <Files>
-      <File FileName="ShieldedTests/BasicTests.cs" Line="154" Column="1" />
+      <File FileName="ShieldedTests/BasicTests.cs" Line="132" Column="1" />
       <File FileName="ShieldedTests/DictionaryTests.cs" Line="58" Column="53" />
-      <File FileName="Shielded/ShieldedTree.cs" Line="116" Column="46" />
-      <File FileName="ConsoleTests/Program.cs" Line="551" Column="13" />
+      <File FileName="ConsoleTests/Program.cs" Line="558" Column="13" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
-        <State expanded="True">
-          <Node name="ConsoleTests" expanded="True">
-            <Node name="Program.cs" selected="True" />
-          </Node>
+        <State expanded="True" selected="True">
+          <Node name="ConsoleTests" expanded="True" />
           <Node name="Shielded" expanded="True" />
           <Node name="ShieldedTests" expanded="True" />
         </State>

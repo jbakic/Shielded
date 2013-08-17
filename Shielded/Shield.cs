@@ -260,7 +260,8 @@ namespace Shielded
                                 enlisted[j].Rollback(writeStamp.Value);
                             break;
                         }
-                    Interlocked.Increment(ref _lastStamp);
+                    if (commit)
+                        Interlocked.Increment(ref _lastStamp);
                 }
                 if (!commit)
                     for (int i = rolledBack + 1; i < enlisted.Length; i++)
