@@ -120,7 +120,10 @@ namespace Shielded
                         _comparer.Compare(_keySelector(curr.Read.Value), to) <= 0)
                         yield return curr;
                 }
-                curr = curr.Read.Right;
+                if (_comparer.Compare(_keySelector(curr.Read.Value), to) <= 0)
+                    curr = curr.Read.Right;
+                else
+                    break;
             }
         }
 
