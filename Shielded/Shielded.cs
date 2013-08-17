@@ -73,7 +73,7 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Since T is a value type, this returns a copy every time it's called!
+        /// If T is a value type, this returns a copy every time it's called!
         /// Works out of transaction also.
         /// </summary>
         public T Read
