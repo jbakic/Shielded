@@ -102,27 +102,33 @@ namespace ShieldedTests
             Assert.AreEqual(3, transactionCount);
         }
 
+        class IgnoreMe : Exception {}
+
         [Test]
         public void SideEffectTest()
         {
             var x = new Shielded<DateTime>(DateTime.UtcNow);
-            Shield.InTransaction(() =>
+            try
             {
-                Shield.SideEffect(() => {
-                    Assert.Fail("Suicide transaction has committed.");
-                },
-                () => {
-                    // this perhaps should not work :D but it does. prevents repetition.
-                    Shield.Rollback(false);
+                Shield.InTransaction(() =>
+                {
+                    Shield.SideEffect(() => {
+                        Assert.Fail("Suicide transaction has committed.");
+                    },
+                    () => {
+                        throw new IgnoreMe();
+                    });
+                    // in case Assign() becomes commutative, we use Modify() to ensure conflict.
+                    x.Modify((ref DateTime d) => d = DateTime.UtcNow);
+                    var t = new Thread(() =>
+                        Shield.InTransaction(() =>
+                            x.Modify((ref DateTime d) => d = DateTime.UtcNow)));
+                    t.Start();
+                    t.Join();
                 });
-                // in case Assign() becomes commutative, we use Modify() to ensure conflict.
-                x.Modify((ref DateTime d) => d = DateTime.UtcNow);
-                var t = new Thread(() =>
-                    Shield.InTransaction(() =>
-                        x.Modify((ref DateTime d) => d = DateTime.UtcNow)));
-                t.Start();
-                t.Join();
-            });
+                Assert.Fail("Suicide transaction did not throw.");
+            }
+            catch (IgnoreMe) {}
 
             bool commitFx = false;
             Shield.InTransaction(() => {
