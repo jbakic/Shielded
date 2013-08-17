@@ -15,18 +15,18 @@ namespace Shielded
         private class ItemKeeper
         {
             public T Value;
-            public readonly ShieldedRef<ItemKeeper> Next;
+            public readonly Shielded<ItemKeeper> Next;
 
             public ItemKeeper(ItemKeeper initialNext)
             {
-                Next = new ShieldedRef<ItemKeeper>(initialNext);
+                Next = new Shielded<ItemKeeper>(initialNext);
             }
         }
 
         // a ShieldedRef should always be readonly! unfortunate, really. if you forget, a horrible
         // class of error becomes possible..
-        private readonly ShieldedRef<ItemKeeper> _head;
-        private readonly ShieldedRef<ItemKeeper> _tail;
+        private readonly Shielded<ItemKeeper> _head;
+        private readonly Shielded<ItemKeeper> _tail;
 
         public ShieldedSeq(params T[] items)
         {
@@ -38,18 +38,18 @@ namespace Shielded
                     Value = items[i]
                 };
                 if (_tail == null)
-                    _tail = new ShieldedRef<ItemKeeper>(item);
+                    _tail = new Shielded<ItemKeeper>(item);
             }
-            _head = new ShieldedRef<ItemKeeper>(item);
+            _head = new Shielded<ItemKeeper>(item);
             // if this is true, there were no items.
             if (_tail == null)
-                _tail = new ShieldedRef<ItemKeeper>();
+                _tail = new Shielded<ItemKeeper>();
         }
 
         public ShieldedSeq()
         {
-            _head = new ShieldedRef<ItemKeeper>();
-            _tail = new ShieldedRef<ItemKeeper>();
+            _head = new Shielded<ItemKeeper>();
+            _tail = new Shielded<ItemKeeper>();
         }
 
         public void Prepend(T val)
@@ -92,7 +92,7 @@ namespace Shielded
             }
         }
 
-        private ShieldedRef<ItemKeeper> RefToIndex(int index)
+        private Shielded<ItemKeeper> RefToIndex(int index)
         {
             if (index < 0 || _head.Read == null)
                 throw new IndexOutOfRangeException();

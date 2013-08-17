@@ -5,11 +5,11 @@ using System.Threading.Tasks;
 namespace Shielded
 {
     /// <summary>
-    /// Makes your data thread safe :)
-    /// 
-    /// This one works with structs, which means C# will be doing the cloning.
+    /// Makes your data thread safe, but only if it's a value type. If it's a reference
+    /// type, then only the reference itself is protected. The class should be threadsafe
+    /// in that case.
     /// </summary>
-    public class Shielded<T> : IShielded where T : struct
+    public class Shielded<T> : IShielded
     {
         private class ValueKeeper
         {

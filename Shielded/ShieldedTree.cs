@@ -27,13 +27,13 @@ namespace Shielded
             public Shielded<Node> Parent;
         }
 
-        private readonly ShieldedRef<Shielded<Node>> _head;
+        private readonly Shielded<Shielded<Node>> _head;
         private readonly Func<T, TKey> _keySelector;
         private readonly IComparer<TKey> _comparer;
 
         public ShieldedTree(Func<T, TKey> keySelector, IComparer<TKey> comparer = null)
         {
-            _head = new ShieldedRef<Shielded<Node>>();
+            _head = new Shielded<Shielded<Node>>();
             _keySelector = keySelector;
             _comparer = comparer != null ? comparer : Comparer<TKey>.Default;
         }

@@ -58,7 +58,6 @@
     <Compile Include="Shielded.cs" />
     <Compile Include="ShieldedDict.cs" />
     <Compile Include="ShieldedSeq.cs" />
-    <Compile Include="ShieldedRef.cs" />
     <Compile Include="ShieldedTree.cs" />
     <Compile Include="LocalStorage.cs" />
     <Compile Include="VersionList.cs" />
