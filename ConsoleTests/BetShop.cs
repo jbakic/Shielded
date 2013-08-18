@@ -51,8 +51,8 @@ namespace ConsoleTests
 
         public readonly ShieldedDict<int, Shielded<Event>> Events;
 
-        public readonly ShieldedTree<Shielded<Ticket>, Guid> Tickets =
-            new ShieldedTree<Shielded<Ticket>, Guid>(t => t.Read.Id);
+        public readonly ShieldedTree<Guid, Shielded<Ticket>> Tickets =
+            new ShieldedTree<Guid, Shielded<Ticket>>();
         private ShieldedDict<string, decimal> _sameTicketWins =
             new ShieldedDict<string, decimal>();
 
@@ -105,7 +105,7 @@ namespace ConsoleTests
                     return;
 
                 bought = true;
-                Tickets.Insert(newTicket);
+                Tickets.Add(newId, newTicket);
                 _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.Read.WinAmount;
 
                 Shield.SideEffect(() => Shield.InTransaction(() =>
@@ -183,11 +183,11 @@ namespace ConsoleTests
                 count = 0;
                 foreach (var t in Tickets)
                 {
-                    var hash = GetOfferHash(t);
+                    var hash = GetOfferHash(t.Value);
                     if (!checkTable.ContainsKey(hash))
-                        checkTable[hash] = t.Read.WinAmount;
+                        checkTable[hash] = t.Value.Read.WinAmount;
                     else
-                        checkTable[hash] = checkTable[hash] + t.Read.WinAmount;
+                        checkTable[hash] = checkTable[hash] + t.Value.Read.WinAmount;
                     if (checkTable[hash] > SameTicketWinLimit)
                     {
                         result = false;

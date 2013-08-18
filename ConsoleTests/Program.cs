@@ -352,7 +352,7 @@ namespace ConsoleTests
             int numTasks = 100000;
             int reportEvery = 1000;
 
-            ShieldedTree<TreeItem, Guid> tree = new ShieldedTree<TreeItem, Guid>(ti => ti.Id);
+            ShieldedTree<Guid, TreeItem> tree = new ShieldedTree<Guid, TreeItem>();
             int transactionCount = 0;
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<int> countComplete = new Shielded<int>(0);
@@ -384,7 +384,7 @@ namespace ConsoleTests
                         Shield.InTransaction(() =>
                         {
                             Interlocked.Increment(ref transactionCount);
-                            tree.Insert(item1);
+                            tree.Add(item1.Id, item1);
                         }
                         );
                         //Shield.InTransaction(
@@ -401,12 +401,12 @@ namespace ConsoleTests
                     foreach (var item in tree)
                     {
                         count++;
-                        if (previous != null && previous.Value.CompareTo(item.Id) > 0)
+                        if (previous != null && previous.Value.CompareTo(item.Key) > 0)
                         {
                             correct = false;
                             break;
                         }
-                        previous = item.Id;
+                        previous = item.Key;
                     }
                     correct = correct && (count == numTasks);
                 }
@@ -520,13 +520,13 @@ namespace ConsoleTests
 
         public static void SimpleTreeTest()
         {
-            ShieldedTree<Dummy, int> tree = new ShieldedTree<Dummy, int>(d => d.Value);
+            ShieldedTree<int, Dummy> tree = new ShieldedTree<int, Dummy>();
             Shield.InTransaction(() =>
             {
                 foreach (int i in Enumerable.Range(1, 2000))
                 {
-                    tree.Insert(new Dummy() { Value = 1000 - i });
-                    tree.Insert(new Dummy() { Value = 1000 - i });
+                    tree.Add(1000 - i, new Dummy() { Value = 1000 - i });
+                    tree.Add(1000 - i, new Dummy() { Value = 1000 - i });
                 }
             });
             Shield.InTransaction(() =>
@@ -538,8 +538,8 @@ namespace ConsoleTests
             });
             Shield.InTransaction(() =>
             {
-                foreach (Dummy d in tree.Range(100, 110))
-                    Console.WriteLine("Item: {0}", d.Value);
+                foreach (var kvp in tree.Range(100, 110))
+                    Console.WriteLine("Item: {0}", kvp.Key);
             });
         }
 
@@ -553,9 +553,9 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
-            TreeTest();
+            //TreeTest();
 
             //SkewTest();
 

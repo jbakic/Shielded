@@ -8,9 +8,9 @@ namespace Shielded
 {
     /// <summary>
     /// A shielded red-black tree. Each node is a Shielded struct, so parallel
-    /// operations are possible.
+    /// operations are possible. Multiple items may be added with the same key.
     /// </summary>
-    public class ShieldedTree<T, TKey> : IEnumerable<T> where T : class
+    public class ShieldedTree<TKey, TValue> : IDictionary<TKey, TValue> where TValue : class
     {
         private enum Color
         {
@@ -21,44 +21,43 @@ namespace Shielded
         private struct Node
         {
             public Color Color;
-            public T Value;
+            public TKey Key;
+            public TValue Value;
             public Shielded<Node> Left;
             public Shielded<Node> Right;
             public Shielded<Node> Parent;
         }
 
         private readonly Shielded<Shielded<Node>> _head;
-        private readonly Func<T, TKey> _keySelector;
         private readonly IComparer<TKey> _comparer;
 
-        public ShieldedTree(Func<T, TKey> keySelector, IComparer<TKey> comparer = null)
+        public ShieldedTree(IComparer<TKey> comparer = null)
         {
             _head = new Shielded<Shielded<Node>>();
-            _keySelector = keySelector;
             _comparer = comparer != null ? comparer : Comparer<TKey>.Default;
         }
 
-        public T Find(TKey key)
+        private Shielded<Node> FindInternal(TKey key)
         {
             var curr = _head.Read;
             int comparison;
             while (curr != null &&
-                   (comparison = _comparer.Compare(_keySelector(curr.Read.Value), key)) != 0)
+                   (comparison = _comparer.Compare(curr.Read.Key, key)) != 0)
             {
                 if (comparison > 0)
                     curr = curr.Read.Left;
                 else
                     curr = curr.Read.Right;
             }
-            return curr != null ? curr.Read.Value : null;
+            return curr;
         }
 
         IEnumerator IEnumerable.GetEnumerator()
         {
-            return ((IEnumerable<T>)this).GetEnumerator();
+            return ((IEnumerable<KeyValuePair<TKey, TValue>>)this).GetEnumerator();
         }
 
-        IEnumerator<T> IEnumerable<T>.GetEnumerator()
+        IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
         {
             var a = Shield.CurrentTransactionStartStamp;
             Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
@@ -71,21 +70,21 @@ namespace Shielded
                     curr = curr.Read.Left;
                 }
 
-                yield return curr.Read.Value;
+                yield return new KeyValuePair<TKey, TValue>(curr.Read.Key, curr.Read.Value);
 
                 while (curr.Read.Right == null && centerStack.Count > 0)
                 {
                     curr = centerStack.Pop();
-                    yield return curr.Read.Value;
+                    yield return new KeyValuePair<TKey, TValue>(curr.Read.Key, curr.Read.Value);
                 }
                 curr = curr.Read.Right;
             }
         }
 
-        public IEnumerable<T> Range(TKey from, TKey to)
+        public IEnumerable<KeyValuePair<TKey, TValue>> Range(TKey from, TKey to)
         {
             foreach (var n in RangeInternal(from, to))
-                yield return n.Read.Value;
+                yield return new KeyValuePair<TKey, TValue>(n.Read.Key, n.Read.Value);
         }
 
         /// <summary>
@@ -101,45 +100,43 @@ namespace Shielded
             while (curr != null)
             {
                 while (curr.Read.Left != null &&
-                       _comparer.Compare(_keySelector(curr.Read.Value), from) >= 0)
+                       _comparer.Compare(curr.Read.Key, from) >= 0)
                 {
                     centerStack.Push(curr);
                     curr = curr.Read.Left;
                 }
 
-                if (_comparer.Compare(_keySelector(curr.Read.Value), from) >= 0 &&
-                    _comparer.Compare(_keySelector(curr.Read.Value), to) <= 0)
+                if (_comparer.Compare(curr.Read.Key, from) >= 0 &&
+                    _comparer.Compare(curr.Read.Key, to) <= 0)
                     yield return curr;
 
                 while (curr.Read.Right == null &&
-                       _comparer.Compare(_keySelector(curr.Read.Value), to) <= 0 &&
+                       _comparer.Compare(curr.Read.Key, to) <= 0 &&
                        centerStack.Count > 0)
                 {
                     curr = centerStack.Pop();
-                    if (_comparer.Compare(_keySelector(curr.Read.Value), from) >= 0 &&
-                        _comparer.Compare(_keySelector(curr.Read.Value), to) <= 0)
+                    if (_comparer.Compare(curr.Read.Key, from) >= 0 &&
+                        _comparer.Compare(curr.Read.Key, to) <= 0)
                         yield return curr;
                 }
-                if (_comparer.Compare(_keySelector(curr.Read.Value), to) <= 0)
+                if (_comparer.Compare(curr.Read.Key, to) <= 0)
                     curr = curr.Read.Right;
                 else
                     break;
             }
         }
 
-        public void Insert(T item)
+        private void InsertInternal(TKey key, TValue item)
         {
-            TKey itemKey = _keySelector(item);
             Shield.InTransaction(() =>
             {
                 Shielded<Node> parent = null;
                 var targetLoc = _head.Read;
                 int comparison = 0;
-                while (targetLoc != null //&&
-                       /*(comparison = _comparer.Compare(_keySelector(targetLoc.Read.Value), itemKey)) != 0*/)
+                while (targetLoc != null)
                 {
                     parent = targetLoc;
-                    if ((comparison = _comparer.Compare(_keySelector(targetLoc.Read.Value), itemKey)) > 0)
+                    if ((comparison = _comparer.Compare(targetLoc.Read.Key, key)) > 0)
                         targetLoc = targetLoc.Read.Left;
                     else
                         targetLoc = targetLoc.Read.Right;
@@ -148,6 +145,7 @@ namespace Shielded
                 {
                     //Color = Color.Red, // the default anyway.
                     Parent = parent,
+                    Key = key,
                     Value = item
                 });
                 if (parent != null)
@@ -162,6 +160,8 @@ namespace Shielded
                 InsertProcedure(shN);
             });
         }
+
+        #region Wikipedia, insertion
 
         private Shielded<Node> Grandparent(Shielded<Node> n)
         {
@@ -263,22 +263,14 @@ namespace Shielded
             }
         }
 
-        public void Remove(T item)
-        {
-            var key = _keySelector(item);
-            Shield.InTransaction(() =>
-            {
-                var node = RangeInternal(key, key).FirstOrDefault(n => n.Read.Value == item);
-                if (node != null)
-                    RemoveInternal(node);
-                else
-                    throw new KeyNotFoundException();
-            });
-        }
+        #endregion
 
-        public T Remove(TKey key)
+        /// <summary>
+        /// Removes an item and returns it. Useful if you could have multiple items under the same key.
+        /// </summary>
+        public TValue RemoveAndReturn(TKey key)
         {
-            T retVal = null;
+            TValue retVal = null;
             Shield.InTransaction(() =>
             {
                 retVal = null;
@@ -307,10 +299,17 @@ namespace Shielded
                     follower = follower.Read.Left;
 
                 // loosing the node value right now!
-                node.Modify((ref Node n) => n.Value = follower.Read.Value);
+                node.Modify((ref Node n) =>
+                {
+                    var f = follower.Read;
+                    n.Key = f.Key;
+                    n.Value = f.Value;
+                });
             }
             DeleteOneChild(follower);
         }
+
+        #region Wikipedia, removal
 
         Shielded<Node> Sibling(Shielded<Node> n)
         {
@@ -443,6 +442,144 @@ namespace Shielded
                 }
             }
         }
+
+        #endregion
+
+        #region ICollection implementation
+
+        public void Add(KeyValuePair<TKey, TValue> item)
+        {
+            InsertInternal(item.Key, item.Value);
+        }
+
+        public void Clear()
+        {
+            // ridiculously simple :)
+            _head.Assign(null);
+        }
+
+        public bool Contains(KeyValuePair<TKey, TValue> item)
+        {
+            return RangeInternal(item.Key, item.Key).Any(n => n.Read.Value == item.Value);
+        }
+
+        public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
+        {
+            throw new System.NotImplementedException();
+        }
+
+        public bool Remove(KeyValuePair<TKey, TValue> item)
+        {
+            var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n => n.Read.Value == item.Value);
+            if (target == null)
+                return false;
+            RemoveInternal(target);
+            return true;
+        }
+
+        /// <summary>
+        /// Currently iterates over the whole tree to get the count! Do not use.
+        /// </summary>
+        public int Count
+        {
+            get
+            {
+                return ((IEnumerable<KeyValuePair<TKey, TValue>>)this).Count();
+            }
+        }
+
+        public bool IsReadOnly
+        {
+            get
+            {
+                return false;
+            }
+        }
+
+        #endregion
+
+        #region IDictionary implementation
+
+        public void Add(TKey key, TValue value)
+        {
+            InsertInternal(key, value);
+        }
+
+        public bool ContainsKey(TKey key)
+        {
+            return FindInternal(key) != null;
+        }
+
+        /// <summary>
+        /// Remove an item with the specified key. If you want to know what got removed, use
+        /// RemoveAndReturn.
+        /// </summary>
+        public bool Remove(TKey key)
+        {
+            return RemoveAndReturn(key) != null;
+        }
+
+        public bool TryGetValue(TKey key, out TValue value)
+        {
+            var n = FindInternal(key);
+            if (n == null)
+            {
+                value = null;
+                return false;
+            }
+            else
+            {
+                value = n.Read.Value;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the item with the specified key.
+        /// If there are many with the same key, acts on the first one it finds!
+        /// </summary>
+        public TValue this[TKey key]
+        {
+            get
+            {
+                var n = FindInternal(key);
+                if (n == null)
+                    throw new KeyNotFoundException();
+                return n.Read.Value;
+            }
+            set
+            {
+                // replaces the first occurrence...
+                var n = FindInternal(key);
+                if (n == null)
+                    throw new KeyNotFoundException();
+                if (n.Read.Value != value)
+                    n.Modify((ref Node nInner) => nInner.Value = value);
+            }
+        }
+
+        public ICollection<TKey> Keys
+        {
+            get
+            {
+                return ((IEnumerable<KeyValuePair<TKey, TValue>>)this)
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+            }
+        }
+
+        public ICollection<TValue> Values
+        {
+            get
+            {
+                return ((IEnumerable<KeyValuePair<TKey, TValue>>)this)
+                    .Select(kvp => kvp.Value)
+                    .ToList();
+            }
+        }
+
+        #endregion
+
     }
 }
 
