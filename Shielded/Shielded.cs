@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 namespace Shielded
 {
     /// <summary>
-    /// Makes your data thread safe, but only if it's a value type. If it's a reference
-    /// type, then only the reference itself is protected. The class should be threadsafe
-    /// in that case.
+    /// Makes your data thread safe. Works with structs, or simple value types,
+    /// and the language does the necessary cloning. If T is a class, then only
+    /// the reference itself is protected.
     /// </summary>
     public class Shielded<T> : IShielded
     {
