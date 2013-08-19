@@ -184,38 +184,62 @@ namespace Shielded
 
         private void RotateLeft(Shielded<Node> p)
         {
-            Shielded<Node> right = p.Read.Right;
-            p.Modify((ref Node pInner) => pInner.Right = right.Read.Left);
-            if (right.Read.Left != null)
-                right.Read.Left.Modify((ref Node n) => n.Parent = p);
-            right.Modify((ref Node r) => r.Left = p);
-            if (p.Read.Parent != null)
-                if (p.Read.Parent.Read.Left == p)
-                    p.Read.Parent.Modify((ref Node n) => n.Left = right);
-                else
-                    p.Read.Parent.Modify((ref Node n) => n.Right = right);
+            Shielded<Node> right = null;
+            Shielded<Node> parent = null;
+            p.Modify((ref Node pInner) =>
+            {
+                right = pInner.Right;
+                parent = pInner.Parent;
+                pInner.Right = right.Read.Left;
+                pInner.Parent = right;
+            });
+            right.Modify((ref Node r) =>
+            {
+                if (r.Left != null)
+                    r.Left.Modify((ref Node n) => n.Parent = p);
+                r.Left = p;
+                r.Parent = parent;
+            });
+            if (parent != null)
+                parent.Modify((ref Node n) =>
+                {
+                    if (n.Left == p)
+                        n.Left = right;
+                    else
+                        n.Right = right;
+                });
             else
                 _head.Assign(right);
-            right.Modify((ref Node r) => r.Parent = p.Read.Parent);
-            p.Modify((ref Node pInner) => pInner.Parent = right);
         }
 
         private void RotateRight(Shielded<Node> p)
         {
-            Shielded<Node> left = p.Read.Left;
-            p.Modify((ref Node pInner) => pInner.Left = left.Read.Right);
-            if (left.Read.Right != null)
-                left.Read.Right.Modify((ref Node n) => n.Parent = p);
-            left.Modify((ref Node l) => l.Right = p);
-            if (p.Read.Parent != null)
-                if (p.Read.Parent.Read.Left == p)
-                    p.Read.Parent.Modify((ref Node n) => n.Left = left);
-                else
-                    p.Read.Parent.Modify((ref Node n) => n.Right = left);
+            Shielded<Node> left = null;
+            Shielded<Node> parent = null;
+            p.Modify((ref Node pInner) =>
+            {
+                left = pInner.Left;
+                parent = pInner.Parent;
+                pInner.Left = left.Read.Right;
+                pInner.Parent = left;
+            });
+            left.Modify((ref Node l) =>
+            {
+                if (l.Right != null)
+                    l.Right.Modify((ref Node n) => n.Parent = p);
+                l.Right = p;
+                l.Parent = parent;
+            });
+            if (parent != null)
+                parent.Modify((ref Node n) =>
+                {
+                    if (n.Left == p)
+                        n.Left = left;
+                    else
+                        n.Right = left;
+                });
             else
                 _head.Assign(left);
-            left.Modify((ref Node l) => l.Parent = p.Read.Parent);
-            p.Modify((ref Node pInner) => pInner.Parent = left);
         }
 
         private void InsertProcedure(Shielded<Node> n)
@@ -313,10 +337,11 @@ namespace Shielded
 
         Shielded<Node> Sibling(Shielded<Node> n)
         {
-            if (n == n.Read.Parent.Read.Left)
-                return n.Read.Parent.Read.Right;
+            var parent = n.Read.Parent.Read;
+            if (n == parent.Left)
+                return parent.Right;
             else
-                return n.Read.Parent.Read.Left;
+                return parent.Left;
         }
 
         void ReplaceNode(Shielded<Node> target, Shielded<Node> source)
@@ -326,17 +351,21 @@ namespace Shielded
                 source.Modify((ref Node s) => s.Parent = targetParent);
             if (targetParent == null)
                 _head.Assign(source);
-            else if (targetParent.Read.Left == target)
-                targetParent.Modify((ref Node p) => p.Left = source);
             else
-                targetParent.Modify((ref Node p) => p.Right = source);
+                targetParent.Modify((ref Node p) =>
+                {
+                    if (p.Left == target)
+                        p.Left = source;
+                    else
+                        p.Right = source;
+                });
         }
 
         void DeleteOneChild(Shielded<Node> node)
         {
             // node has at most one child!
             Shielded<Node> child = node.Read.Right == null ? node.Read.Left : node.Read.Right;
- 
+
             ReplaceNode(node, child);
             if (node.Read.Color == Color.Black)
             {
