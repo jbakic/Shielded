@@ -109,6 +109,11 @@ namespace Shielded
             });
         }
 
+        /// <summary>
+        /// The action is performed just before commit, and reads the latest
+        /// data. If it conflicts, only it is retried. If it succeeds,
+        /// we (try to) commit with the same write stamp along with it.
+        /// </summary>
         public void Commute(Action perform)
         {
             Shield.EnlistCommute(perform, this);

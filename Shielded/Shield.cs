@@ -105,6 +105,14 @@ namespace Shielded
         [ThreadStatic]
         private static bool _blockCommute;
 
+        /// <summary>
+        /// The action is performed just before commit, and reads the latest
+        /// data. If it conflicts, only it is retried. If it succeeds,
+        /// we (try to) commit with the same write stamp along with it.
+        /// The affecting param determines the IShieldeds that this transaction must
+        /// not access, otherwise this commute must degenerate - it gets executed
+        /// now, or at the moment when one of these IShieldeds enlists.
+        /// </summary>
         internal static void EnlistCommute(Action perform, params ICommutableShielded[] affecting)
         {
             if (_blockCommute || _localItems.Enlisted.Overlaps(affecting))
