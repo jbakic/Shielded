@@ -88,7 +88,7 @@ namespace Shielded
             // reading the current stamp throws ...
             _localItems.Enlisted.Add(item);
             // does a commute have to degenerate?
-            if (_localItems.Commutes != null)
+            if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
             {
                 foreach (var comm in _localItems.Commutes.Where(c => c.Affecting.Contains(item)).ToArray())
                 {
@@ -279,10 +279,11 @@ namespace Shielded
 
         private static object _stampLock = new object();
 
-        static bool CommitCheck(out long? writeStamp, TransItems items)
+        static bool CommitCheck(out long? writeStamp, out ICollection<IShielded> toCommit)
         {
-            var enlisted = items.Enlisted.ToArray();
-            IShielded[] commEnlisted = null;
+            var items = _localItems;
+            List<IShielded> enlisted = items.Enlisted.ToList();
+            List<IShielded> commEnlisted = null;
             long oldStamp = _currentTransactionStartStamp.Value;
             bool commit = true;
             try
@@ -303,7 +304,7 @@ namespace Shielded
                         });
                         if (commutedItems.Enlisted.Overlaps(enlisted))
                             throw new ApplicationException("Incorrect commute affecting list, conflict with transaction.");
-                        commEnlisted = commutedItems.Enlisted.ToArray();
+                        commEnlisted = commutedItems.Enlisted.ToList();
                     }
 
                     int rolledBack = -1;
@@ -313,7 +314,7 @@ namespace Shielded
 
                         if (commEnlisted != null)
                         {
-                            for (int i = 0; i < commEnlisted.Length; i++)
+                            for (int i = 0; i < commEnlisted.Count; i++)
                                 if (!commEnlisted[i].CanCommit(writeStamp.Value))
                                 {
                                     commit = false;
@@ -328,7 +329,7 @@ namespace Shielded
                         {
                             _currentTransactionStartStamp = oldStamp;
                             brokeInCommutes = false;
-                            for (int i = 0; i < enlisted.Length; i++)
+                            for (int i = 0; i < enlisted.Count; i++)
                                 if (!enlisted[i].CanCommit(writeStamp.Value))
                                 {
                                     commit = false;
@@ -336,7 +337,7 @@ namespace Shielded
                                     for (int j = i - 1; j >= 0; j--)
                                         enlisted[j].Rollback(writeStamp.Value);
                                     if (commEnlisted != null)
-                                        for (int j = 0; j < commEnlisted.Length; j++)
+                                        for (int j = 0; j < commEnlisted.Count; j++)
                                             commEnlisted[j].Rollback(writeStamp.Value);
                                     break;
                                 }
@@ -348,14 +349,17 @@ namespace Shielded
                     if (!commit)
                     {
                         if (brokeInCommutes)
-                            for (int i = rolledBack + 1; i < commEnlisted.Length; i++)
+                            for (int i = rolledBack + 1; i < commEnlisted.Count; i++)
                                 commEnlisted[i].Rollback(null);
                         else
-                            for (int i = rolledBack + 1; i < enlisted.Length; i++)
+                            for (int i = rolledBack + 1; i < enlisted.Count; i++)
                                 enlisted[i].Rollback(null);
                     }
                 } while (brokeInCommutes);
 
+                if (commEnlisted != null)
+                    enlisted.InsertRange(0, commEnlisted);
+                toCommit = enlisted;
                 return commit;
             }
             finally
@@ -367,34 +371,41 @@ namespace Shielded
 
         private static bool DoCommit()
         {
-            // if there are items, they must all commit.
             var items = _localItems;
-
             bool hasChanges = items.Enlisted.Any(s => s.HasChanges) ||
-                (items.Commutes != null && items.Commutes.Any());
-            long? writeStamp;
+                (items.Commutes != null && items.Commutes.Count > 0);
 
-            bool commit = hasChanges ? CommitCheck(out writeStamp, items) : true;
-
-            if (commit)
+            long? writeStamp = null;
+            ICollection<IShielded> enlisted = null;
+            bool commit = true;
+            if (!hasChanges)
             {
-                var enlisted = items.Enlisted;
-                // do the commit. out of global lock! and, non side-effects first.
-                List<IShielded> copies = hasChanges ? new List<IShielded>() : null;
-                IShielded[] trigger = hasChanges ? enlisted.Where(s => s.HasChanges).ToArray() : null;
-                foreach (var item in enlisted)
-                    if (item.Commit(writeStamp) && copies != null)
-                        copies.Add(item);
-                if (copies != null)
-                    RegisterCopies(writeStamp.Value, copies);
+                foreach (var item in items.Enlisted)
+                    item.Commit(null);
 
                 _transactions.Remove(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;
                 _localItems = null;
 
-                // if committing, trigger change subscriptions.
-                if (trigger != null)
-                    TriggerSubscriptions(trigger);
+                if (items.Fx != null)
+                    foreach (var fx in items.Fx)
+                        // caller beware.
+                        fx.Commit();
+            }
+            else if (CommitCheck(out writeStamp, out enlisted))
+            {
+                var trigger = enlisted.Where(s => s.HasChanges).ToArray();
+                var copies = new List<IShielded>();
+                foreach (var item in enlisted)
+                    if (item.Commit(writeStamp))
+                        copies.Add(item);
+                RegisterCopies(writeStamp.Value, copies);
+
+                _transactions.Remove(_currentTransactionStartStamp.Value);
+                _currentTransactionStartStamp = null;
+                _localItems = null;
+
+                TriggerSubscriptions(trigger);
 
                 if (items.Fx != null)
                     foreach (var fx in items.Fx)
@@ -403,6 +414,8 @@ namespace Shielded
             }
             else
             {
+                commit = false;
+
                 _transactions.Remove(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;
                 _localItems = null;
