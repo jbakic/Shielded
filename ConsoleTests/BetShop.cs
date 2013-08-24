@@ -25,7 +25,7 @@ namespace ConsoleTests
 
     public struct Ticket
     {
-        public Guid Id;
+        public int Id;
         public decimal PayInAmount;
         public decimal WinAmount;
         // readonly
@@ -51,8 +51,10 @@ namespace ConsoleTests
 
         public readonly ShieldedDict<int, Shielded<Event>> Events;
 
-        public readonly ShieldedTree<Guid, Shielded<Ticket>> Tickets =
-            new ShieldedTree<Guid, Shielded<Ticket>>();
+        private int _ticketIdGenerator = 0;
+        public readonly ShieldedSeq<int> TicketIdSeq = new ShieldedSeq<int>();
+        public readonly ShieldedDict<int, Shielded<Ticket>> Tickets =
+            new ShieldedDict<int, Shielded<Ticket>>();
         private ShieldedDict<string, decimal> _sameTicketWins =
             new ShieldedDict<string, decimal>();
 
@@ -77,9 +79,9 @@ namespace ConsoleTests
             return _sameTicketWins[hash] + newTicket.Read.WinAmount <= SameTicketWinLimit;
         }
 
-        public Guid? BuyTicket(decimal payIn, params Shielded<BetOffer>[] bets)
+        public int? BuyTicket(decimal payIn, params Shielded<BetOffer>[] bets)
         {
-            var newId = Guid.NewGuid();
+            var newId = Interlocked.Increment(ref _ticketIdGenerator);
             bool bought = false;
             var newTicket = new Shielded<Ticket>(new Ticket()
             {
@@ -105,15 +107,15 @@ namespace ConsoleTests
                     return;
 
                 bought = true;
-                Tickets.Add(newId, newTicket);
+                Tickets[newId] = newTicket;
+                TicketIdSeq.Append(newId);
                 _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.Read.WinAmount;
 
-                Shield.SideEffect(() => Shield.InTransaction(() =>
-                {
-                    _ticketCount.Modify((ref int c) => c++);
-                }));
+//                Shield.SideEffect(() => Shield.InTransaction(() =>
+                _ticketCount.Commute(() =>
+                    _ticketCount.Modify((ref int c) => c++));
             });
-            return bought ? (Guid?)newId : null;
+            return bought ? (int?)newId : null;
         }
 
         /// <summary>
@@ -181,13 +183,14 @@ namespace ConsoleTests
             {
                 Dictionary<string, decimal> checkTable = new Dictionary<string, decimal>();
                 count = 0;
-                foreach (var t in Tickets)
+                foreach (var id in TicketIdSeq)
                 {
-                    var hash = GetOfferHash(t.Value);
+                    var t = Tickets[id];
+                    var hash = GetOfferHash(t);
                     if (!checkTable.ContainsKey(hash))
-                        checkTable[hash] = t.Value.Read.WinAmount;
+                        checkTable[hash] = t.Read.WinAmount;
                     else
-                        checkTable[hash] = checkTable[hash] + t.Value.Read.WinAmount;
+                        checkTable[hash] = checkTable[hash] + t.Read.WinAmount;
                     if (checkTable[hash] > SameTicketWinLimit)
                     {
                         result = false;

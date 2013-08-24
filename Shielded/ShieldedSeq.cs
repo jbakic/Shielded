@@ -74,22 +74,29 @@ namespace Shielded
             return item.Value;
         }
 
+        /// <summary>
+        /// Appends the specified val, commutatively - if you don't / haven't read the
+        /// seq in this transaction, this will not cause conflicts.
+        /// </summary>
         public void Append(T val)
         {
             var newItem = new ItemKeeper(null)
             {
                 Value = val
             };
-            if (_head.Read == null)
+            Shield.EnlistCommute(() =>
             {
-                _head.Assign(newItem);
-                _tail.Assign(newItem);
-            }
-            else
-            {
-                _tail.Read.Next.Assign(newItem);
-                _tail.Assign(newItem);
-            }
+                if (_head.Read == null)
+                {
+                    _head.Assign(newItem);
+                    _tail.Assign(newItem);
+                }
+                else
+                {
+                    _tail.Read.Next.Assign(newItem);
+                    _tail.Assign(newItem);
+                }
+            }, _head, _tail); // the commute degenerates if you read from the seq..
         }
 
         private Shielded<ItemKeeper> RefToIndex(int index)

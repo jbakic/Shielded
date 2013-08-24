@@ -30,10 +30,17 @@ namespace Shielded
             }
         }
 
+        private class Commute
+        {
+            public Action Perform;
+            public ICommutableShielded[] Affecting;
+        }
+
         private class TransItems
         {
             public HashSet<IShielded> Enlisted = new HashSet<IShielded>();
             public List<SideEffect> Fx;
+            public List<Commute> Commutes;
 
             public void UnionWith(TransItems other)
             {
@@ -43,6 +50,11 @@ namespace Shielded
                         Fx = new List<SideEffect>(other.Fx);
                     else
                         Fx.AddRange(other.Fx);
+                if (other.Commutes != null)
+                    if (Commutes == null)
+                        Commutes = new List<Commute>(other.Commutes);
+                    else
+                        Commutes.AddRange(other.Commutes);
             }
 
             private TransItems() {}
@@ -61,6 +73,8 @@ namespace Shielded
                 items.Enlisted.Clear();
                 if (items.Fx != null)
                     items.Fx.Clear();
+                if (items.Commutes != null)
+                    items.Commutes.Clear();
                 _itemPool.Add(items);
             }
         }
@@ -73,6 +87,34 @@ namespace Shielded
         {
             // reading the current stamp throws ...
             _localItems.Enlisted.Add(item);
+            // does a commute have to degenerate?
+            if (_localItems.Commutes != null)
+            {
+                foreach (var comm in _localItems.Commutes.Where(c => c.Affecting.Contains(item)).ToArray())
+                {
+                    _localItems.Commutes.Remove(comm);
+                    comm.Perform();
+                }
+            }
+        }
+
+        [ThreadStatic]
+        private static bool _blockCommute;
+
+        internal static void EnlistCommute(Action perform, params ICommutableShielded[] affecting)
+        {
+            if (_blockCommute || _localItems.Enlisted.Overlaps(affecting))
+                perform(); // immediate degeneration. should be some warning.
+            else
+            {
+                if (_localItems.Commutes == null)
+                    _localItems.Commutes = new List<Commute>();
+                _localItems.Commutes.Add(new Commute()
+                {
+                    Perform = perform,
+                    Affecting = affecting
+                });
+            }
         }
 
         /// <summary>
@@ -155,6 +197,30 @@ namespace Shielded
                    new NoRepeatTransException("Requested rollback without retry."));
         }
 
+        /// <summary>
+        /// Runs the action, and returns a set of IShieldeds that the action enlisted.
+        /// It will make sure to restore original enlisted items, merged with the ones
+        /// that the action enlisted, before returning.
+        /// </summary>
+        private static TransItems IsolatedRun(Action act)
+        {
+            TransItems oldItems = _localItems;
+            var isolated = TransItems.BagOrNew();
+            _localItems = isolated;
+            _blockCommute = true;
+            try
+            {
+                act();
+            }
+            finally
+            {
+                oldItems.UnionWith(isolated);
+                _localItems = oldItems;
+                _blockCommute = false;
+            }
+            return isolated;
+        }
+
         #region Conditional impl
 
         private struct CommitSubscription
@@ -173,28 +239,6 @@ namespace Shielded
                 Test = test,
                 Trans = trans
             }));
-        }
-
-        /// <summary>
-        /// Runs the action, and returns a set of IShieldeds that the action enlisted.
-        /// It will make sure to restore original enlisted items, merged with the ones
-        /// that the action enlisted, before returning.
-        /// </summary>
-        private static TransItems IsolatedRun(Action act)
-        {
-            TransItems oldItems = _localItems;
-            var isolated = TransItems.BagOrNew();
-            _localItems = isolated;
-            try
-            {
-                act();
-            }
-            finally
-            {
-                oldItems.UnionWith(isolated);
-                _localItems = oldItems;
-            }
-            return isolated;
         }
 
         private static void TriggerSubscriptions(IShielded[] changes)
@@ -235,47 +279,112 @@ namespace Shielded
 
         private static object _stampLock = new object();
 
+        static bool CommitCheck(out long? writeStamp, TransItems items)
+        {
+            var enlisted = items.Enlisted.ToArray();
+            IShielded[] commEnlisted = null;
+            long oldStamp = _currentTransactionStartStamp.Value;
+            bool commit = true;
+            try
+            {
+                bool brokeInCommutes = true;
+                do
+                {
+                    commit = true;
+                    // first perform the commutes, if any, in a "sub-transaction". each commute may
+                    // involve waiting for a spinlock to be released, this is why out of lock is better.
+                    if (items.Commutes != null && items.Commutes.Any())
+                    {
+                        _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
+                        var commutedItems = IsolatedRun(() =>
+                        {
+                            foreach (var comm in items.Commutes)
+                                comm.Perform();
+                        });
+                        if (commutedItems.Enlisted.Overlaps(enlisted))
+                            throw new ApplicationException("Incorrect commute affecting list, conflict with transaction.");
+                        commEnlisted = commutedItems.Enlisted.ToArray();
+                    }
+
+                    int rolledBack = -1;
+                    lock (_stampLock)
+                    {
+                        writeStamp = Interlocked.Read(ref _lastStamp) + 1;
+
+                        if (commEnlisted != null)
+                        {
+                            for (int i = 0; i < commEnlisted.Length; i++)
+                                if (!commEnlisted[i].CanCommit(writeStamp.Value))
+                                {
+                                    commit = false;
+                                    rolledBack = i - 1;
+                                    for (int j = rolledBack; j >= 0; j--)
+                                        commEnlisted[j].Rollback(writeStamp.Value);
+                                    break;
+                                }
+                        }
+
+                        if (commit)
+                        {
+                            _currentTransactionStartStamp = oldStamp;
+                            brokeInCommutes = false;
+                            for (int i = 0; i < enlisted.Length; i++)
+                                if (!enlisted[i].CanCommit(writeStamp.Value))
+                                {
+                                    commit = false;
+                                    rolledBack = i - 1;
+                                    for (int j = i - 1; j >= 0; j--)
+                                        enlisted[j].Rollback(writeStamp.Value);
+                                    if (commEnlisted != null)
+                                        for (int j = 0; j < commEnlisted.Length; j++)
+                                            commEnlisted[j].Rollback(writeStamp.Value);
+                                    break;
+                                }
+
+                            if (commit)
+                                Interlocked.Increment(ref _lastStamp);
+                        }
+                    }
+                    if (!commit)
+                    {
+                        if (brokeInCommutes)
+                            for (int i = rolledBack + 1; i < commEnlisted.Length; i++)
+                                commEnlisted[i].Rollback(null);
+                        else
+                            for (int i = rolledBack + 1; i < enlisted.Length; i++)
+                                enlisted[i].Rollback(null);
+                    }
+                } while (brokeInCommutes);
+
+                return commit;
+            }
+            finally
+            {
+                if (_currentTransactionStartStamp != oldStamp)
+                    _currentTransactionStartStamp = oldStamp;
+            }
+        }
+
         private static bool DoCommit()
         {
             // if there are items, they must all commit.
             var items = _localItems;
 
-            var enlisted = items.Enlisted.ToArray();
-            bool hasChanges = enlisted.Any(s => s.HasChanges);
-            long? writeStamp = null;
-            bool commit = true;
+            bool hasChanges = items.Enlisted.Any(s => s.HasChanges) ||
+                (items.Commutes != null && items.Commutes.Any());
+            long? writeStamp;
 
-            if (hasChanges)
-            {
-                int rolledBack = 0;
-                lock (_stampLock)
-                {
-                    writeStamp = Interlocked.Read(ref _lastStamp) + 1;
-                    for (int i = 0; i < enlisted.Length; i++)
-                        if (!enlisted[i].CanCommit(writeStamp.Value))
-                        {
-                            commit = false;
-                            rolledBack = i - 1;
-                            for (int j = i - 1; j >= 0; j--)
-                                enlisted[j].Rollback(writeStamp.Value);
-                            break;
-                        }
-                    if (commit)
-                        Interlocked.Increment(ref _lastStamp);
-                }
-                if (!commit)
-                    for (int i = rolledBack + 1; i < enlisted.Length; i++)
-                        enlisted[i].Rollback(null);
-            }
+            bool commit = hasChanges ? CommitCheck(out writeStamp, items) : true;
 
             if (commit)
             {
+                var enlisted = items.Enlisted;
                 // do the commit. out of global lock! and, non side-effects first.
                 List<IShielded> copies = hasChanges ? new List<IShielded>() : null;
                 IShielded[] trigger = hasChanges ? enlisted.Where(s => s.HasChanges).ToArray() : null;
-                for (int i = 0; i < enlisted.Length; i++)
-                    if (enlisted[i].Commit(writeStamp) && copies != null)
-                        copies.Add(enlisted[i]);
+                foreach (var item in enlisted)
+                    if (item.Commit(writeStamp) && copies != null)
+                        copies.Add(item);
                 if (copies != null)
                     RegisterCopies(writeStamp.Value, copies);
 

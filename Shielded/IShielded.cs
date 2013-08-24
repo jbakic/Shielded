@@ -15,5 +15,7 @@ namespace Shielded
         void Rollback(long? writeStamp = null);
         void TrimCopies(long smallestOpenTransactionId);
     }
+
+    internal interface ICommutableShielded : IShielded {}
 }
 

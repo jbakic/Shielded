@@ -581,8 +581,8 @@ namespace Shielded
                 // replaces the first occurrence...
                 var n = FindInternal(key);
                 if (n == null)
-                    throw new KeyNotFoundException();
-                if (n.Read.Value != value)
+                    Add(key, value);
+                else if (n.Read.Value != value)
                     n.Modify((ref Node nInner) => nInner.Value = value);
             }
         }

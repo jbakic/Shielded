@@ -9,7 +9,7 @@ namespace Shielded
     /// and the language does the necessary cloning. If T is a class, then only
     /// the reference itself is protected.
     /// </summary>
-    public class Shielded<T> : IShielded
+    public class Shielded<T> : ICommutableShielded
     {
         private class ValueKeeper
         {
@@ -47,8 +47,6 @@ namespace Shielded
 
         private ValueKeeper CurrentTransactionOldValue()
         {
-            CheckLockAndEnlist();
-
             var point = _current;
             while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
                 point = point.Older;
@@ -61,12 +59,11 @@ namespace Shielded
         {
             if (_current.Version > Shield.CurrentTransactionStartStamp)
                 throw new TransException("Write collision.");
+            CheckLockAndEnlist();
             if (!_locals.HasValue)
             {
                 var v = new ValueKeeper();
-                if (!prepareOld)
-                    CheckLockAndEnlist();
-                else
+                if (prepareOld)
                     v.Value = CurrentTransactionOldValue().Value;
                 _locals.Value = v;
             }
@@ -83,6 +80,7 @@ namespace Shielded
                 if (!Shield.IsInTransaction)
                     return _current.Value;
 
+                CheckLockAndEnlist();
                 if (!_locals.HasValue)
                     return CurrentTransactionOldValue().Value;
                 else if (_current.Version > Shield.CurrentTransactionStartStamp)
@@ -99,10 +97,21 @@ namespace Shielded
             d(ref _locals.Value.Value);
         }
 
+        /// <summary>
+        /// Commutative, which means it won't conflict unless you read this shielded.
+        /// </summary>
         public void Assign(T value)
         {
-            PrepareForWriting(false);
-            _locals.Value.Value = value;
+            Commute(() =>
+            {
+                PrepareForWriting(false);
+                _locals.Value.Value = value;
+            });
+        }
+
+        public void Commute(Action perform)
+        {
+            Shield.EnlistCommute(perform, this);
         }
 
         public static implicit operator T(Shielded<T> obj)

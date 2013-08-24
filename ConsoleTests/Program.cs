@@ -356,23 +356,23 @@ namespace ConsoleTests
             int transactionCount = 0;
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<int> countComplete = new Shielded<int>(0);
-            //Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
-
-            //Shield.Conditional(() => countComplete >= lastReport + reportEvery, () =>
-            //{
-            //    DateTime newNow = DateTime.UtcNow;
-            //    int speed = (countComplete - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-            //    lastTime.Assign(newNow);
-            //    lastReport.Modify((ref int n) => n += reportEvery);
-            //    int count = countComplete.Read;
-            //    Shield.SideEffect(() =>
-            //    {
-            //        Console.Write("\n{0} at {1} item/s", count, speed);
-            //    }
-            //    );
-            //    return true;
-            //}
-            //);
+//            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
+//
+//            Shield.Conditional(() => countComplete >= lastReport + reportEvery, () =>
+//            {
+//                DateTime newNow = DateTime.UtcNow;
+//                int speed = (countComplete - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
+//                lastTime.Assign(newNow);
+//                lastReport.Modify((ref int n) => n += reportEvery);
+//                int count = countComplete.Read;
+//                Shield.SideEffect(() =>
+//                {
+//                    Console.Write("\n{0} at {1} item/s", count, speed);
+//                }
+//                );
+//                return true;
+//            }
+//            );
 
             if (true)
             {
@@ -387,8 +387,8 @@ namespace ConsoleTests
                             tree.Add(item1.Id, item1);
                         }
                         );
-                        //Shield.InTransaction(
-                        //    () => countComplete.Modify((ref int c) => c++));
+//                        Shield.InTransaction(
+//                            () => countComplete.Modify((ref int c) => c++));
                     }
                     );
                 }
@@ -437,8 +437,8 @@ namespace ConsoleTests
                             dict[item1.Id] = item1;
                         }
                         );
-                        //Shield.InTransaction(
-                        //() => countComplete.Modify((ref int c) => c++));
+//                        Shield.InTransaction(
+//                        () => countComplete.Modify((ref int c) => c++));
                     }
                     );
                 }
@@ -543,6 +543,29 @@ namespace ConsoleTests
             });
         }
 
+        public static void SimpleCommuteTest()
+        {
+            var a = new Shielded<int>();
+
+            Shield.InTransaction(() => a.Commute(() => a.Modify((ref int n) => n++)));
+            Console.WriteLine(a);
+
+            Shield.InTransaction(() =>
+            {
+                Console.WriteLine(a);
+                a.Commute(() => a.Modify((ref int n) => n++));
+                Console.WriteLine(a);
+            });
+            Console.WriteLine(a);
+
+            Shield.InTransaction(() =>
+            {
+                a.Commute(() => a.Modify((ref int n) => n++));
+                Console.WriteLine(a);
+            });
+            Console.WriteLine(a);
+        }
+
         public static void Main(string[] args)
         {
             //TimeTests();
@@ -560,6 +583,8 @@ namespace ConsoleTests
             //SkewTest();
 
             //SimpleTreeTest();
+
+            //SimpleCommuteTest();
         }
     }
 }

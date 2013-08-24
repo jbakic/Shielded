@@ -170,6 +170,44 @@ namespace ShieldedTests
             // committed, so this is not a fixed number.
             Assert.Greater(triggerCommits, 0);
         }
+
+        [Test]
+        public void CommuteTest()
+        {
+            var a = new Shielded<int>();
+
+            Shield.InTransaction(() => a.Commute(() => a.Modify((ref int n) => n++)));
+            Assert.AreEqual(1, a);
+
+            Shield.InTransaction(() =>
+            {
+                Assert.AreEqual(1, a);
+                a.Commute(() => a.Modify((ref int n) => n++));
+                Assert.AreEqual(2, a);
+            });
+            Assert.AreEqual(2, a);
+
+            Shield.InTransaction(() =>
+            {
+                a.Commute(() => a.Modify((ref int n) => n++));
+                Assert.AreEqual(3, a);
+            });
+            Assert.AreEqual(3, a);
+
+            int transactionCount = 0;
+            Task.WaitAll(
+                Enumerable.Repeat(1, 100).Select(i => Task.Factory.StartNew(() =>
+                {
+                    Shield.InTransaction(() =>
+                    {
+                        Interlocked.Increment(ref transactionCount);
+                        a.Commute(() => a.Modify((ref int n) => n++));
+                    });
+                }, TaskCreationOptions.LongRunning)).ToArray());
+            Assert.AreEqual(103, a);
+            // commutes never conflict!
+            Assert.AreEqual(100, transactionCount);
+        }
     }
 }
 
