@@ -102,11 +102,10 @@ namespace Shielded
         /// </summary>
         public void Assign(T value)
         {
-            Commute(() =>
-            {
+            Shield.EnlistCommute(() => {
                 PrepareForWriting(false);
                 _locals.Value.Value = value;
-            });
+            }, this);
         }
 
         /// <summary>
@@ -115,9 +114,9 @@ namespace Shielded
         /// we (try to) commit with the same write stamp along with it.
         /// But, if you access this Shielded, it gets executed directly in this transaction.
         /// </summary>
-        public void Commute(Action perform)
+        public void Commute(ModificationDelegate perform)
         {
-            Shield.EnlistCommute(perform, this);
+            Shield.EnlistCommute(() => Modify(perform), this);
         }
 
         public static implicit operator T(Shielded<T> obj)

@@ -115,6 +115,8 @@ namespace Shielded
         /// </summary>
         internal static void EnlistCommute(Action perform, params ICommutableShielded[] affecting)
         {
+            if (affecting == null || affecting.Length == 0)
+                throw new ArgumentException();
             if (_blockCommute || _localItems.Enlisted.Overlaps(affecting))
                 perform(); // immediate degeneration. should be some warning.
             else

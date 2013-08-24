@@ -547,20 +547,20 @@ namespace ConsoleTests
         {
             var a = new Shielded<int>();
 
-            Shield.InTransaction(() => a.Commute(() => a.Modify((ref int n) => n++)));
+            Shield.InTransaction(() => a.Commute((ref int n) => n++));
             Console.WriteLine(a);
 
             Shield.InTransaction(() =>
             {
                 Console.WriteLine(a);
-                a.Commute(() => a.Modify((ref int n) => n++));
+                a.Commute((ref int n) => n++);
                 Console.WriteLine(a);
             });
             Console.WriteLine(a);
 
             Shield.InTransaction(() =>
             {
-                a.Commute(() => a.Modify((ref int n) => n++));
+                a.Commute((ref int n) => n++);
                 Console.WriteLine(a);
             });
             Console.WriteLine(a);

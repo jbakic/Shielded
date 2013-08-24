@@ -112,8 +112,7 @@ namespace ConsoleTests
                 _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.Read.WinAmount;
 
 //                Shield.SideEffect(() => Shield.InTransaction(() =>
-                _ticketCount.Commute(() =>
-                    _ticketCount.Modify((ref int c) => c++));
+                _ticketCount.Commute((ref int c) => c++);
             });
             return bought ? (int?)newId : null;
         }

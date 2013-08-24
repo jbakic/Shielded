@@ -176,20 +176,20 @@ namespace ShieldedTests
         {
             var a = new Shielded<int>();
 
-            Shield.InTransaction(() => a.Commute(() => a.Modify((ref int n) => n++)));
+            Shield.InTransaction(() => a.Commute((ref int n) => n++));
             Assert.AreEqual(1, a);
 
             Shield.InTransaction(() =>
             {
                 Assert.AreEqual(1, a);
-                a.Commute(() => a.Modify((ref int n) => n++));
+                a.Commute((ref int n) => n++);
                 Assert.AreEqual(2, a);
             });
             Assert.AreEqual(2, a);
 
             Shield.InTransaction(() =>
             {
-                a.Commute(() => a.Modify((ref int n) => n++));
+                a.Commute((ref int n) => n++);
                 Assert.AreEqual(3, a);
             });
             Assert.AreEqual(3, a);
@@ -201,7 +201,7 @@ namespace ShieldedTests
                     Shield.InTransaction(() =>
                     {
                         Interlocked.Increment(ref transactionCount);
-                        a.Commute(() => a.Modify((ref int n) => n++));
+                        a.Commute((ref int n) => n++);
                     });
                 }, TaskCreationOptions.LongRunning)).ToArray());
             Assert.AreEqual(103, a);
