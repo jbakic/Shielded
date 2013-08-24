@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace Shielded
 {
-    internal class SideEffect : IShielded
+    internal class SideEffect
     {
         private Action _fx, _rollbackFx;
 
@@ -13,32 +13,15 @@ namespace Shielded
             _rollbackFx = rollbackFx;
         }
 
-
-        public bool CanCommit(long writeStamp)
-        {
-            return true;
-        }
-
-        public bool Commit(long? writeStamp)
+        public bool Commit()
         {
             if (_fx != null) _fx();
             return true;
         }
 
-        public void Rollback(long? writeStamp)
+        public void Rollback()
         {
             if (_rollbackFx != null) _rollbackFx();
-        }
-
-        public void TrimCopies(long smallestOpenTransactionId)
-        { }
-
-        public bool HasChanges
-        {
-            get
-            {
-                return true;
-            }
         }
     }
 }

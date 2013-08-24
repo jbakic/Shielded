@@ -290,7 +290,7 @@ namespace Shielded
                 if (items.Fx != null)
                     foreach (var fx in items.Fx)
                         // caller beware.
-                        fx.Commit(writeStamp);
+                        fx.Commit();
             }
             else
             {
@@ -300,7 +300,7 @@ namespace Shielded
 
                 if (items.Fx != null)
                     foreach (var fx in items.Fx)
-                        fx.Rollback(writeStamp);
+                        fx.Rollback();
             }
 
             TransItems.Bag(items);
@@ -319,7 +319,7 @@ namespace Shielded
 
             if (items.Fx != null)
                 foreach (var fx in items.Fx)
-                    fx.Rollback(null);
+                    fx.Rollback();
 
             TransItems.Bag(items);
             TrimCopies();
