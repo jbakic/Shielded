@@ -90,10 +90,14 @@ namespace Shielded
             // does a commute have to degenerate?
             if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
             {
-                foreach (var comm in _localItems.Commutes.Where(c => c.Affecting.Contains(item)).ToArray())
+                var commutes = _localItems.Commutes.Where(c => c.Affecting.Contains(item)).ToArray();
+                if (commutes.Length > 0)
                 {
-                    _localItems.Commutes.Remove(comm);
-                    comm.Perform();
+                    // first remove all, because they will most likely cause enlists and trigger
+                    // each other if not removed.
+                    _localItems.Commutes.RemoveAll(c => c.Affecting.Contains(item));
+                    foreach (var comm in commutes)
+                        comm.Perform();
                 }
             }
         }
