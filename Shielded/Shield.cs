@@ -340,13 +340,11 @@ namespace Shielded
         private static int _trimFlag = 0;
         private static void TrimCopies()
         {
-            // must read value before checking Min() below
-            var lastStamp = Interlocked.Read(ref _lastStamp);
             if (Interlocked.CompareExchange(ref _trimFlag, 1, 0) != 0)
                 return;
             try
             {
-                var minTransactionNo = _transactions.Min() ?? lastStamp;
+                var minTransactionNo = _transactions.Min() ?? Interlocked.Read(ref _lastStamp);
 
                 Tuple<long, List<IShielded>> curr;
                 HashSet<IShielded> toTrim = new HashSet<IShielded>();
