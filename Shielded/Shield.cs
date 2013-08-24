@@ -45,16 +45,16 @@ namespace Shielded
             public void UnionWith(TransItems other)
             {
                 Enlisted.UnionWith(other.Enlisted);
-                if (other.Fx != null)
+                if (other.Fx != null && other.Fx.Count > 0)
                     if (Fx == null)
                         Fx = new List<SideEffect>(other.Fx);
                     else
                         Fx.AddRange(other.Fx);
-                if (other.Commutes != null)
-                    if (Commutes == null)
-                        Commutes = new List<Commute>(other.Commutes);
-                    else
-                        Commutes.AddRange(other.Commutes);
+//                if (other.Commutes != null && other.Commutes.Count > 0)
+//                    if (Commutes == null)
+//                        Commutes = new List<Commute>(other.Commutes);
+//                    else
+//                        Commutes.AddRange(other.Commutes);
             }
 
             private TransItems() {}
