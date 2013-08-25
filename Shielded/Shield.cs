@@ -480,7 +480,8 @@ namespace Shielded
                 return;
             try
             {
-                var minTransactionNo = _transactions.Min() ?? Interlocked.Read(ref _lastStamp);
+                var lastStamp = Interlocked.Read(ref _lastStamp);
+                var minTransactionNo = _transactions.Min() ?? lastStamp;
 
                 Tuple<long, List<IShielded>> curr;
                 HashSet<IShielded> toTrim = new HashSet<IShielded>();
