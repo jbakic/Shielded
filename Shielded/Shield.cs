@@ -161,6 +161,13 @@ namespace Shielded
             _localItems.Fx.Add(new SideEffect(fx, rollbackFx));
         }
 
+        public static T InTransaction<T>(Func<T> act)
+        {
+            T retVal = default(T);
+            Shield.InTransaction(() => retVal = act());
+            return retVal;
+        }
+
         public static void InTransaction(Action act)
         {
             if (_currentTransactionStartStamp.HasValue)

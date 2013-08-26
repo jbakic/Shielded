@@ -39,17 +39,19 @@ namespace Shielded
 
         private Shielded<Node> FindInternal(TKey key)
         {
-            var curr = _head.Read;
-            int comparison;
-            while (curr != null &&
-                   (comparison = _comparer.Compare(curr.Read.Key, key)) != 0)
-            {
-                if (comparison > 0)
-                    curr = curr.Read.Left;
-                else
-                    curr = curr.Read.Right;
-            }
-            return curr;
+            return Shield.InTransaction(() => {
+                var curr = _head.Read;
+                int comparison;
+                while (curr != null &&
+                       (comparison = _comparer.Compare(curr.Read.Key, key)) != 0)
+                {
+                    if (comparison > 0)
+                        curr = curr.Read.Left;
+                    else
+                        curr = curr.Read.Right;
+                }
+                return curr;
+            });
         }
 
         IEnumerator IEnumerable.GetEnumerator()
@@ -294,20 +296,17 @@ namespace Shielded
         /// </summary>
         public TValue RemoveAndReturn(TKey key)
         {
-            TValue retVal = null;
-            Shield.InTransaction(() =>
-            {
-                retVal = null;
+            return Shield.InTransaction(() => {
                 var node = RangeInternal(key, key).FirstOrDefault();
                 if (node != null)
                 {
-                    retVal = node.Read.Value;
+                    var retVal = node.Read.Value;
                     RemoveInternal(node);
+                    return retVal;
                 }
                 else
-                    retVal = null;
+                    return null;
             });
-            return retVal;
         }
 
         private void RemoveInternal(Shielded<Node> node)
@@ -499,11 +498,13 @@ namespace Shielded
 
         public bool Remove(KeyValuePair<TKey, TValue> item)
         {
-            var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n => n.Read.Value == item.Value);
-            if (target == null)
-                return false;
-            RemoveInternal(target);
-            return true;
+            return Shield.InTransaction(() => {
+                var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n => n.Read.Value == item.Value);
+                if (target == null)
+                    return false;
+                RemoveInternal(target);
+                return true;
+            });
         }
 
         /// <summary>
@@ -550,17 +551,22 @@ namespace Shielded
 
         public bool TryGetValue(TKey key, out TValue value)
         {
-            var n = FindInternal(key);
-            if (n == null)
-            {
-                value = null;
-                return false;
-            }
-            else
-            {
-                value = n.Read.Value;
-                return true;
-            }
+            TValue v = null;
+            var res = Shield.InTransaction(() => {
+                var n = FindInternal(key);
+                if (n == null)
+                {
+                    v = null;
+                    return false;
+                }
+                else
+                {
+                    v = n.Read.Value;
+                    return true;
+                }
+            });
+            value = v;
+            return res;
         }
 
         /// <summary>
@@ -571,19 +577,23 @@ namespace Shielded
         {
             get
             {
-                var n = FindInternal(key);
-                if (n == null)
-                    throw new KeyNotFoundException();
-                return n.Read.Value;
+                return Shield.InTransaction(() => {
+                    var n = FindInternal(key);
+                    if (n == null)
+                        throw new KeyNotFoundException();
+                    return n.Read.Value;
+                });
             }
             set
             {
-                // replaces the first occurrence...
-                var n = FindInternal(key);
-                if (n == null)
-                    Add(key, value);
-                else if (n.Read.Value != value)
-                    n.Modify((ref Node nInner) => nInner.Value = value);
+                Shield.InTransaction(() => {
+                    // replaces the first occurrence...
+                    var n = FindInternal(key);
+                    if (n == null)
+                        Add(key, value);
+                    else if (n.Read.Value != value)
+                        n.Modify((ref Node nInner) => nInner.Value = value);
+                });
             }
         }
 
