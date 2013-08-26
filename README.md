@@ -39,27 +39,27 @@ make progress.
 Features
 --------
 
-* *MVCC*: Each transaction reads a consistent snapshot of the state without
+* **MVCC**: Each transaction reads a consistent snapshot of the state without
 the need for locking, since updates just create new versions.
     * Old versions are dropped soon after noone is capable of reading them
     any more.
-* *Read-only transactions* always complete without any repetitions and
+* **Read-only transactions** always complete without any repetitions and
 without entering the global lock!
-* *Strictness*: If a write is made anywhere, the system will insist that
+* **Strictness**: If a write is made anywhere, the system will insist that
 all touched locations, read or written, still contain the same version
 of data that they had when the transaction opened. This means it does not
 suffer from the Write Skew issue.
-* To perform *side-effects* (IO, and all other operations which are not
+* To perform **side-effects** (IO, and all other operations which are not
 shielded, should not be repeated if we retry, and which should only take
 effect if you commit) you use the SideEffect method of the Shield class,
 which takes optional onCommit and onRollback lambdas.
-* *Conditional transactions*: The Shield’s method Conditional enables you
+* **Conditional transactions**: The Shield’s method Conditional enables you
 to define something similar to a database trigger. It receives a test, and
 an action to perform, both lambdas. If the test returns true, action will
 be called. If not, the system will make a note of all shielded objects
 that the test had accessed, and retry the test only when one of those
 objects is committed into. The subscription can be permanent.
-* *Commutables*: operations which can be performed without conflict, because
+* **Commutables**: operations which can be performed without conflict, because
 they can be reordered in time and have the same net effect, i.e. they are
 commutable (name borrowed from Clojure). Incrementing an int is an
 example - if you don’t care what the int’s value is, you can increment it
@@ -82,12 +82,12 @@ improves concurrency. Incrementing an int, conflict-free:
     sequence is commutable - if you do not touch the seq, it never conflicts.
     Inserting into a tree also. Assigning a value to a Shielded<> by using
     Assign (which means, without reading the old value) is also commutable.
-* *Struct-based entities*: The Shielded<> generic class works best with
+* **Struct-based entities**: The Shielded<> generic class works best with
 structs. This way C# automatically does the required cloning for MVCC.
     * Shielded<> also works with class types, but in that case it only makes
     the reference itself transactional. That class should be read-only, or
     have some protections of it’s own (it can be another Shielded<>!). The
     ShieldedSeq<> is implemented using Shielded<> references to read-only item holders.
-* *Transactional collections*: Included in the library are ShieldedDict<>
+* **Transactional collections**: Included in the library are ShieldedDict<>
 (dictionary), ShieldedSeq<> (singly linked list) and ShieldedTree<> (a
 red-black tree implementation).
