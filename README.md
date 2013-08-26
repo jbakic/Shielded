@@ -14,8 +14,8 @@ degree of concurrency.
 
 Here is a small example:
 
-  Shielded<int> n = new Shielded<int>();
-  Shield.InTransaction(() => n.Modify((ref int a) => a += 5));
+    Shielded<int> n = new Shielded<int>();
+    Shield.InTransaction(() => n.Modify((ref int a) => a += 5));
 
 The first line creates a shielded container for an Int32, 0 will be the
 initial value as it is the int’s default. The second line starts a
@@ -40,7 +40,7 @@ Features
 
 * MVCC: Each transaction reads a consistent snapshot of the state without
 the need for locking, since updates just create new versions.
-  * Old versions are dropped soon after noone is capable of reading them
+    * Old versions are dropped soon after noone is capable of reading them
     any more.
 * Read-only transactions always complete without any repetitions and
 without entering the global lock!
@@ -66,27 +66,27 @@ without conflict by simply incrementing whatever value you encounter there
 at commit time. Using commutes, when appropriate, reduces conflicts and
 improves concurrency. Incrementing an int, conflict-free:
 
-    n.Commute((ref int n) => n++);
+        n.Commute((ref int n) => n++);
 
-  * Commutes are not performed under any lock, but rather in a special
-  commute subtransaction, which reads the latest data, and tries to
-  commit with the same stamp as your main transaction. If only the commutes
-  fail, then only the commutes get retried.
-  * If, in the example above, your main transaction has already (or perhaps
-  will later) read the n field or written to it (non-commutatively), the
-  commute “degenerates” - it gets executed in place, in your transaction,
-  and you can see it’s effect. This means consistency - if you read it, it
-  will stay as read when you commit. But, it is now a potential conflict.
-  * Shield has various commutable operations defined in it. Appending to a
-  sequence is commutable - if you do not touch the seq, it never conflicts.
-  Inserting into a tree also. Assigning a value to a Shielded<> by using
-  Assign (which means, without reading the old value) is also commutable.
+    * Commutes are not performed under any lock, but rather in a special
+    commute subtransaction, which reads the latest data, and tries to
+    commit with the same stamp as your main transaction. If only the commutes
+    fail, then only the commutes get retried.
+    * If, in the example above, your main transaction has already (or perhaps
+    will later) read the n field or written to it (non-commutatively), the
+    commute “degenerates” - it gets executed in place, in your transaction,
+    and you can see it’s effect. This means consistency - if you read it, it
+    will stay as read when you commit. But, it is now a potential conflict.
+    * Shield has various commutable operations defined in it. Appending to a
+    sequence is commutable - if you do not touch the seq, it never conflicts.
+    Inserting into a tree also. Assigning a value to a Shielded<> by using
+    Assign (which means, without reading the old value) is also commutable.
 * Struct-based entities: The Shielded<> generic class works best with
 structs. This way C# automatically does the required cloning for MVCC.
-  * Shielded<> also works with class types, but in that case it only makes
-  the reference itself transactional. That class should be read-only, or
-  have some protections of it’s own (it can be another Shielded<>!). The
-  ShieldedSeq<> is implemented using Shielded<> references to read-only item holders.
+    * Shielded<> also works with class types, but in that case it only makes
+    the reference itself transactional. That class should be read-only, or
+    have some protections of it’s own (it can be another Shielded<>!). The
+    ShieldedSeq<> is implemented using Shielded<> references to read-only item holders.
 * Transactional collections: Included in the library are ShieldedDict<>
 (dictionary), ShieldedSeq<> (singly linked list) and ShieldedTree<> (a
 red-black tree implementation).
