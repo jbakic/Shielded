@@ -326,6 +326,7 @@ namespace Shielded
                         if (commutedItems.Enlisted.Overlaps(enlisted))
                             throw new ApplicationException("Incorrect commute affecting list, conflict with transaction.");
                         commEnlisted = commutedItems.Enlisted.ToList();
+                        TransItems.Bag(commutedItems);
                     }
 
                     int rolledBack = -1;

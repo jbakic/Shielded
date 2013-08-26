@@ -576,9 +576,9 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
-            //TreeTest();
+            TreeTest();
 
             //SkewTest();
 

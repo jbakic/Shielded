@@ -130,7 +130,7 @@ namespace Shielded
 
         private void InsertInternal(TKey key, TValue item)
         {
-            Shield.InTransaction(() =>
+            Shield.InTransaction(() => Shield.EnlistCommute(() =>
             {
                 Shielded<Node> parent = null;
                 var targetLoc = _head.Read;
@@ -160,7 +160,7 @@ namespace Shielded
                 else
                     _head.Assign(shN);
                 InsertProcedure(shN);
-            });
+            }, _head));
         }
 
         #region Wikipedia, insertion
