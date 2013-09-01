@@ -73,12 +73,6 @@ namespace ConsoleTests
                 }, sb => sb.ToString());
         }
 
-        private bool CheckAllowed(Shielded<Ticket> newTicket, out string hash)
-        {
-            hash = GetOfferHash(newTicket);
-            return _sameTicketWins[hash] + newTicket.Read.WinAmount <= SameTicketWinLimit;
-        }
-
         public int? BuyTicket(decimal payIn, params Shielded<BetOffer>[] bets)
         {
             var newId = Interlocked.Increment(ref _ticketIdGenerator);
@@ -102,8 +96,8 @@ namespace ConsoleTests
                         t.Bets.Aggregate(1m, (curr, nextBet) => curr * nextBet.Odds);
                 });
 
-                string hash;
-                if (!CheckAllowed(newTicket, out hash))
+                var hash = GetOfferHash(newTicket);
+                if (_sameTicketWins[hash] + newTicket.Read.WinAmount > SameTicketWinLimit)
                     return;
 
                 bought = true;
@@ -168,7 +162,7 @@ namespace ConsoleTests
             });
 
             Events = new ShieldedDict<int, Shielded<Event>>(
-                ev => ev.Read.Id, initialEvents);
+                initialEvents.Select(e => new KeyValuePair<int, Shielded<Event>>(e.Read.Id, e)));
         }
 
         /// <summary>

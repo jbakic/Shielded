@@ -30,17 +30,11 @@ namespace Shielded
             = new ConcurrentDictionary<TKey, long>();
         private LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
 
-        public ShieldedDict(Func<TItem, TKey> keySelector, IEnumerable<TItem> items)
+        public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items)
         {
-            _dict = new ConcurrentDictionary<TKey, ItemKeeper>(
-                items.Select(i =>
-                    new KeyValuePair<TKey, ItemKeeper>(
-                        keySelector(i),
-                        new ItemKeeper()
-                        {
-                            Version = 0,
-                            Value = i
-                        })));
+            _dict = new ConcurrentDictionary<TKey, ItemKeeper>(items
+                .Select(kvp =>
+                    new KeyValuePair<TKey, ItemKeeper>(kvp.Key, new ItemKeeper() { Value = kvp.Value })));
         }
 
         public ShieldedDict()
@@ -168,7 +162,6 @@ namespace Shielded
                         Version = writeStamp.Value,
                         Older = v
                     };
-                    // nobody is actually changing it now.
                     _dict[kvp.Key] = newCurrent;
                     _copies[kvp.Key] = writeStamp.Value;
 
@@ -211,8 +204,6 @@ namespace Shielded
                 if (_copies[key] > smallestOpenTransactionId)
                     continue;
 
-//                if (!_dict.ContainsKey(key))
-//                    continue;
                 var point = _dict[key];
                 while (point != null && point.Version > smallestOpenTransactionId)
                 {
@@ -222,6 +213,17 @@ namespace Shielded
                 {
                     // point is the last accessible - his Older is not needed.
                     point.Older = null;
+                    // if null, remove the item from the dict. this approach can cause conflicts,
+                    // unfortunately, there is no ConcurrentDictionary.CompareRemove..
+                    if (point.Value == null && point == _dict[key] &&
+                        _writeStamps.TryAdd(key, point.Version))
+                    {
+                        ItemKeeper item;
+                        if (_dict[key] == point)
+                            _dict.TryRemove(key, out item);
+                        long ws;
+                        _writeStamps.TryRemove(key, out ws);
+                    }
                 }
                 long version;
                 _copies.TryRemove(key, out version);

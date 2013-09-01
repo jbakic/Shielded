@@ -164,7 +164,7 @@ namespace Shielded
         public static T InTransaction<T>(Func<T> act)
         {
             T retVal = default(T);
-            Shield.InTransaction(() => retVal = act());
+            Shield.InTransaction(() => { retVal = act(); });
             return retVal;
         }
 
