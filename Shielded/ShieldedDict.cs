@@ -213,17 +213,9 @@ namespace Shielded
                 {
                     // point is the last accessible - his Older is not needed.
                     point.Older = null;
-                    // if null, remove the item from the dict. this approach can cause conflicts,
-                    // unfortunately, there is no ConcurrentDictionary.CompareRemove..
-                    if (point.Value == null && point == _dict[key] &&
-                        _writeStamps.TryAdd(key, point.Version))
-                    {
-                        ItemKeeper item;
-                        if (_dict[key] == point)
-                            _dict.TryRemove(key, out item);
-                        long ws;
-                        _writeStamps.TryRemove(key, out ws);
-                    }
+                    if (point.Value == null && point == _dict[key])
+                        ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
+                            .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));
                 }
                 long version;
                 _copies.TryRemove(key, out version);
