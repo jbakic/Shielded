@@ -205,17 +205,24 @@ namespace Shielded
                     continue;
 
                 var point = _dict[key];
+                ItemKeeper pointNewer = null;
                 while (point != null && point.Version > smallestOpenTransactionId)
                 {
+                    pointNewer = point;
                     point = point.Older;
                 }
                 if (point != null)
                 {
                     // point is the last accessible - his Older is not needed.
                     point.Older = null;
-                    if (point.Value == null && point == _dict[key])
-                        ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
-                            .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));
+                    if (point.Value == null)
+                    {
+                        if (pointNewer != null)
+                            pointNewer.Older = null;
+                        else
+                            ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
+                                .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));
+                    }
                 }
                 long version;
                 _copies.TryRemove(key, out version);
