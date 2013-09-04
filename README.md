@@ -8,9 +8,9 @@ implementation is strict, with strong guarantees on safety. It is mostly
 obstruction-free, using only one major lock which is held during
 the pre-commit check. It is slower than non-transactional code, of
 course - a trivial transaction is roughly around 2-5 times slower than
-optimally written code. But, for anything non-trivial, the code written
-for an STM is much simpler and less error-prone, while achieving a high
-degree of concurrency.
+optimally written code. But, for anything non-trivial, the impact of STM
+on performance becomes smaller, while the code is much simpler,
+less error-prone, and achieves a high degree of concurrency.
 
 Here is a small example:
 
