@@ -84,8 +84,8 @@ improves concurrency. Incrementing an int, conflict-free:
     will stay as read when you commit. But, it is now a potential conflict.
     * Shield has various commutable operations defined in it. Appending to a
     sequence is commutable - if you do not touch the seq, it never conflicts.
-    Inserting into a tree also. Assigning a value to a Shielded<> by using
-    Assign (which means, without reading the old value) is also commutable.
+    Assigning a value to a Shielded<> by using Assign (which means, without
+    reading the old value) is also commutable.
 * **Struct-based entities**: The Shielded<> generic class works best with
 structs. This way C# automatically does the required cloning for MVCC.
     * Shielded<> also works with class types, but in that case it only makes

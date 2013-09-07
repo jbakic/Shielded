@@ -130,37 +130,35 @@ namespace Shielded
 
         private void InsertInternal(TKey key, TValue item)
         {
-            Shield.EnlistCommute(() =>
+            Shield.AssertInTransaction();
+            Shielded<Node> parent = null;
+            var targetLoc = _head.Read;
+            int comparison = 0;
+            while (targetLoc != null)
             {
-                Shielded<Node> parent = null;
-                var targetLoc = _head.Read;
-                int comparison = 0;
-                while (targetLoc != null)
-                {
-                    parent = targetLoc;
-                    if ((comparison = _comparer.Compare(targetLoc.Read.Key, key)) > 0)
-                        targetLoc = targetLoc.Read.Left;
-                    else
-                        targetLoc = targetLoc.Read.Right;
-                }
-                var shN = new Shielded<Node>(new Node()
-                {
-                    //Color = Color.Red, // the default anyway.
-                    Parent = parent,
-                    Key = key,
-                    Value = item
-                });
-                if (parent != null)
-                {
-                    if (comparison > 0)
-                        parent.Modify((ref Node p) => p.Left = shN);
-                    else
-                        parent.Modify((ref Node p) => p.Right = shN);
-                }
+                parent = targetLoc;
+                if ((comparison = _comparer.Compare(targetLoc.Read.Key, key)) > 0)
+                    targetLoc = targetLoc.Read.Left;
                 else
-                    _head.Assign(shN);
-                InsertProcedure(shN);
-            }, _head);
+                    targetLoc = targetLoc.Read.Right;
+            }
+            var shN = new Shielded<Node>(new Node()
+            {
+                //Color = Color.Red, // the default anyway.
+                Parent = parent,
+                Key = key,
+                Value = item
+            });
+            if (parent != null)
+            {
+                if (comparison > 0)
+                    parent.Modify((ref Node p) => p.Left = shN);
+                else
+                    parent.Modify((ref Node p) => p.Right = shN);
+            }
+            else
+                _head.Assign(shN);
+            InsertProcedure(shN);
         }
 
         #region Wikipedia, insertion
