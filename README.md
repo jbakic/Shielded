@@ -55,10 +55,12 @@ effect if you commit) you use the SideEffect method of the Shield class,
 which takes optional onCommit and onRollback lambdas.
 * **Conditional transactions**: The Shield’s method Conditional enables you
 to define something similar to a database trigger. It receives a test, and
-an action to perform, both lambdas. If the test returns true, action will
-be called. If not, the system will make a note of all shielded objects
-that the test had accessed, and retry the test only when one of those
-objects is committed into. The subscription can be permanent.
+an action to perform, both lambdas. It runs the test, makes a note of
+all shielded objects that the test had accessed, and later re-executes
+the test when any of those objects is committed into. If test passes, the
+action is called.
+    * Implemented transactionally, so can be called from transactions, and
+    can be triggered by the transaction that created it.
 * **Commutables**: operations which can be performed without conflict, because
 they can be reordered in time and have the same net effect, i.e. they are
 commutable (name borrowed from Clojure). Incrementing an int is an
