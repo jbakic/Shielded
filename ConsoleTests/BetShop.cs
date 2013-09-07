@@ -76,15 +76,13 @@ namespace ConsoleTests
         public int? BuyTicket(decimal payIn, params Shielded<BetOffer>[] bets)
         {
             var newId = Interlocked.Increment(ref _ticketIdGenerator);
-            bool bought = false;
             var newTicket = new Shielded<Ticket>(new Ticket()
             {
                 Id = newId,
                 PayInAmount = payIn
             });
-            Shield.InTransaction(() =>
+            return Shield.InTransaction(() =>
             {
-                bought = false;
                 newTicket.Modify((ref Ticket t) =>
                 {
                     t.Bets = bets.Select(shBo => new Bet()
@@ -98,17 +96,14 @@ namespace ConsoleTests
 
                 var hash = GetOfferHash(newTicket);
                 if (_sameTicketWins[hash] + newTicket.Read.WinAmount > SameTicketWinLimit)
-                    return;
+                    return false;
 
-                bought = true;
                 Tickets[newId] = newTicket;
                 TicketIdSeq.Append(newId);
                 _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.Read.WinAmount;
-
-//                Shield.SideEffect(() => Shield.InTransaction(() =>
                 _ticketCount.Commute((ref int c) => c++);
-            });
-            return bought ? (int?)newId : null;
+                return true;
+            }) ? (int?)newId : null;
         }
 
         /// <summary>
