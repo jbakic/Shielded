@@ -553,11 +553,13 @@ namespace Shielded
 
         public bool TryGetValue(TKey key, out TValue value)
         {
+            bool res = false;
             value = Shield.InTransaction(() => {
                 var n = FindInternal(key);
-                return n != null ? n.Read.Value : null;
+                res = n != null;
+                return res ? n.Read.Value : null;
             });
-            return value != null;
+            return res;
         }
 
         /// <summary>
