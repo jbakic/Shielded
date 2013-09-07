@@ -57,9 +57,9 @@ namespace Shielded
 
         private void PrepareForWriting(bool prepareOld)
         {
+            CheckLockAndEnlist();
             if (_current.Version > Shield.CurrentTransactionStartStamp)
                 throw new TransException("Write collision.");
-            CheckLockAndEnlist();
             if (!_locals.HasValue)
             {
                 var v = new ValueKeeper();

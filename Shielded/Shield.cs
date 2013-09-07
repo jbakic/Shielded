@@ -152,7 +152,7 @@ namespace Shielded
         {
             Shield.InTransaction(() =>
             {
-                var items = IsolatedRun(() => test(), false);
+                var items = IsolatedRun(() => test());
                 _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
                 {
                     Items = items.Enlisted,
@@ -228,10 +228,10 @@ namespace Shielded
 
         /// <summary>
         /// Runs the action, and returns a set of IShieldeds that the action enlisted.
-        /// It will make sure to restore original enlisted items, optionally merged
-        /// with the items that this run enlisted.
+        /// It will make sure to restore original enlisted items, merged with the ones
+        /// that the action enlisted, before returning.
         /// </summary>
-        private static TransItems IsolatedRun(Action act, bool mergeWithMain)
+        private static TransItems IsolatedRun(Action act)
         {
             TransItems oldItems = _localItems;
             var isolated = TransItems.BagOrNew();
@@ -243,8 +243,7 @@ namespace Shielded
             }
             finally
             {
-                if (mergeWithMain)
-                    oldItems.UnionWith(isolated);
+                oldItems.UnionWith(isolated);
                 _localItems = oldItems;
                 _blockCommute = false;
             }
@@ -277,7 +276,7 @@ namespace Shielded
 
                     var subscription = sub.Read;
                     bool test = false;
-                    var testItems = IsolatedRun(() => test = subscription.Test(), true);
+                    var testItems = IsolatedRun(() => test = subscription.Test());
 
                     if (!testItems.Enlisted.SetEquals(subscription.Items))
                     {
@@ -303,6 +302,7 @@ namespace Shielded
         {
             var items = _localItems;
             List<IShielded> enlisted = items.Enlisted.ToList();
+            TransItems commutedItems = null;
             List<IShielded> commEnlisted = null;
             long oldStamp = _currentTransactionStartStamp.Value;
             bool commit = true;
@@ -316,16 +316,40 @@ namespace Shielded
                     // involve waiting for a spinlock to be released, this is why out of lock is better.
                     if (items.Commutes != null && items.Commutes.Any())
                     {
-                        _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
-                        var commutedItems = IsolatedRun(() =>
+                        while (true)
                         {
-                            foreach (var comm in items.Commutes)
-                                comm.Perform();
-                        }, false);
+                            _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
+                            commutedItems = TransItems.BagOrNew();
+                            _localItems = commutedItems;
+                            _blockCommute = true;
+                            try
+                            {
+                                foreach (var comm in items.Commutes)
+                                    comm.Perform();
+                            }
+                            catch (TransException ex)
+                            {
+                                if (ex is NoRepeatTransException)
+                                {
+                                    _localItems = items;
+                                    throw;
+                                }
+                                foreach (var item in commutedItems.Enlisted)
+                                    item.Rollback();
+                                TransItems.Bag(commutedItems);
+                                commutedItems = null;
+                                continue;
+                            }
+                            finally
+                            {
+                                _blockCommute = false;
+                            }
+                            _localItems = items;
+                            break;
+                        }
                         if (commutedItems.Enlisted.Overlaps(enlisted))
                             throw new ApplicationException("Incorrect commute affecting list, conflict with transaction.");
                         commEnlisted = commutedItems.Enlisted.ToList();
-                        TransItems.Bag(commutedItems);
                     }
 
                     int rolledBack = -1;
@@ -387,6 +411,11 @@ namespace Shielded
             {
                 if (_currentTransactionStartStamp != oldStamp)
                     _currentTransactionStartStamp = oldStamp;
+                if (commutedItems != null)
+                {
+                    _localItems.UnionWith(commutedItems);
+                    TransItems.Bag(commutedItems);
+                }
             }
         }
 
