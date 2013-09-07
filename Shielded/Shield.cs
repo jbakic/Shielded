@@ -139,8 +139,9 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Conditional transaction. If test returns true, executes immediately.
-        /// If not, test is re-executed when any of the accessed IShieldeds commits.
+        /// Conditional transaction. Does not execute immediately! Test is executed once just to
+        /// get a read pattern, result is ignored. It will later be re-executed when any of the
+        /// accessed IShieldeds commits.
         /// When test passes, executes trans. While trans returns true, subscription is maintained.
         /// Test is executed in a normal transaction. If it changes access patterns between
         /// calls, the subscription changes as well!
@@ -151,13 +152,13 @@ namespace Shielded
         {
             Shield.InTransaction(() =>
             {
-                if (test())
-                { // important brackets! :)
-                    if (trans())
-                        Shield.SideEffect(() => Conditional(test, trans));
-                }
-                else
-                    Subscribe(test, trans);
+                var items = IsolatedRun(() => test());
+                _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
+                {
+                    Items = items.Enlisted,
+                    Test = test,
+                    Trans = trans
+                }));
             });
         }
 
@@ -258,16 +259,6 @@ namespace Shielded
             public Func<bool> Trans;
         }
         private static ShieldedSeq<Shielded<CommitSubscription>> _subscriptions = new ShieldedSeq<Shielded<CommitSubscription>>();
-
-        private static void Subscribe(Func<bool> test, Func<bool> trans)
-        {
-            _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
-            {
-                Items = new HashSet<IShielded>(_localItems.Enlisted),
-                Test = test,
-                Trans = trans
-            }));
-        }
 
         private static void TriggerSubscriptions(IShielded[] changes)
         {
