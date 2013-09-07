@@ -7,8 +7,14 @@ using System.Threading;
 namespace Shielded
 {
     /// <summary>
-    /// Protects only regarding adds or removes. Updates are unprotected unless
-    /// you choose to have shielded items.
+    /// A dictionary protecting itself only - adding, removing, replacing items are transactional,
+    /// but anything done to the items is not unless they are Shielded themselves.
+    /// 
+    /// The dictionary does not provide any iterators, and considers null as empty,
+    /// behaving as an infinite line of slots. Transactional protection for iterating over
+    /// a ConcurrentDictionary (this dict is based on it) is difficult, and transactions which
+    /// would iterate would be highly conflicting. If needed, use a tree instead, or combine
+    /// this with one or more sequences or trees. Iterators might still be added in the future.
     /// </summary>
     public class ShieldedDict<TKey, TItem> : IShielded
     {

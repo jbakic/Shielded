@@ -142,6 +142,34 @@ namespace Shielded
             }
         }
 
+        public void RemoveAll(Func<T, bool> condition)
+        {
+            Shield.AssertInTransaction();
+            var curr = _head;
+            while (curr.Read != null)
+            {
+                if (condition(curr.Read.Value))
+                {
+                    if (_tail.Read == curr.Read)
+                    {
+                        _tail.Assign(null);
+                        if (curr == _head)
+                            _head.Assign(null);
+                        return;
+                    }
+                    curr.Assign(curr.Read.Next);
+                }
+                else
+                    curr = curr.Read.Next;
+            }
+        }
+
+        public void Clear()
+        {
+            _head.Assign(null);
+            _tail.Assign(null);
+        }
+
         public void RemoveAt(int index)
         {
             Shield.AssertInTransaction();
