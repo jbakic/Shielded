@@ -28,6 +28,8 @@ namespace Shielded
         private readonly Shielded<ItemKeeper> _head;
         private readonly Shielded<ItemKeeper> _tail;
 
+        private readonly Shielded<int> _count;
+
         public ShieldedSeq(params T[] items)
         {
             ItemKeeper item = null;
@@ -44,12 +46,14 @@ namespace Shielded
             // if this is true, there were no items.
             if (_tail == null)
                 _tail = new Shielded<ItemKeeper>();
+            _count = new Shielded<int>(items.Length);
         }
 
         public ShieldedSeq()
         {
             _head = new Shielded<ItemKeeper>();
             _tail = new Shielded<ItemKeeper>();
+            _count = new Shielded<int>();
         }
 
         public void Prepend(T val)
@@ -61,6 +65,7 @@ namespace Shielded
             _head.Assign(keeper);
             if (_tail.Read == null)
                 _tail.Assign(keeper);
+            _count.Commute((ref int c) => c++);
         }
 
         public T TakeHead()
@@ -71,6 +76,7 @@ namespace Shielded
             _head.Assign(item.Next);
             if (_tail.Read == item)
                 _tail.Assign(null);
+            _count.Commute((ref int c) => c--);
             return item.Value;
         }
 
@@ -96,26 +102,19 @@ namespace Shielded
                     _tail.Read.Next.Assign(newItem);
                     _tail.Assign(newItem);
                 }
-            }, _head, _tail); // the commute degenerates if you read from the seq..
+                // in case the big one degenerates, this one does not necessarily have to.
+                _count.Commute((ref int c) => c++);
+            }, _head, _tail, _count); // the commute degenerates if you read from the seq..
         }
 
         private Shielded<ItemKeeper> RefToIndex(int index)
         {
-            if (index < 0)
-                throw new IndexOutOfRangeException();
             return Shield.InTransaction(() => {
+                if (index < 0 || index >= _count)
+                    throw new IndexOutOfRangeException();
                 var curr = _head;
-                try
-                {
-                    for (; index > 0; index--)
-                        curr = curr.Read.Next;
-                }
-                catch (NullReferenceException)
-                {
-                    throw new IndexOutOfRangeException();
-                }
-                if (curr.Read == null)
-                    throw new IndexOutOfRangeException();
+                for (; index > 0; index--)
+                    curr = curr.Read.Next;
                 return curr;
             });
         }
@@ -142,32 +141,44 @@ namespace Shielded
             }
         }
 
+        public int Count
+        {
+            get
+            {
+                return _count;
+            }
+        }
+
         public void RemoveAll(Func<T, bool> condition)
         {
             Shield.AssertInTransaction();
             var curr = _head;
+            int removed = 0;
             while (curr.Read != null)
             {
                 if (condition(curr.Read.Value))
                 {
+                    removed++;
                     if (_tail.Read == curr.Read)
                     {
                         _tail.Assign(null);
                         if (curr == _head)
                             _head.Assign(null);
-                        return;
+                        break;
                     }
                     curr.Assign(curr.Read.Next);
                 }
                 else
                     curr = curr.Read.Next;
             }
+            _count.Commute((ref int c) => c -= removed);
         }
 
         public void Clear()
         {
             _head.Assign(null);
             _tail.Assign(null);
+            _count.Assign(0);
         }
 
         public void RemoveAt(int index)
@@ -175,6 +186,7 @@ namespace Shielded
             Shield.AssertInTransaction();
             var r = RefToIndex(index);
             r.Assign(r.Read.Next);
+            _count.Commute((ref int c) => c--);
         }
 
         public int IndexOf(T item, IEqualityComparer<T> comp = null)
