@@ -207,6 +207,12 @@ namespace ShieldedTests
             Assert.AreEqual(103, a);
             // commutes never conflict!
             Assert.AreEqual(100, transactionCount);
+
+            Shield.InTransaction(() => {
+                a.Commute((ref int n) => n -= 3);
+                a.Commute((ref int n) => n--);
+            });
+            Assert.AreEqual(99, a);
         }
     }
 }
