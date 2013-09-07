@@ -16,8 +16,7 @@ namespace Shielded
         {
             get
             {
-                if (_currentTransactionStartStamp == null)
-                    throw new InvalidOperationException("Operation needs to be in a transaction.");
+                AssertInTransaction();
                 return _currentTransactionStartStamp.Value;
             }
         }
@@ -28,6 +27,12 @@ namespace Shielded
             {
                 return _currentTransactionStartStamp.HasValue;
             }
+        }
+
+        public static void AssertInTransaction()
+        {
+            if (_currentTransactionStartStamp == null)
+                throw new InvalidOperationException("Operation needs to be in a transaction.");
         }
 
         private class Commute
@@ -85,7 +90,7 @@ namespace Shielded
 
         internal static void Enlist(IShielded item)
         {
-            // reading the current stamp throws ...
+            AssertInTransaction();
             _localItems.Enlisted.Add(item);
             // does a commute have to degenerate?
             if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
@@ -117,6 +122,8 @@ namespace Shielded
         {
             if (affecting == null || affecting.Length == 0)
                 throw new ArgumentException();
+            AssertInTransaction();
+
             if (_blockCommute || _localItems.Enlisted.Overlaps(affecting))
                 perform(); // immediate degeneration. should be some warning.
             else

@@ -101,17 +101,23 @@ namespace Shielded
 
         private Shielded<ItemKeeper> RefToIndex(int index)
         {
-            if (index < 0 || _head.Read == null)
+            if (index < 0)
                 throw new IndexOutOfRangeException();
-            var curr = _head;
-            for (int i = 0; i < index; i++)
+            return Shield.InTransaction(() => {
+                var curr = _head;
+                try
+                {
+                    for (; index > 0; index--)
+                        curr = curr.Read.Next;
+                }
+                catch (NullReferenceException)
+                {
+                    throw new IndexOutOfRangeException();
+                }
                 if (curr.Read == null)
                     throw new IndexOutOfRangeException();
-                else
-                    curr = curr.Read.Next;
-            if (curr.Read == null)
-                throw new IndexOutOfRangeException();
-            return curr;
+                return curr;
+            });
         }
 
         public T this [int index]
@@ -122,6 +128,7 @@ namespace Shielded
             }
             set
             {
+                Shield.AssertInTransaction();
                 // to make this op transactional, we must create a new ItemKeeper and
                 // insert him in the list.
                 var refInd = RefToIndex(index);
@@ -137,27 +144,30 @@ namespace Shielded
 
         public void RemoveAt(int index)
         {
+            Shield.AssertInTransaction();
             var r = RefToIndex(index);
             r.Assign(r.Read.Next);
         }
 
         public int IndexOf(T item, IEqualityComparer<T> comp = null)
         {
-            if (comp == null)
-                comp = EqualityComparer<T>.Default;
-            var curr = _head;
-            int i = 0;
-            while (curr.Read != null && !comp.Equals(curr.Read.Value, item))
-            {
-                i++;
-                curr = curr.Read.Next;
-            }
-            return curr.Read == null ? -1 : i;
+            return Shield.InTransaction(() => {
+                if (comp == null)
+                    comp = EqualityComparer<T>.Default;
+                var curr = _head;
+                int i = 0;
+                while (curr.Read != null && !comp.Equals(curr.Read.Value, item))
+                {
+                    i++;
+                    curr = curr.Read.Next;
+                }
+                return curr.Read == null ? -1 : i;
+            });
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
         {
-            var a = Shield.CurrentTransactionStartStamp;
+            Shield.AssertInTransaction();
             var curr = _head;
             while (curr.Read != null)
             {

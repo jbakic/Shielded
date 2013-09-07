@@ -328,13 +328,13 @@ namespace ConsoleTests
                 int offer1Ind = randomizr.Next(3);
                 int offer2Ind = randomizr.Next(3);
                 int offer3Ind = randomizr.Next(3);
-                return Task.Factory.StartNew(() =>
+                return Task.Factory.StartNew(() => Shield.InTransaction(() =>
                 {
                     var offer1 = betShop.Events[event1Id].Read.BetOffers[offer1Ind];
                     var offer2 = betShop.Events[event2Id].Read.BetOffers[offer2Ind];
                     var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
                     betShop.BuyTicket(payIn, offer1, offer2, offer3);
-                });
+                }));
             });
             int total;
             var totalCorrect = betShop.VerifyTickets(out total);
@@ -576,9 +576,9 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
-            //TreeTest();
+            TreeTest();
 
             //SkewTest();
 

@@ -61,7 +61,7 @@ namespace Shielded
 
         IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
         {
-            var a = Shield.CurrentTransactionStartStamp;
+            Shield.AssertInTransaction();
             Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
             var curr = _head.Read;
             while (curr != null)
@@ -96,7 +96,7 @@ namespace Shielded
         {
             if (_comparer.Compare(from, to) > 0)
                 yield break;
-            var a = Shield.CurrentTransactionStartStamp;
+            Shield.AssertInTransaction();
             Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
             var curr = _head.Read;
             while (curr != null)
@@ -130,7 +130,7 @@ namespace Shielded
 
         private void InsertInternal(TKey key, TValue item)
         {
-            Shield.InTransaction(() => Shield.EnlistCommute(() =>
+            Shield.EnlistCommute(() =>
             {
                 Shielded<Node> parent = null;
                 var targetLoc = _head.Read;
@@ -160,7 +160,7 @@ namespace Shielded
                 else
                     _head.Assign(shN);
                 InsertProcedure(shN);
-            }, _head));
+            }, _head);
         }
 
         #region Wikipedia, insertion
@@ -294,23 +294,25 @@ namespace Shielded
         /// <summary>
         /// Removes an item and returns it. Useful if you could have multiple items under the same key.
         /// </summary>
-        public TValue RemoveAndReturn(TKey key)
+        public bool RemoveAndReturn(TKey key, out TValue val)
         {
-            return Shield.InTransaction(() => {
-                var node = RangeInternal(key, key).FirstOrDefault();
-                if (node != null)
-                {
-                    var retVal = node.Read.Value;
-                    RemoveInternal(node);
-                    return retVal;
-                }
-                else
-                    return null;
-            });
+            var node = RangeInternal(key, key).FirstOrDefault();
+            if (node != null)
+            {
+                val = node.Read.Value;
+                RemoveInternal(node);
+                return true;
+            }
+            else
+            {
+                val = null;
+                return false;
+            }
         }
 
         private void RemoveInternal(Shielded<Node> node)
         {
+            Shield.AssertInTransaction();
             // find the first follower in the right subtree (arbitrary choice..)
             Shielded<Node> follower;
             if (node.Read.Right == null)
@@ -488,7 +490,8 @@ namespace Shielded
 
         public bool Contains(KeyValuePair<TKey, TValue> item)
         {
-            return RangeInternal(item.Key, item.Key).Any(n => n.Read.Value == item.Value);
+            return Shield.InTransaction(() =>
+                RangeInternal(item.Key, item.Key).Any(n => n.Read.Value == item.Value));
         }
 
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
@@ -498,13 +501,11 @@ namespace Shielded
 
         public bool Remove(KeyValuePair<TKey, TValue> item)
         {
-            return Shield.InTransaction(() => {
-                var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n => n.Read.Value == item.Value);
-                if (target == null)
-                    return false;
-                RemoveInternal(target);
-                return true;
-            });
+            var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n => n.Read.Value == item.Value);
+            if (target == null)
+                return false;
+            RemoveInternal(target);
+            return true;
         }
 
         /// <summary>
@@ -546,27 +547,17 @@ namespace Shielded
         /// </summary>
         public bool Remove(TKey key)
         {
-            return RemoveAndReturn(key) != null;
+            TValue val;
+            return RemoveAndReturn(key, out val);
         }
 
         public bool TryGetValue(TKey key, out TValue value)
         {
-            TValue v = null;
-            var res = Shield.InTransaction(() => {
+            value = Shield.InTransaction(() => {
                 var n = FindInternal(key);
-                if (n == null)
-                {
-                    v = null;
-                    return false;
-                }
-                else
-                {
-                    v = n.Read.Value;
-                    return true;
-                }
+                return n != null ? n.Read.Value : null;
             });
-            value = v;
-            return res;
+            return value != null;
         }
 
         /// <summary>
@@ -586,14 +577,13 @@ namespace Shielded
             }
             set
             {
-                Shield.InTransaction(() => {
-                    // replaces the first occurrence...
-                    var n = FindInternal(key);
-                    if (n == null)
-                        Add(key, value);
-                    else if (n.Read.Value != value)
-                        n.Modify((ref Node nInner) => nInner.Value = value);
-                });
+                Shield.AssertInTransaction();
+                // replaces the first occurrence...
+                var n = FindInternal(key);
+                if (n == null)
+                    Add(key, value);
+                else if (n.Read.Value != value)
+                    n.Modify((ref Node nInner) => nInner.Value = value);
             }
         }
 
