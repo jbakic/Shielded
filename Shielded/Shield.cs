@@ -152,7 +152,7 @@ namespace Shielded
         {
             Shield.InTransaction(() =>
             {
-                var items = IsolatedRun(() => test());
+                var items = IsolatedRun(() => test(), false);
                 _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
                 {
                     Items = items.Enlisted,
@@ -228,10 +228,10 @@ namespace Shielded
 
         /// <summary>
         /// Runs the action, and returns a set of IShieldeds that the action enlisted.
-        /// It will make sure to restore original enlisted items, merged with the ones
-        /// that the action enlisted, before returning.
+        /// It will make sure to restore original enlisted items, optionally merged
+        /// with the items that this run enlisted.
         /// </summary>
-        private static TransItems IsolatedRun(Action act)
+        private static TransItems IsolatedRun(Action act, bool mergeWithMain)
         {
             TransItems oldItems = _localItems;
             var isolated = TransItems.BagOrNew();
@@ -243,7 +243,8 @@ namespace Shielded
             }
             finally
             {
-                oldItems.UnionWith(isolated);
+                if (mergeWithMain)
+                    oldItems.UnionWith(isolated);
                 _localItems = oldItems;
                 _blockCommute = false;
             }
@@ -276,7 +277,7 @@ namespace Shielded
 
                     var subscription = sub.Read;
                     bool test = false;
-                    var testItems = IsolatedRun(() => test = subscription.Test());
+                    var testItems = IsolatedRun(() => test = subscription.Test(), true);
 
                     if (!testItems.Enlisted.SetEquals(subscription.Items))
                     {
@@ -320,7 +321,7 @@ namespace Shielded
                         {
                             foreach (var comm in items.Commutes)
                                 comm.Perform();
-                        });
+                        }, false);
                         if (commutedItems.Enlisted.Overlaps(enlisted))
                             throw new ApplicationException("Incorrect commute affecting list, conflict with transaction.");
                         commEnlisted = commutedItems.Enlisted.ToList();
