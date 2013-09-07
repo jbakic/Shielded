@@ -44,10 +44,9 @@ namespace ConsoleTests
         {
             get
             {
-                return _ticketCount.Read;
+                return TicketIdSeq.Count;
             }
         }
-        private Shielded<int> _ticketCount = new Shielded<int>(0);
 
         public readonly ShieldedDict<int, Shielded<Event>> Events;
 
@@ -101,7 +100,6 @@ namespace ConsoleTests
                 Tickets[newId] = newTicket;
                 TicketIdSeq.Append(newId);
                 _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.Read.WinAmount;
-                _ticketCount.Commute((ref int c) => c++);
                 return true;
             }) ? (int?)newId : null;
         }
