@@ -60,7 +60,9 @@ all shielded objects that the test had accessed, and later re-executes
 the test when any of those objects is committed into. If test passes, the
 action is called.
     * Implemented transactionally, so can be called from transactions, and
-    can be triggered by the transaction that created it.
+    can be triggered by the transaction that created it. If the action
+    returns false, the subscription is removed in this transaction, which
+    can guarantee one-time execution if needed.
 * **Commutables**: operations which can be performed without conflict, because
 they can be reordered in time and have the same net effect, i.e. they are
 commutable (name borrowed from Clojure). Incrementing an int is an
