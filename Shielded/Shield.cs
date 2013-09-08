@@ -91,7 +91,8 @@ namespace Shielded
         internal static void Enlist(IShielded item)
         {
             AssertInTransaction();
-            _localItems.Enlisted.Add(item);
+            if (!_localItems.Enlisted.Add(item))
+                return;
             // does a commute have to degenerate?
             if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
             {
