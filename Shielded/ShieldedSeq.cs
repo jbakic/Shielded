@@ -171,7 +171,8 @@ namespace Shielded
                 else
                     curr = curr.Read.Next;
             }
-            _count.Commute((ref int c) => c -= removed);
+            if (removed > 0)
+                _count.Commute((ref int c) => c -= removed);
         }
 
         public void Clear()
