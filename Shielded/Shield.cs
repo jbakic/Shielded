@@ -320,20 +320,17 @@ namespace Shielded
                         {
                             _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
                             commutedItems = TransItems.BagOrNew();
-                            _localItems = commutedItems;
-                            _blockCommute = true;
                             try
                             {
+                                _localItems = commutedItems;
+                                _blockCommute = true;
                                 foreach (var comm in items.Commutes)
                                     comm.Perform();
                             }
                             catch (TransException ex)
                             {
                                 if (ex is NoRepeatTransException)
-                                {
-                                    _localItems = items;
                                     throw;
-                                }
                                 foreach (var item in commutedItems.Enlisted)
                                     item.Rollback();
                                 TransItems.Bag(commutedItems);
@@ -342,9 +339,9 @@ namespace Shielded
                             }
                             finally
                             {
+                                _localItems = items;
                                 _blockCommute = false;
                             }
-                            _localItems = items;
                             break;
                         }
                         if (commutedItems.Enlisted.Overlaps(enlisted))
