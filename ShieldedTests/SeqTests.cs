@@ -26,9 +26,12 @@ namespace ShieldedTests
             for (int i = 0; i < 20; i++)
                 Assert.AreEqual(i + 21, seq[i]);
 
-            Shield.InTransaction(() => seq.Append(0));
+            Shield.InTransaction(() => {
+                seq.Append(0);
+                // test commute
+                Assert.AreEqual(0, seq[20]);
+            });
             Assert.AreEqual(21, seq.Count);
-            Assert.AreEqual(0, seq[20]);
 
             var a = Shield.InTransaction(() => seq.TakeHead());
             Assert.AreEqual(20, seq.Count);
