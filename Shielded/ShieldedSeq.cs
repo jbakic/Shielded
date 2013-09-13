@@ -56,6 +56,17 @@ namespace Shielded
             _count = new Shielded<int>();
         }
 
+        /// <summary>
+        /// Smaller footprint than Count (reads the head only), useful in Conditionals.
+        /// </summary>
+        public bool HasAny
+        {
+            get
+            {
+                return _head.Read != null;
+            }
+        }
+
         public void Prepend(T val)
         {
             var keeper = new ItemKeeper(_head)
@@ -74,7 +85,8 @@ namespace Shielded
             if (item == null)
                 throw new InvalidOperationException();
             _head.Assign(item.Next);
-            if (_tail.Read == item)
+            // NB we don't read the tail if not needed!
+            if (_head.Read == null)
                 _tail.Assign(null);
             _count.Commute((ref int c) => c--);
             return item.Value;
@@ -185,8 +197,22 @@ namespace Shielded
         public void RemoveAt(int index)
         {
             Shield.AssertInTransaction();
-            var r = RefToIndex(index);
-            r.Assign(r.Read.Next);
+            if (index < 0 || index >= _count)
+                throw new IndexOutOfRangeException();
+            if (index == 0)
+            {
+                _head.Modify((ref ItemKeeper h) => h = h.Next);
+                if (_head.Read == null)
+                    _tail.Assign(null);
+            }
+            else
+            {
+                // slightly more tricky, in case we need to change _tail
+                var r = RefToIndex(index - 1);
+                r.Read.Next.Modify((ref ItemKeeper n) => n = n.Next);
+                if (r.Read.Next.Read == null)
+                    _tail.Assign(r);
+            }
             _count.Commute((ref int c) => c--);
         }
 

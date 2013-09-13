@@ -297,6 +297,43 @@ namespace Shielded
 
         #region Commit & rollback
 
+        /// <summary>
+        /// Increases the current start stamp, and leaves the commuted items unmerged with the
+        /// main transaction items!
+        /// </summary>
+        static TransItems RunCommutes()
+        {
+            var items = _localItems;
+            while (true)
+            {
+                _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
+                var commutedItems = TransItems.BagOrNew();
+                try
+                {
+                    _localItems = commutedItems;
+                    _blockCommute = true;
+                    foreach (var comm in items.Commutes)
+                        comm.Perform();
+                }
+                catch (TransException ex)
+                {
+                    if (ex is NoRepeatTransException)
+                        throw;
+                    foreach (var item in commutedItems.Enlisted)
+                        item.Rollback();
+                    TransItems.Bag(commutedItems);
+                    commutedItems = null;
+                    continue;
+                }
+                finally
+                {
+                    _localItems = items;
+                    _blockCommute = false;
+                }
+                return commutedItems;
+            }
+        }
+
         private static object _stampLock = new object();
 
         static bool CommitCheck(out long? writeStamp, out ICollection<IShielded> toCommit)
@@ -317,34 +354,7 @@ namespace Shielded
                     // involve waiting for a spinlock to be released, this is why out of lock is better.
                     if (items.Commutes != null && items.Commutes.Any())
                     {
-                        while (true)
-                        {
-                            _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
-                            commutedItems = TransItems.BagOrNew();
-                            try
-                            {
-                                _localItems = commutedItems;
-                                _blockCommute = true;
-                                foreach (var comm in items.Commutes)
-                                    comm.Perform();
-                            }
-                            catch (TransException ex)
-                            {
-                                if (ex is NoRepeatTransException)
-                                    throw;
-                                foreach (var item in commutedItems.Enlisted)
-                                    item.Rollback();
-                                TransItems.Bag(commutedItems);
-                                commutedItems = null;
-                                continue;
-                            }
-                            finally
-                            {
-                                _localItems = items;
-                                _blockCommute = false;
-                            }
-                            break;
-                        }
+                        commutedItems = RunCommutes();
                         if (commutedItems.Enlisted.Overlaps(enlisted))
                             throw new ApplicationException("Incorrect commute affecting list, conflict with transaction.");
                         commEnlisted = commutedItems.Enlisted.ToList();

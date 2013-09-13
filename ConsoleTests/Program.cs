@@ -364,7 +364,7 @@ namespace ConsoleTests
 //                int speed = (countComplete - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
 //                lastTime.Assign(newNow);
 //                lastReport.Modify((ref int n) => n += reportEvery);
-//                int count = countComplete.Read;
+//                int count = countComplete;
 //                Shield.SideEffect(() =>
 //                {
 //                    Console.Write("\n{0} at {1} item/s", count, speed);
@@ -385,10 +385,9 @@ namespace ConsoleTests
                         {
                             Interlocked.Increment(ref transactionCount);
                             tree.Add(item1.Id, item1);
+//                            countComplete.Commute((ref int c) => c++);
                         }
                         );
-//                        Shield.InTransaction(
-//                            () => countComplete.Modify((ref int c) => c++));
                     }
                     );
                 }
@@ -435,10 +434,9 @@ namespace ConsoleTests
                         {
                             Interlocked.Increment(ref transactionCount);
                             dict[item1.Id] = item1;
+//                            countComplete.Commute((ref int c) => c++);
                         }
                         );
-//                        Shield.InTransaction(
-//                        () => countComplete.Modify((ref int c) => c++));
                     }
                     );
                 }
@@ -578,13 +576,15 @@ namespace ConsoleTests
 
             //BetShopTest();
 
-            TreeTest();
+            //TreeTest();
 
             //SkewTest();
 
             //SimpleTreeTest();
 
             //SimpleCommuteTest();
+
+            new Queue().Run();
         }
     }
 }

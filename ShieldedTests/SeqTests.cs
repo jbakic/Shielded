@@ -59,6 +59,18 @@ namespace ShieldedTests
             Assert.AreEqual(0, seq.Count);
             Shield.InTransaction(() => seq2.Clear());
             Assert.AreEqual(0, seq2.Count);
+
+            var seq3 = new ShieldedSeq<int>(
+                Enumerable.Range(1, 5).ToArray());
+            Shield.InTransaction(() => seq3.RemoveAt(0));
+            Assert.AreEqual(4, seq3.Count);
+            Assert.AreEqual(2, seq3[0]);
+            Shield.InTransaction(() => seq3.RemoveAt(3));
+            Assert.AreEqual(3, seq3.Count);
+            Assert.AreEqual(4, seq3[2]);
+            Shield.InTransaction(() => seq3.Append(100));
+            Assert.AreEqual(4, seq3.Count);
+            Assert.AreEqual(100, seq3[3]);
         }
     }
 }
