@@ -71,6 +71,12 @@ namespace ShieldedTests
             Shield.InTransaction(() => seq3.Append(100));
             Assert.AreEqual(4, seq3.Count);
             Assert.AreEqual(100, seq3[3]);
+            Shield.InTransaction(() => seq3.RemoveAll(i => i == 100));
+            Assert.AreEqual(3, seq3.Count);
+            Assert.AreEqual(4, seq3[2]);
+            Shield.InTransaction(() => seq3.Append(100));
+            Assert.AreEqual(4, seq3.Count);
+            Assert.AreEqual(100, seq3[3]);
         }
     }
 }

@@ -165,6 +165,7 @@ namespace Shielded
         {
             Shield.AssertInTransaction();
             var curr = _head;
+            ItemKeeper previous = null;
             int removed = 0;
             while (curr.Read != null)
             {
@@ -173,15 +174,18 @@ namespace Shielded
                     removed++;
                     if (_tail.Read == curr.Read)
                     {
-                        _tail.Assign(null);
+                        _tail.Assign(previous);
                         if (curr == _head)
                             _head.Assign(null);
                         break;
                     }
-                    curr.Assign(curr.Read.Next);
+                    curr.Modify((ref ItemKeeper c) => c = c.Next);
                 }
                 else
+                {
+                    previous = curr;
                     curr = curr.Read.Next;
+                }
             }
             if (removed > 0)
                 _count.Commute((ref int c) => c -= removed);
@@ -197,8 +201,6 @@ namespace Shielded
         public void RemoveAt(int index)
         {
             Shield.AssertInTransaction();
-            if (index < 0 || index >= _count)
-                throw new IndexOutOfRangeException();
             if (index == 0)
             {
                 _head.Modify((ref ItemKeeper h) => h = h.Next);
