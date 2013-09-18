@@ -202,10 +202,7 @@ namespace Shielded
                 catch (TransException ex)
                 {
                     if (_currentTransactionStartStamp.HasValue)
-                    {
                         repeat = !(ex is NoRepeatTransException);
-                        DoRollback();
-                    }
                 }
                 finally
                 {
