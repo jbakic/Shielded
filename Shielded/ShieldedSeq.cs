@@ -21,6 +21,12 @@ namespace Shielded
             {
                 Next = new Shielded<ItemKeeper>(initialNext);
             }
+
+            public void ClearNext()
+            {
+                // this somehow fixes the leak in Queue test... cannot explain it.
+                Next.Assign(null);
+            }
         }
 
         // a ShieldedRef should always be readonly! unfortunate, really. if you forget, a horrible
@@ -84,7 +90,7 @@ namespace Shielded
             var item = _head.Read;
             if (item == null)
                 throw new InvalidOperationException();
-            _head.Assign(item.Next);
+            Skip(_head);
             // NB we don't read the tail if not needed!
             if (_head.Read == null)
                 _tail.Assign(null);
@@ -149,7 +155,10 @@ namespace Shielded
                 };
                 if (_tail.Read == refInd.Read)
                     _tail.Assign(newItem);
-                refInd.Assign(newItem);
+                refInd.Modify((ref ItemKeeper r) => {
+                    r.ClearNext();
+                    r = newItem;
+                });
             }
         }
 
@@ -159,6 +168,15 @@ namespace Shielded
             {
                 return _count;
             }
+        }
+
+        private static void Skip(Shielded<ItemKeeper> sh)
+        {
+            sh.Modify((ref ItemKeeper c) => {
+                var old = c;
+                c = c.Next;
+                old.ClearNext();
+            });
         }
 
         public void RemoveAll(Func<T, bool> condition)
@@ -179,7 +197,7 @@ namespace Shielded
                             _head.Assign(null);
                         break;
                     }
-                    curr.Modify((ref ItemKeeper c) => c = c.Next);
+                    Skip(curr);
                 }
                 else
                 {
@@ -203,7 +221,7 @@ namespace Shielded
             Shield.AssertInTransaction();
             if (index == 0)
             {
-                _head.Modify((ref ItemKeeper h) => h = h.Next);
+                Skip(_head);
                 if (_head.Read == null)
                     _tail.Assign(null);
             }
@@ -211,7 +229,7 @@ namespace Shielded
             {
                 // slightly more tricky, in case we need to change _tail
                 var r = RefToIndex(index - 1);
-                r.Read.Next.Modify((ref ItemKeeper n) => n = n.Next);
+                Skip(r.Read.Next);
                 if (r.Read.Next.Read == null)
                     _tail.Assign(r);
             }
