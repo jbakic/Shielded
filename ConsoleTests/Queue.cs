@@ -19,7 +19,7 @@ namespace ConsoleTests
 
         private ShieldedSeq<Item> _queue = new ShieldedSeq<Item>();
         private Shielded<int> _processed = new Shielded<int>();
-        private const int ItemCount = 100000;
+        private const int ItemCount = 500000;
         private Barrier _barrier = new Barrier(2);
 
         public void Run()

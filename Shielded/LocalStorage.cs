@@ -1,18 +1,19 @@
 using System;
 using System.Threading;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace Shielded
 {
     public class LocalStorage<T> where T : class
     {
-        private ConcurrentDictionary<int, T> _storage = new ConcurrentDictionary<int, T>();
+        [ThreadStatic]
+        private static Dictionary<LocalStorage<T>, T> _storage;
 
         public bool HasValue
         {
             get
             {
-                return _storage.ContainsKey(Thread.CurrentThread.ManagedThreadId);
+                return _storage != null && _storage.ContainsKey(this);
             }
         }
 
@@ -20,16 +21,19 @@ namespace Shielded
         {
             get
             {
-                return _storage[Thread.CurrentThread.ManagedThreadId];
+                return _storage[this];
             }
             set
             {
                 if (value != null)
-                    _storage[Thread.CurrentThread.ManagedThreadId] = value;
-                else
                 {
-                    T x;
-                    _storage.TryRemove(Thread.CurrentThread.ManagedThreadId, out x);
+                    if (_storage == null)
+                        _storage = new Dictionary<LocalStorage<T>, T>();
+                    _storage[this] = value;
+                }
+                else if (_storage != null)
+                {
+                    _storage.Remove(this);
                 }
             }
         }

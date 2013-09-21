@@ -28,6 +28,11 @@ namespace Shielded
             public Shielded<Node> Parent;
         }
 
+        private void ClearLinks(Shielded<Node> node)
+        {
+            node.Modify((ref Node n) => n.Left = n.Right = n.Parent = null);
+        }
+
         private readonly Shielded<Shielded<Node>> _head;
         private readonly Shielded<int> _count;
         private readonly IComparer<TKey> _comparer;
@@ -362,6 +367,7 @@ namespace Shielded
                     else
                         p.Right = source;
                 });
+            ClearLinks(target);
         }
 
         void DeleteOneChild(Shielded<Node> node)
@@ -495,6 +501,7 @@ namespace Shielded
                     });
                 else
                     _head.Assign(null);
+                ClearLinks(node);
             }
         }
 
