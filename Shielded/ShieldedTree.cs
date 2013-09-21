@@ -29,11 +29,13 @@ namespace Shielded
         }
 
         private readonly Shielded<Shielded<Node>> _head;
+        private readonly Shielded<int> _count;
         private readonly IComparer<TKey> _comparer;
 
         public ShieldedTree(IComparer<TKey> comparer = null)
         {
             _head = new Shielded<Shielded<Node>>();
+            _count = new Shielded<int>();
             _comparer = comparer != null ? comparer : Comparer<TKey>.Default;
         }
 
@@ -159,6 +161,7 @@ namespace Shielded
             else
                 _head.Assign(shN);
             InsertProcedure(shN);
+            _count.Commute((ref int c) => c++);
         }
 
         #region Wikipedia, insertion
@@ -330,6 +333,7 @@ namespace Shielded
                 });
             }
             DeleteOneChild(follower);
+            _count.Commute((ref int c) => c--);
         }
 
         #region Wikipedia, removal
@@ -364,110 +368,133 @@ namespace Shielded
         {
             // node has at most one child!
             Shielded<Node> child = node.Read.Right == null ? node.Read.Left : node.Read.Right;
+            bool deleted = false;
 
-            ReplaceNode(node, child);
+            if (child != null)
+            {
+                ReplaceNode(node, child);
+                deleted = true;
+            }
             if (node.Read.Color == Color.Black)
             {
                 if (child != null && child.Read.Color == Color.Red)
                     child.Modify((ref Node c) => c.Color = Color.Black);
-                else while (true)
+                else
                 {
-                    // can happen only once.
-                    if (child == null) child = node.Read.Parent;
+                    // since we don't represent null leaves as nodes, we must start
+                    // the process with the not yet removed parent in this case.
+                    if (!deleted)
+                        child = node;
 
-                    // delete case 1
-                    if (child.Read.Parent != null)
+                    while (true)
                     {
-                        // delete case 2
-                        Shielded<Node> s = Sibling(child);
-     
-                        if (s.Read.Color == Color.Red)
+                        // delete case 1
+                        if (child.Read.Parent != null)
                         {
-                            child.Read.Parent.Modify((ref Node p) => p.Color = Color.Red);
-                            s.Modify((ref Node sInn) => sInn.Color = Color.Black);
-                            if (child == child.Read.Parent.Read.Left)
-                                RotateLeft(child.Read.Parent);
-                            else
-                                RotateRight(child.Read.Parent);
+                            // delete case 2
+                            Shielded<Node> s = Sibling(child);
+         
+                            if (s.Read.Color == Color.Red)
+                            {
+                                child.Read.Parent.Modify((ref Node p) => p.Color = Color.Red);
+                                s.Modify((ref Node sInn) => sInn.Color = Color.Black);
+                                if (child == child.Read.Parent.Read.Left)
+                                    RotateLeft(child.Read.Parent);
+                                else
+                                    RotateRight(child.Read.Parent);
 
-                            s = Sibling(child);
-                        }
+                                s = Sibling(child);
+                            }
 
-                        // delete case 3
-                        if ((child.Read.Parent.Read.Color == Color.Black) &&
-                            (s != null) && (s.Read.Color == Color.Black) &&
-                            (s.Read.Left == null || s.Read.Left.Read.Color == Color.Black) &&
-                            (s.Read.Right == null || s.Read.Right.Read.Color == Color.Black))
-                        {
-                            s.Modify((ref Node sInn) => sInn.Color = Color.Red);
-                            child = child.Read.Parent;
-                            continue; // back to 1
-                        }
-                        else
-                        {
-                            // delete case 4
-                            if ((child.Read.Parent.Read.Color == Color.Red) &&
+                            // delete case 3
+                            if ((child.Read.Parent.Read.Color == Color.Black) &&
                                 (s.Read.Color == Color.Black) &&
                                 (s.Read.Left == null || s.Read.Left.Read.Color == Color.Black) &&
                                 (s.Read.Right == null || s.Read.Right.Read.Color == Color.Black))
                             {
                                 s.Modify((ref Node sInn) => sInn.Color = Color.Red);
-                                child.Read.Parent.Modify((ref Node p) => p.Color = Color.Black);
+                                child = child.Read.Parent;
+                                continue; // back to 1
                             }
                             else
                             {
-                                // delete case 5
-                                if (s.Read.Color == Color.Black)
+                                // delete case 4
+                                if ((child.Read.Parent.Read.Color == Color.Red) &&
+                                    (s.Read.Color == Color.Black) &&
+                                    (s.Read.Left == null || s.Read.Left.Read.Color == Color.Black) &&
+                                    (s.Read.Right == null || s.Read.Right.Read.Color == Color.Black))
                                 {
-                                    if ((child == child.Read.Parent.Read.Left) &&
-                                        (s.Read.Right == null || s.Read.Right.Read.Color == Color.Black) &&
-                                        (s.Read.Left != null && s.Read.Left.Read.Color == Color.Red))
-                                    {
-                                        s.Modify((ref Node sInn) =>
-                                        {
-                                            sInn.Color = Color.Red;
-                                            sInn.Left.Modify((ref Node l) => l.Color = Color.Black);
-                                        });
-                                        RotateRight(s);
-                                        s = Sibling(child);
-                                    }
-                                    else if ((child == child.Read.Parent.Read.Right) &&
-                                        (s.Read.Left == null || s.Read.Left.Read.Color == Color.Black) &&
-                                        (s.Read.Right != null && s.Read.Right.Read.Color == Color.Red))
-                                    {
-                                        s.Modify((ref Node sInn) =>
-                                        {
-                                            sInn.Color = Color.Red;
-                                            sInn.Right.Modify((ref Node r) => r.Color = Color.Black);
-                                        });
-                                        RotateLeft(s);
-                                        s = Sibling(child);
-                                    }
-                                }
-
-                                // delete case 6
-                                child.Read.Parent.Modify((ref Node p) =>
-                                {
-                                    var c = p.Color;
-                                    s.Modify((ref Node sInn) => sInn.Color = c);
-                                    p.Color = Color.Black;
-                                });
- 
-                                if (child == child.Read.Parent.Read.Left)
-                                {
-                                    s.Read.Right.Modify((ref Node r) => r.Color = Color.Black);
-                                    RotateLeft(child.Read.Parent);
+                                    s.Modify((ref Node sInn) => sInn.Color = Color.Red);
+                                    child.Read.Parent.Modify((ref Node p) => p.Color = Color.Black);
                                 }
                                 else
                                 {
-                                    s.Read.Left.Modify((ref Node l) => l.Color = Color.Black);
-                                    RotateRight(child.Read.Parent);
+                                    // delete case 5
+                                    if (s.Read.Color == Color.Black)
+                                    {
+                                        if ((child == child.Read.Parent.Read.Left) &&
+                                            (s.Read.Right == null || s.Read.Right.Read.Color == Color.Black) &&
+                                            (s.Read.Left != null && s.Read.Left.Read.Color == Color.Red))
+                                        {
+                                            s.Modify((ref Node sInn) =>
+                                            {
+                                                sInn.Color = Color.Red;
+                                                sInn.Left.Modify((ref Node l) => l.Color = Color.Black);
+                                            });
+                                            RotateRight(s);
+                                            s = Sibling(child);
+                                        }
+                                        else if ((child == child.Read.Parent.Read.Right) &&
+                                            (s.Read.Left == null || s.Read.Left.Read.Color == Color.Black) &&
+                                            (s.Read.Right != null && s.Read.Right.Read.Color == Color.Red))
+                                        {
+                                            s.Modify((ref Node sInn) =>
+                                            {
+                                                sInn.Color = Color.Red;
+                                                sInn.Right.Modify((ref Node r) => r.Color = Color.Black);
+                                            });
+                                            RotateLeft(s);
+                                            s = Sibling(child);
+                                        }
+                                    }
+
+                                    // delete case 6
+                                    child.Read.Parent.Modify((ref Node p) =>
+                                    {
+                                        var c = p.Color;
+                                        s.Modify((ref Node sInn) => sInn.Color = c);
+                                        p.Color = Color.Black;
+                                    });
+     
+                                    if (child == child.Read.Parent.Read.Left)
+                                    {
+                                        s.Read.Right.Modify((ref Node r) => r.Color = Color.Black);
+                                        RotateLeft(child.Read.Parent);
+                                    }
+                                    else
+                                    {
+                                        s.Read.Left.Modify((ref Node l) => l.Color = Color.Black);
+                                        RotateRight(child.Read.Parent);
+                                    }
                                 }
                             }
                         }
+                        break;
                     }
-                    break;
                 }
+            }
+            if (!deleted)
+            {
+                // original node is still in the tree, and it still has no children.
+                if (node.Read.Parent != null)
+                    node.Read.Parent.Modify((ref Node p) => {
+                        if (p.Left == node)
+                            p.Left = null;
+                        else
+                            p.Right = null;
+                    });
+                else
+                    _head.Assign(null);
             }
         }
 
@@ -484,6 +511,7 @@ namespace Shielded
         {
             // ridiculously simple :)
             _head.Assign(null);
+            _count.Assign(0);
         }
 
         public bool Contains(KeyValuePair<TKey, TValue> item)
@@ -506,14 +534,11 @@ namespace Shielded
             return true;
         }
 
-        /// <summary>
-        /// Currently iterates over the whole tree to get the count! Do not use.
-        /// </summary>
         public int Count
         {
             get
             {
-                return ((IEnumerable<KeyValuePair<TKey, TValue>>)this).Count();
+                return _count;
             }
         }
 

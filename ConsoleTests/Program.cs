@@ -576,7 +576,7 @@ namespace ConsoleTests
 
             //BetShopTest();
 
-            //TreeTest();
+            TreeTest();
 
             //SkewTest();
 
@@ -584,7 +584,7 @@ namespace ConsoleTests
 
             //SimpleCommuteTest();
 
-            new Queue().Run();
+            //new Queue().Run();
         }
     }
 }
