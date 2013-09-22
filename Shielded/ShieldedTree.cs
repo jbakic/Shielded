@@ -529,7 +529,12 @@ namespace Shielded
 
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
         {
-            throw new System.NotImplementedException();
+            Shield.InTransaction(() => {
+                if (_count + arrayIndex > array.Length)
+                    throw new IndexOutOfRangeException();
+                foreach (var kvp in this)
+                    array[arrayIndex++] = kvp;
+            });
         }
 
         public bool Remove(KeyValuePair<TKey, TValue> item)
