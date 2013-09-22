@@ -228,9 +228,9 @@ namespace ConsoleTests
             foreach (var _ in Enumerable.Repeat(0, 10))
             {
                 var transactionCounter = 0;
-                var time = mtTest("dictionary", 1000, i =>
+                var time = mtTest("dictionary", 10000, i =>
                 {
-                    var rnd = randomizr.Next(100);
+                    var rnd = randomizr.Next(10);
                     if (i % 2 == 0)
                         // adder task - 500 of these
                         return Task.Factory.StartNew(() =>
@@ -240,7 +240,7 @@ namespace ConsoleTests
                                 Interlocked.Increment(ref transactionCounter);
                                 var v = dict[rnd];
                                 int? num = v != null ? (int?)v.Read : null;
-                                Thread.Sleep(10);
+                                Thread.Sleep(1);
                                 if (v == null)
                                     dict[rnd] = new Shielded<int>(1);
                                 else if (v.Read == -1)
@@ -261,7 +261,7 @@ namespace ConsoleTests
                                 Interlocked.Increment(ref transactionCounter);
                                 var v = dict[rnd];
                                 int? num = v != null ? (int?)v.Read : null;
-                                Thread.Sleep(10);
+                                Thread.Sleep(1);
                                 if (v == null)
                                     dict[rnd] = new Shielded<int>(-1);
                                 else if (v.Read == 1)
@@ -274,9 +274,9 @@ namespace ConsoleTests
                         TaskCreationOptions.LongRunning
                         );
                 });
-                var correct = Enumerable.Range(0, 100).Sum(n => dict[n] == null ? 0 : dict[n].Read) == 0;
-                Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
-                    time, transactionCounter, correct ? "correct" : "incorrect");
+                var sum = Enumerable.Range(0, 100).Sum(n => dict[n] == null ? 0 : dict[n]);
+                Console.WriteLine(" {0} ms with {1} iterations and sum {2}.",
+                    time, transactionCounter, sum);
             }
         }
 

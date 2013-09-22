@@ -62,7 +62,6 @@ namespace Shielded
         private ItemKeeper CurrentTransactionOldValue(TKey key)
         {
             PrepareLocal(key);
-            _localDict.Value.Reads.Add(key);
 
             ItemKeeper point;
             _dict.TryGetValue(key, out point);
@@ -73,22 +72,15 @@ namespace Shielded
 
         private bool IsLocalPrepared()
         {
-            return _localDict.HasValue && _localDict.Value.Reads != null;
+            return _localDict.HasValue;
         }
 
         private void PrepareLocal(TKey key)
         {
             CheckLockAndEnlist(key);
-            if (!IsLocalPrepared())
-            {
-                if (!_localDict.HasValue)
-                    _localDict.Value = new LocalDict();
-                else
-                {
-                    if (_localDict.Value.Reads == null)
-                        _localDict.Value.Reads = new HashSet<TKey>();
-                }
-            }
+            if (!_localDict.HasValue)
+                _localDict.Value = new LocalDict();
+            _localDict.Value.Reads.Add(key);
         }
 
         /// <summary>
@@ -125,7 +117,7 @@ namespace Shielded
         {
             get
             {
-                return IsLocalPrepared() && _localDict.Value.Items != null && _localDict.Value.Items.Any();
+                return IsLocalPrepared() && _localDict.Value.Items != null;
             }
         }
 
@@ -175,29 +167,23 @@ namespace Shielded
                     if (!_writeStamps.TryRemove(kvp.Key, out ourStamp) || ourStamp != writeStamp)
                         throw new ApplicationException("Commit from unexpected transaction");
                 }
-                _localDict.Value.Items = null;
-                _localDict.Value.Reads = null;
+                _localDict.Value = null;
                 return true;
             }
-            if (IsLocalPrepared())
-                _localDict.Value.Reads = null;
+            _localDict.Value = null;
             return false;
         }
 
         void IShielded.Rollback(long? writeStamp)
         {
-            _localDict.Value.Reads = null;
-            if (_localDict.Value.Items != null)
+            if (_localDict.Value.Items != null && writeStamp.HasValue)
             {
-                if (writeStamp.HasValue)
-                {
-                    long ws;
-                    foreach (var key in _localDict.Value.Items.Keys)
-                        if (_writeStamps.TryGetValue(key, out ws) && ws == writeStamp.Value)
-                            _writeStamps.TryRemove(key, out ws);
-                }
-                _localDict.Value.Items = null;
+                long ws;
+                foreach (var key in _localDict.Value.Items.Keys)
+                    if (_writeStamps.TryGetValue(key, out ws) && ws == writeStamp.Value)
+                        _writeStamps.TryRemove(key, out ws);
             }
+            _localDict.Value = null;
         }
 
         void IShielded.TrimCopies(long smallestOpenTransactionId)
@@ -210,24 +196,27 @@ namespace Shielded
                 if (_copies[key] > smallestOpenTransactionId)
                     continue;
 
-                var point = _dict[key];
-                ItemKeeper pointNewer = null;
-                while (point != null && point.Version > smallestOpenTransactionId)
+                if (_dict.ContainsKey(key))
                 {
-                    pointNewer = point;
-                    point = point.Older;
-                }
-                if (point != null)
-                {
-                    // point is the last accessible - his Older is not needed.
-                    point.Older = null;
-                    if (point.Value == null)
+                    var point = _dict[key];
+                    ItemKeeper pointNewer = null;
+                    while (point != null && point.Version > smallestOpenTransactionId)
                     {
-                        if (pointNewer != null)
-                            pointNewer.Older = null;
-                        else
-                            ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
-                                .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));
+                        pointNewer = point;
+                        point = point.Older;
+                    }
+                    if (point != null)
+                    {
+                        // point is the last accessible - his Older is not needed.
+                        point.Older = null;
+                        if (point.Value == null)
+                        {
+                            if (pointNewer != null)
+                                pointNewer.Older = null;
+                            /*else
+                                ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
+                                    .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));*/
+                        }
                     }
                 }
                 long version;
