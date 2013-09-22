@@ -160,7 +160,8 @@ namespace Shielded
                         Version = writeStamp.Value,
                         Older = v
                     };
-                    _dict[kvp.Key] = newCurrent;
+                    lock (_dict)
+                        _dict[kvp.Key] = newCurrent;
                     _copies[kvp.Key] = writeStamp.Value;
 
                     long ourStamp;
@@ -213,9 +214,17 @@ namespace Shielded
                         {
                             if (pointNewer != null)
                                 pointNewer.Older = null;
-                            /*else
-                                ((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
-                                    .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));*/
+                            else
+                            {
+                                //((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
+                                //    .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));
+                                lock (_dict)
+                                {
+                                    ItemKeeper k;
+                                    if (_dict.TryGetValue(key, out k) && k == point)
+                                        _dict.TryRemove(key, out k);
+                                }
+                            }
                         }
                     }
                 }
