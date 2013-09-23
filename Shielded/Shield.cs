@@ -202,10 +202,7 @@ namespace Shielded
                 catch (TransException ex)
                 {
                     if (_currentTransactionStartStamp.HasValue)
-                    {
                         repeat = !(ex is NoRepeatTransException);
-                        DoRollback();
-                    }
                 }
                 finally
                 {
@@ -234,20 +231,9 @@ namespace Shielded
         /// </summary>
         private static TransItems IsolatedRun(Action act)
         {
-            TransItems oldItems = _localItems;
             var isolated = TransItems.BagOrNew();
-            _localItems = isolated;
-            _blockCommute = true;
-            try
-            {
+            using (WithTransactionContext(isolated, merge: true))
                 act();
-            }
-            finally
-            {
-                oldItems.UnionWith(isolated);
-                _localItems = oldItems;
-                _blockCommute = false;
-            }
             return isolated;
         }
 
@@ -298,6 +284,47 @@ namespace Shielded
         #region Commit & rollback
 
         /// <summary>
+        /// Helper struct for <see cref="WithTransactionContexts"/>.
+        /// See there for further information.
+        /// </summary>
+        private struct TransactionContextScope : IDisposable
+        {
+            private readonly TransItems _isolatedItems;
+            private readonly TransItems _originalItems;
+            private readonly bool _merge;
+
+            public TransactionContextScope(TransItems isolatedItems, bool merge)
+            {
+                this._isolatedItems = isolatedItems;
+                this._originalItems = Shield._localItems;
+                this._merge = merge;
+
+                Shield._localItems = isolatedItems;
+                Shield._blockCommute = true;
+            }
+
+            public void Dispose()
+            {
+                if (_merge) _originalItems.UnionWith(_isolatedItems);
+                Shield._localItems = _originalItems;
+                Shield._blockCommute = false;
+            }
+        }
+
+        /// <summary>
+        /// Create a local transaction context by replacing <see cref="Shield._localItems"/> with <paramref name="isolatedItems"/>,
+        /// and setting <see cref="Shield._blockCommute"/> to <c>false</c>.
+        /// Both changes are undone when the returned <see cref="TransactionContextScope"/> value is disposed.
+        /// </summary>
+        /// <param name="isolatedItems">The <see cref="TransItems"/> instance which replaces <see cref="Shield._localItems"/> until the scope is disposed.</param>
+        /// <param name="merge">Whether to merge the isolated items into the original items when the scope is disposed. Defaults to <c>false</c>.</param>
+        /// <returns>An <see cref="TransactionContextScope"/> instance representing the scope.</returns>
+        private static TransactionContextScope WithTransactionContext(TransItems isolatedItems, bool merge = false)
+        {
+            return new TransactionContextScope(isolatedItems, merge);
+        }
+
+        /// <summary>
         /// Increases the current start stamp, and leaves the commuted items unmerged with the
         /// main transaction items!
         /// </summary>
@@ -308,29 +335,27 @@ namespace Shielded
             {
                 _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
                 var commutedItems = TransItems.BagOrNew();
-                try
+                using (WithTransactionContext(commutedItems))
                 {
-                    _localItems = commutedItems;
-                    _blockCommute = true;
-                    foreach (var comm in items.Commutes)
-                        comm.Perform();
+                    try
+                    {
+                        foreach (var comm in items.Commutes)
+                            comm.Perform();
+
+                        return commutedItems;
+                    }
+                    catch (TransException ex)
+                    {
+                        if (ex is NoRepeatTransException)
+                            throw;
+
+                        foreach (var item in commutedItems.Enlisted)
+                            item.Rollback();
+
+                        TransItems.Bag(commutedItems);
+                        commutedItems = null;
+                    }
                 }
-                catch (TransException ex)
-                {
-                    if (ex is NoRepeatTransException)
-                        throw;
-                    foreach (var item in commutedItems.Enlisted)
-                        item.Rollback();
-                    TransItems.Bag(commutedItems);
-                    commutedItems = null;
-                    continue;
-                }
-                finally
-                {
-                    _localItems = items;
-                    _blockCommute = false;
-                }
-                return commutedItems;
             }
         }
 
