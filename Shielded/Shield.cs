@@ -346,14 +346,12 @@ namespace Shielded
                     }
                     catch (TransException ex)
                     {
-                        if (ex is NoRepeatTransException)
-                            throw;
-
                         foreach (var item in commutedItems.Enlisted)
                             item.Rollback();
-
                         TransItems.Bag(commutedItems);
-                        commutedItems = null;
+
+                        if (ex is NoRepeatTransException)
+                            throw;
                     }
                 }
             }
