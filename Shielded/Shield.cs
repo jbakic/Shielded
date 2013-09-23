@@ -232,7 +232,7 @@ namespace Shielded
         private static TransItems IsolatedRun(Action act)
         {
             var isolated = TransItems.BagOrNew();
-            using (WithTransactionContext(isolated, merge: true))
+            using (WithTransactionContext(isolated))
                 act();
             return isolated;
         }
@@ -317,9 +317,10 @@ namespace Shielded
         /// Both changes are undone when the returned <see cref="TransactionContextScope"/> value is disposed.
         /// </summary>
         /// <param name="isolatedItems">The <see cref="TransItems"/> instance which replaces <see cref="Shield._localItems"/> until the scope is disposed.</param>
-        /// <param name="merge">Whether to merge the isolated items into the original items when the scope is disposed. Defaults to <c>false</c>.</param>
+        /// <param name="merge">Whether to merge the isolated items into the original items when the scope is disposed. Defaults to <c>true</c>.
+        /// If items are left unmerged, take care to handle TransExceptions and roll back the items yourself!</param>
         /// <returns>An <see cref="TransactionContextScope"/> instance representing the scope.</returns>
-        private static TransactionContextScope WithTransactionContext(TransItems isolatedItems, bool merge = false)
+        private static TransactionContextScope WithTransactionContext(TransItems isolatedItems, bool merge = true)
         {
             return new TransactionContextScope(isolatedItems, merge);
         }
@@ -335,7 +336,7 @@ namespace Shielded
             {
                 _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
                 var commutedItems = TransItems.BagOrNew();
-                using (WithTransactionContext(commutedItems))
+                using (WithTransactionContext(commutedItems, merge: false))
                 {
                     try
                     {
