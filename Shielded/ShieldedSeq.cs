@@ -228,9 +228,9 @@ namespace Shielded
             else
             {
                 // slightly more tricky, in case we need to change _tail
-                var r = RefToIndex(index - 1);
-                Skip(r.Read.Next);
-                if (r.Read.Next.Read == null)
+                var r = RefToIndex(index - 1).Read;
+                Skip(r.Next);
+                if (r.Next.Read == null)
                     _tail.Assign(r);
             }
             _count.Commute((ref int c) => c--);
@@ -238,9 +238,9 @@ namespace Shielded
 
         public int IndexOf(T item, IEqualityComparer<T> comp = null)
         {
+            if (comp == null)
+                comp = EqualityComparer<T>.Default;
             return Shield.InTransaction(() => {
-                if (comp == null)
-                    comp = EqualityComparer<T>.Default;
                 var curr = _head;
                 int i = 0;
                 while (curr.Read != null && !comp.Equals(curr.Read.Value, item))
