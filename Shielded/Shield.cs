@@ -377,39 +377,51 @@ namespace Shielded
                     lock (_stampLock)
                     {
                         writeStamp = Interlocked.Read(ref _lastStamp) + 1;
-
-                        if (commEnlisted != null)
+                        try
                         {
-                            for (int i = 0; i < commEnlisted.Count; i++)
-                                if (!commEnlisted[i].CanCommit(writeStamp.Value))
-                                {
-                                    commit = false;
-                                    rolledBack = i - 1;
-                                    for (int j = rolledBack; j >= 0; j--)
-                                        commEnlisted[j].Rollback(writeStamp.Value);
-                                    break;
-                                }
-                        }
-
-                        if (commit)
-                        {
-                            _currentTransactionStartStamp = oldStamp;
-                            brokeInCommutes = false;
-                            for (int i = 0; i < enlisted.Count; i++)
-                                if (!enlisted[i].CanCommit(writeStamp.Value))
-                                {
-                                    commit = false;
-                                    rolledBack = i - 1;
-                                    for (int j = i - 1; j >= 0; j--)
-                                        enlisted[j].Rollback(writeStamp.Value);
-                                    if (commEnlisted != null)
-                                        for (int j = 0; j < commEnlisted.Count; j++)
+                            if (commEnlisted != null)
+                            {
+                                for (int i = 0; i < commEnlisted.Count; i++)
+                                    if (!commEnlisted[i].CanCommit(writeStamp.Value))
+                                    {
+                                        commit = false;
+                                        rolledBack = i - 1;
+                                        for (int j = rolledBack; j >= 0; j--)
                                             commEnlisted[j].Rollback(writeStamp.Value);
-                                    break;
-                                }
+                                        break;
+                                    }
+                            }
 
                             if (commit)
-                                Interlocked.Increment(ref _lastStamp);
+                            {
+                                _currentTransactionStartStamp = oldStamp;
+                                brokeInCommutes = false;
+                                for (int i = 0; i < enlisted.Count; i++)
+                                    if (!enlisted[i].CanCommit(writeStamp.Value))
+                                    {
+                                        commit = false;
+                                        rolledBack = i - 1;
+                                        for (int j = i - 1; j >= 0; j--)
+                                            enlisted[j].Rollback(writeStamp.Value);
+                                        if (commEnlisted != null)
+                                            for (int j = 0; j < commEnlisted.Count; j++)
+                                                commEnlisted[j].Rollback(writeStamp.Value);
+                                        break;
+                                    }
+
+                                if (commit)
+                                    Interlocked.Increment(ref _lastStamp);
+                            }
+                        }
+                        catch
+                        {
+                            // we roll them all back. it's important to get rid of the write lock.
+                            if (commEnlisted != null)
+                                foreach (var item in commEnlisted)
+                                    item.Rollback(writeStamp);
+                            foreach (var item in enlisted)
+                                item.Rollback(writeStamp);
+                            throw;
                         }
                     }
                     if (!commit)

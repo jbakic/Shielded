@@ -177,6 +177,8 @@ namespace Shielded
 
         void IShielded.Rollback(long? writeStamp)
         {
+            if (!_localDict.HasValue)
+                return;
             if (_localDict.Value.Items != null && writeStamp.HasValue)
             {
                 long ws;

@@ -134,12 +134,13 @@ namespace Shielded
         
         bool IShielded.CanCommit(long writeStamp)
         {
-            if (Interlocked.Read(ref _writerStamp) != 0)
+            // these can be non-interlocked, since we're under lock.
+            if (_writerStamp != 0)
                 return false;
             else if (_current.Version <= Shield.CurrentTransactionStartStamp)
             {
                 if (((IShielded)this).HasChanges)
-                    Interlocked.Exchange(ref _writerStamp, writeStamp);
+                    _writerStamp = writeStamp;
                 return true;
             }
             return false;
@@ -149,14 +150,13 @@ namespace Shielded
         {
             if (((IShielded)this).HasChanges)
             {
-                if (Interlocked.Read(ref _writerStamp) != writeStamp.Value)
-                    throw new ApplicationException("Commit received from unexpected transaction.");
                 var newCurrent = _locals.Value;
                 newCurrent.Older = _current;
                 newCurrent.Version = writeStamp.Value;
                 _current = newCurrent;
                 _locals.Value = null;
-                Interlocked.Exchange(ref _writerStamp, 0);
+                if (Interlocked.CompareExchange(ref _writerStamp, 0, writeStamp.Value) != writeStamp.Value)
+                    throw new ApplicationException("Commit from unexpected transaction.");
                 return true;
             }
             _locals.Value = null;
