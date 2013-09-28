@@ -73,14 +73,20 @@ namespace Shielded
                 return new TransItems();
             }
 
-            public static void Bag(TransItems items)
+            /// <summary>
+            /// Bag the items, for this or other threads to reuse. Will clear your
+            /// reference before adding the items into the bag, for safety.
+            /// </summary>
+            public static void Bag(ref TransItems items)
             {
                 items.Enlisted.Clear();
                 if (items.Fx != null)
                     items.Fx.Clear();
                 if (items.Commutes != null)
                     items.Commutes.Clear();
-                _itemPool.Add(items);
+                var t = items;
+                items = null;
+                _itemPool.Add(t);
             }
         }
 
@@ -272,7 +278,7 @@ namespace Shielded
                         });
                     }
                     else
-                        TransItems.Bag(testItems);
+                        TransItems.Bag(ref testItems);
                     if (test && !sub.Read.Trans())
                         _subscriptions.RemoveAt(i);
                 });
@@ -313,13 +319,13 @@ namespace Shielded
         /// Increases the current start stamp, and leaves the commuted items unmerged with the
         /// main transaction items!
         /// </summary>
-        static TransItems RunCommutes()
+        static void RunCommutes(out TransItems commutedItems)
         {
             var items = _localItems;
             while (true)
             {
                 _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
-                var commutedItems = TransItems.BagOrNew();
+                commutedItems = TransItems.BagOrNew();
                 try
                 {
                     WithTransactionContext(commutedItems, () =>
@@ -327,13 +333,13 @@ namespace Shielded
                         foreach (var comm in items.Commutes)
                             comm.Perform();
                     }, merge: false);
-                    return commutedItems;
+                    return;
                 }
                 catch (TransException ex)
                 {
                     foreach (var item in commutedItems.Enlisted)
                         item.Rollback();
-                    TransItems.Bag(commutedItems);
+                    TransItems.Bag(ref commutedItems);
 
                     if (ex is NoRepeatTransException)
                         throw;
@@ -361,7 +367,7 @@ namespace Shielded
                     // involve waiting for a spinlock to be released, this is why out of lock is better.
                     if (items.Commutes != null && items.Commutes.Any())
                     {
-                        commutedItems = RunCommutes();
+                        RunCommutes(out commutedItems);
                         if (commutedItems.Enlisted.Overlaps(enlisted))
                             throw new ApplicationException("Incorrect commute affecting list, conflict with transaction.");
                         commEnlisted = commutedItems.Enlisted.ToList();
@@ -429,7 +435,7 @@ namespace Shielded
                 if (commutedItems != null)
                 {
                     _localItems.UnionWith(commutedItems);
-                    TransItems.Bag(commutedItems);
+                    TransItems.Bag(ref commutedItems);
                 }
             }
         }
@@ -490,7 +496,7 @@ namespace Shielded
                         fx.Rollback();
             }
 
-            TransItems.Bag(items);
+            TransItems.Bag(ref items);
             TrimCopies();
             return commit;
         }
@@ -508,7 +514,7 @@ namespace Shielded
                 foreach (var fx in items.Fx)
                     fx.Rollback();
 
-            TransItems.Bag(items);
+            TransItems.Bag(ref items);
             TrimCopies();
         }
 
