@@ -342,6 +342,91 @@ namespace ConsoleTests
                 time, total, totalCorrect ? "correct" : "incorrect");
         }
 
+        public static void BetShopPoolTest()
+        {
+            int numThreads = 50;
+            int numTickets = 50000;
+            int numEvents = 100;
+            var barrier = new Barrier(2);
+            var betShop = new BetShop(numEvents);
+            var randomizr = new Random();
+            int reportEvery = 1000;
+            //Shielded<int> nextReport = new Shielded<int>(reportEvery);
+
+            //Shield.Conditional(() => betShop.TicketCount >= nextReport, () =>
+            //{
+            //    nextReport.Modify((ref int n) => n += reportEvery);
+            //    Shield.SideEffect(() =>
+            //    {
+            //        Console.Write(" {0}..", betShop.TicketCount);
+            //    });
+            //    return true;
+            //});
+            Shielded<int> lastReport = new Shielded<int>(0);
+            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
+
+            Shield.Conditional(() => betShop.TicketCount >= lastReport + reportEvery, () =>
+            {
+                DateTime newNow = DateTime.UtcNow;
+                int count = betShop.TicketCount;
+                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
+                lastTime.Assign(newNow);
+                lastReport.Modify((ref int n) => n += reportEvery);
+                Shield.SideEffect(() =>
+                {
+                    Console.Write("\n{0} at {1} item/s", count, speed);
+                });
+                return true;
+            });
+
+
+            var bags = new List<Action>[numThreads];
+            var threads = new Thread[numThreads];
+            for (int i = 0; i < numThreads; i++)
+            {
+                var bag = bags[i] = new List<Action>();
+                threads[i] = new Thread(() => {
+                    foreach (var a in bag)
+                        a();
+                });
+            }
+
+            var complete = new Shielded<int>();
+            Shield.Conditional(() => complete == numTickets, () => {
+                barrier.SignalAndWait();
+                return false;
+            });
+            foreach (var i in Enumerable.Range(0, numTickets))
+            {
+                decimal payIn = (randomizr.Next(10) + 1m) * 1;
+                int event1Id = randomizr.Next(numEvents) + 1;
+                int event2Id = randomizr.Next(numEvents) + 1;
+                int event3Id = randomizr.Next(numEvents) + 1;
+                int offer1Ind = randomizr.Next(3);
+                int offer2Ind = randomizr.Next(3);
+                int offer3Ind = randomizr.Next(3);
+                bags[i % numThreads].Add(() => Shield.InTransaction(() =>
+                {
+                    var offer1 = betShop.Events[event1Id].Read.BetOffers[offer1Ind];
+                    var offer2 = betShop.Events[event2Id].Read.BetOffers[offer2Ind];
+                    var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
+                    betShop.BuyTicket(payIn, offer1, offer2, offer3);
+                    complete.Commute((ref int n) => n++);
+                }));
+            }
+            _timer = new Stopwatch();
+            _timer.Start();
+            for (int i = 0; i < numThreads; i++)
+                threads[i].Start();
+
+            barrier.SignalAndWait();
+            var time = _timer.ElapsedMilliseconds;
+            int total;
+            var totalCorrect = betShop.VerifyTickets(out total);
+            Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
+                time, total, totalCorrect ? "correct" : "incorrect");
+        }
+
         class TreeItem
         {
             public Guid Id = Guid.NewGuid();
@@ -576,7 +661,9 @@ namespace ConsoleTests
 
             //BetShopTest();
 
-            TreeTest();
+            BetShopPoolTest();
+
+            //TreeTest();
 
             //SkewTest();
 
