@@ -146,7 +146,7 @@ namespace Shielded
 
         private ConcurrentDictionary<TKey, long> _copies = new ConcurrentDictionary<TKey, long>();
 
-        bool IShielded.Commit(long? writeStamp)
+        void IShielded.Commit(long? writeStamp)
         {
             if (((IShielded)this).HasChanges)
             {
@@ -168,11 +168,8 @@ namespace Shielded
                     if (!_writeStamps.TryRemove(kvp.Key, out ourStamp) || ourStamp != writeStamp)
                         throw new ApplicationException("Commit from unexpected transaction");
                 }
-                _localDict.Value = null;
-                return true;
             }
             _localDict.Value = null;
-            return false;
         }
 
         void IShielded.Rollback(long? writeStamp)

@@ -661,9 +661,9 @@ namespace ConsoleTests
 
             //BetShopTest();
 
-            BetShopPoolTest();
+            //BetShopPoolTest();
 
-            //TreeTest();
+            TreeTest();
 
             //SkewTest();
 

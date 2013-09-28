@@ -146,7 +146,7 @@ namespace Shielded
             return false;
         }
         
-        bool IShielded.Commit(long? writeStamp)
+        void IShielded.Commit(long? writeStamp)
         {
             if (((IShielded)this).HasChanges)
             {
@@ -154,13 +154,10 @@ namespace Shielded
                 newCurrent.Older = _current;
                 newCurrent.Version = writeStamp.Value;
                 _current = newCurrent;
-                _locals.Value = null;
                 if (Interlocked.CompareExchange(ref _writerStamp, 0, writeStamp.Value) != writeStamp.Value)
                     throw new ApplicationException("Commit from unexpected transaction.");
-                return true;
             }
             _locals.Value = null;
-            return false;
         }
 
         void IShielded.Rollback(long? writeStamp)

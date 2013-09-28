@@ -479,11 +479,9 @@ namespace Shielded
             else if (CommitCheck(out writeStamp, out enlisted))
             {
                 var trigger = enlisted.Where(s => s.HasChanges).ToArray();
-                var copies = new List<IShielded>();
                 foreach (var item in enlisted)
-                    if (item.Commit(writeStamp))
-                        copies.Add(item);
-                RegisterCopies(writeStamp.Value, copies);
+                    item.Commit(writeStamp);
+                RegisterCopies(writeStamp.Value, trigger);
 
                 _transactions.Remove(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;
@@ -534,13 +532,13 @@ namespace Shielded
 
 
         // the long is their current version, but being in this list indicates they have something older.
-        private static ConcurrentQueue<Tuple<long, List<IShielded>>> _copiesByVersion =
-            new ConcurrentQueue<Tuple<long, List<IShielded>>>();
+        private static ConcurrentQueue<Tuple<long, IEnumerable<IShielded>>> _copiesByVersion =
+            new ConcurrentQueue<Tuple<long, IEnumerable<IShielded>>>();
 
-        private static void RegisterCopies(long version, List<IShielded> copies)
+        private static void RegisterCopies(long version, IEnumerable<IShielded> copies)
         {
             if (copies.Any())
-                _copiesByVersion.Enqueue(new Tuple<long, List<IShielded>>(version, copies));
+                _copiesByVersion.Enqueue(Tuple.Create(version, copies));
         }
 
         private static int _trimFlag = 0;
@@ -553,7 +551,7 @@ namespace Shielded
                 var lastStamp = Interlocked.Read(ref _lastStamp);
                 var minTransactionNo = _transactions.Min() ?? lastStamp;
 
-                Tuple<long, List<IShielded>> curr;
+                Tuple<long, IEnumerable<IShielded>> curr;
                 HashSet<IShielded> toTrim = new HashSet<IShielded>();
                 while (_copiesByVersion.TryPeek(out curr))
                 {

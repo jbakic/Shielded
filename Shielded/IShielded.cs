@@ -11,7 +11,7 @@ namespace Shielded
         // it should lock only if it HasChanges!
         bool CanCommit(long writeStamp);
         // if no changes were made anywhere, this is called directly with a null stamp.
-        bool Commit(long? writeStamp);
+        void Commit(long? writeStamp);
         void Rollback(long? writeStamp = null);
         void TrimCopies(long smallestOpenTransactionId);
     }
