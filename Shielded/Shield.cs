@@ -419,8 +419,9 @@ namespace Shielded
                             if (commEnlisted != null)
                                 foreach (var item in commEnlisted)
                                     item.Rollback(writeStamp);
-                            foreach (var item in enlisted)
-                                item.Rollback(writeStamp);
+                            if (!brokeInCommutes)
+                                foreach (var item in enlisted)
+                                    item.Rollback(writeStamp);
                             throw;
                         }
                     }
