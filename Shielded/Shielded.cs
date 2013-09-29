@@ -147,15 +147,14 @@ namespace Shielded
         
         void IShielded.Commit()
         {
-            if (_locals.HasValue)
-            {
-                var newCurrent = _locals.Value;
-                newCurrent.Older = _current;
-                newCurrent.Version = _writerStamp.Item2;
-                _current = newCurrent;
-                _writerStamp = null;
-            }
+            if (!_locals.HasValue)
+                return;
+            var newCurrent = _locals.Value;
+            newCurrent.Older = _current;
+            newCurrent.Version = _writerStamp.Item2;
+            _current = newCurrent;
             _locals.Value = null;
+            _writerStamp = null;
         }
 
         void IShielded.Rollback()
