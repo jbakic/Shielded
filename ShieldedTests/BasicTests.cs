@@ -63,17 +63,31 @@ namespace ShieldedTests
             var x = new Shielded<int>();
             int transactionCount = 0;
             Task.WaitAll(
-                Enumerable.Repeat(1, 100).Select(i => Task.Factory.StartNew(() =>
+                Enumerable.Range(1, 100).Select(i => Task.Factory.StartNew(() =>
                 {
-                    Shield.InTransaction(() =>
+                    bool committed = false;
+                    try
                     {
-                        Interlocked.Increment(ref transactionCount);
-                        int a = x;
-                        Thread.Sleep(5);
-                        x.Assign(a + i);
-                    });
+                        Shield.InTransaction(() =>
+                        {
+                            Shield.SideEffect(() => { committed = true; });
+                            Interlocked.Increment(ref transactionCount);
+                            int a = x;
+                            Thread.Sleep(5);
+                            x.Assign(a + i);
+                            if (i == 100)
+                                throw new InvalidOperationException();
+                        });
+                        Assert.AreNotEqual(100, i);
+                        Assert.IsTrue(committed);
+                    }
+                    catch
+                    {
+                        Assert.AreEqual(100, i);
+                        Assert.IsFalse(committed);
+                    }
                 }, TaskCreationOptions.LongRunning)).ToArray());
-            Assert.AreEqual(100, x);
+            Assert.AreEqual(4950, x);
             // just to confirm validity of test! not really a fail if this fails.
             Assert.Greater(transactionCount, 100);
         }
