@@ -138,7 +138,7 @@ namespace Shielded
                 return false;
             else if (_current.Version <= Shield.CurrentTransactionStartStamp)
             {
-                if (((IShielded)this).HasChanges)
+                if (_locals.HasValue)
                     _writerStamp = writeStamp;
                 return true;
             }
@@ -147,7 +147,7 @@ namespace Shielded
         
         void IShielded.Commit()
         {
-            if (((IShielded)this).HasChanges)
+            if (_locals.HasValue)
             {
                 var newCurrent = _locals.Value;
                 newCurrent.Older = _current;

@@ -659,11 +659,11 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
             //BetShopPoolTest();
 
-            TreeTest();
+            //TreeTest();
 
             //SkewTest();
 

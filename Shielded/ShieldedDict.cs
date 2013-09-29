@@ -145,7 +145,7 @@ namespace Shielded
 
         void IShielded.Commit()
         {
-            if (((IShielded)this).HasChanges)
+            if (_localDict.Value.Items != null)
             {
                 foreach (var kvp in _localDict.Value.Items)
                 {
