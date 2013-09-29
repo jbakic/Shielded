@@ -32,8 +32,8 @@ namespace Shielded
         }
 
         private readonly ConcurrentDictionary<TKey, ItemKeeper> _dict;
-        private readonly ConcurrentDictionary<TKey, long> _writeStamps
-            = new ConcurrentDictionary<TKey, long>();
+        private readonly ConcurrentDictionary<TKey, Tuple<int, long>> _writeStamps
+            = new ConcurrentDictionary<TKey, Tuple<int, long>>();
         private LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
 
         public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items)
@@ -53,8 +53,8 @@ namespace Shielded
             var stamp = Shield.CurrentTransactionStartStamp;
             SpinWait.SpinUntil(() =>
             {
-                long w;
-                return !_writeStamps.TryGetValue(key, out w) || w > stamp;
+                Tuple<int, long> w;
+                return !_writeStamps.TryGetValue(key, out w) || w.Item2 > stamp;
             });
             Shield.Enlist(this);
         }
@@ -137,7 +137,7 @@ namespace Shielded
                 if (_localDict.Value.Items != null)
                     foreach (var key in _localDict.Value.Items.Keys)
                     {
-                        if (!_writeStamps.TryAdd(key, writeStamp))
+                        if (!_writeStamps.TryAdd(key, Tuple.Create(Thread.CurrentThread.ManagedThreadId, writeStamp)))
                             throw new ApplicationException("Another transaction already has write lock on this key!");
                     }
                 return true;
@@ -146,41 +146,40 @@ namespace Shielded
 
         private ConcurrentDictionary<TKey, long> _copies = new ConcurrentDictionary<TKey, long>();
 
-        void IShielded.Commit(long? writeStamp)
+        void IShielded.Commit()
         {
             if (((IShielded)this).HasChanges)
             {
                 foreach (var kvp in _localDict.Value.Items)
                 {
+                    var ws = _writeStamps[kvp.Key];
                     ItemKeeper v = null;
                     _dict.TryGetValue(kvp.Key, out v);
                     var newCurrent = new ItemKeeper()
                     {
                         Value = kvp.Value,
-                        Version = writeStamp.Value,
+                        Version = ws.Item2,
                         Older = v
                     };
                     lock (_dict)
                         _dict[kvp.Key] = newCurrent;
-                    _copies[kvp.Key] = writeStamp.Value;
+                    _copies[kvp.Key] = ws.Item2;
 
-                    long ourStamp;
-                    if (!_writeStamps.TryRemove(kvp.Key, out ourStamp) || ourStamp != writeStamp)
-                        throw new ApplicationException("Commit from unexpected transaction");
+                    _writeStamps.TryRemove(kvp.Key, out ws);
                 }
             }
             _localDict.Value = null;
         }
 
-        void IShielded.Rollback(long? writeStamp)
+        void IShielded.Rollback()
         {
             if (!_localDict.HasValue)
                 return;
-            if (_localDict.Value.Items != null && writeStamp.HasValue)
+            if (_localDict.Value.Items != null)
             {
-                long ws;
+                Tuple<int, long> ws;
                 foreach (var key in _localDict.Value.Items.Keys)
-                    if (_writeStamps.TryGetValue(key, out ws) && ws == writeStamp.Value)
+                    if (_writeStamps.TryGetValue(key, out ws) && ws.Item1 == Thread.CurrentThread.ManagedThreadId)
                         _writeStamps.TryRemove(key, out ws);
             }
             _localDict.Value = null;

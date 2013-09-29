@@ -7,12 +7,11 @@ namespace Shielded
         bool HasChanges { get; }
         // this locks the implementor. All reads with >stamp are
         // spinwaited, all other threads' CanCommits() return false,
-        // and only a Commit() or Rollback() (with the same stamp) release it.
+        // and only a Commit() or Rollback() release it.
         // it should lock only if it HasChanges!
         bool CanCommit(long writeStamp);
-        // if no changes were made anywhere, this is called directly with a null stamp.
-        void Commit(long? writeStamp);
-        void Rollback(long? writeStamp = null);
+        void Commit();
+        void Rollback();
         void TrimCopies(long smallestOpenTransactionId);
     }
 

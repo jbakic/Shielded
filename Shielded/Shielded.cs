@@ -20,7 +20,7 @@ namespace Shielded
         
         private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
-        private long _writerStamp;
+        private volatile Tuple<int, long> _writerStamp;
         private LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
 
         public Shielded()
@@ -39,8 +39,8 @@ namespace Shielded
             var stamp = Shield.CurrentTransactionStartStamp;
             SpinWait.SpinUntil(() =>
             {
-                var w = Interlocked.Read(ref _writerStamp);
-                return w == 0 || w > stamp;
+                var w = _writerStamp;
+                return w == null || w.Item2 > stamp;
             });
             Shield.Enlist(this);
         }
@@ -134,37 +134,38 @@ namespace Shielded
         
         bool IShielded.CanCommit(long writeStamp)
         {
-            // these can be non-interlocked, since we're under lock.
-            if (_writerStamp != 0)
+            if (_writerStamp != null)
                 return false;
             else if (_current.Version <= Shield.CurrentTransactionStartStamp)
             {
                 if (((IShielded)this).HasChanges)
-                    _writerStamp = writeStamp;
+                    _writerStamp = Tuple.Create(Thread.CurrentThread.ManagedThreadId, writeStamp);
                 return true;
             }
             return false;
         }
         
-        void IShielded.Commit(long? writeStamp)
+        void IShielded.Commit()
         {
             if (((IShielded)this).HasChanges)
             {
                 var newCurrent = _locals.Value;
                 newCurrent.Older = _current;
-                newCurrent.Version = writeStamp.Value;
+                newCurrent.Version = _writerStamp.Item2;
                 _current = newCurrent;
-                if (Interlocked.CompareExchange(ref _writerStamp, 0, writeStamp.Value) != writeStamp.Value)
-                    throw new ApplicationException("Commit from unexpected transaction.");
+                _writerStamp = null;
             }
             _locals.Value = null;
         }
 
-        void IShielded.Rollback(long? writeStamp)
+        void IShielded.Rollback()
         {
+            if (!_locals.HasValue)
+                return;
             _locals.Value = null;
-            if (writeStamp.HasValue)
-                Interlocked.CompareExchange(ref _writerStamp, 0, writeStamp.Value);
+            var ws = _writerStamp;
+            if (ws != null && ws.Item1 == Thread.CurrentThread.ManagedThreadId)
+                _writerStamp = null;
         }
         
         void IShielded.TrimCopies(long smallestOpenTransactionId)

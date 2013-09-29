@@ -387,7 +387,7 @@ namespace Shielded
                                         commit = false;
                                         rolledBack = i - 1;
                                         for (int j = rolledBack; j >= 0; j--)
-                                            commEnlisted[j].Rollback(writeStamp.Value);
+                                            commEnlisted[j].Rollback();
                                         break;
                                     }
                             }
@@ -402,10 +402,10 @@ namespace Shielded
                                         commit = false;
                                         rolledBack = i - 1;
                                         for (int j = i - 1; j >= 0; j--)
-                                            enlisted[j].Rollback(writeStamp.Value);
+                                            enlisted[j].Rollback();
                                         if (commEnlisted != null)
                                             for (int j = 0; j < commEnlisted.Count; j++)
-                                                commEnlisted[j].Rollback(writeStamp.Value);
+                                                commEnlisted[j].Rollback();
                                         break;
                                     }
 
@@ -415,13 +415,13 @@ namespace Shielded
                         }
                         catch
                         {
-                            // we roll them all back. it's important to get rid of the write lock.
+                            // we roll them all back. it's good to get rid of the write lock.
                             if (commEnlisted != null)
                                 foreach (var item in commEnlisted)
-                                    item.Rollback(writeStamp);
+                                    item.Rollback();
                             if (!brokeInCommutes)
                                 foreach (var item in enlisted)
-                                    item.Rollback(writeStamp);
+                                    item.Rollback();
                             throw;
                         }
                     }
@@ -429,10 +429,10 @@ namespace Shielded
                     {
                         if (brokeInCommutes)
                             for (int i = rolledBack + 1; i < commEnlisted.Count; i++)
-                                commEnlisted[i].Rollback(null);
+                                commEnlisted[i].Rollback();
                         else
                             for (int i = rolledBack + 1; i < enlisted.Count; i++)
-                                enlisted[i].Rollback(null);
+                                enlisted[i].Rollback();
                     }
                 } while (brokeInCommutes);
 
@@ -465,7 +465,7 @@ namespace Shielded
             if (!hasChanges)
             {
                 foreach (var item in items.Enlisted)
-                    item.Commit(null);
+                    item.Commit();
 
                 _transactions.Remove(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;
@@ -480,7 +480,7 @@ namespace Shielded
             {
                 var trigger = enlisted.Where(s => s.HasChanges).ToArray();
                 foreach (var item in enlisted)
-                    item.Commit(writeStamp);
+                    item.Commit();
                 RegisterCopies(writeStamp.Value, trigger);
 
                 _transactions.Remove(_currentTransactionStartStamp.Value);
