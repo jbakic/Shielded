@@ -132,14 +132,14 @@ namespace Shielded
             }
         }
         
-        bool IShielded.CanCommit(long writeStamp)
+        bool IShielded.CanCommit(Tuple<int, long> writeStamp)
         {
             if (_writerStamp != null)
                 return false;
             else if (_current.Version <= Shield.CurrentTransactionStartStamp)
             {
                 if (((IShielded)this).HasChanges)
-                    _writerStamp = Tuple.Create(Thread.CurrentThread.ManagedThreadId, writeStamp);
+                    _writerStamp = writeStamp;
                 return true;
             }
             return false;

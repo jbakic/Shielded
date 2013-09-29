@@ -349,7 +349,7 @@ namespace Shielded
 
         private static object _stampLock = new object();
 
-        static bool CommitCheck(out long? writeStamp, out ICollection<IShielded> toCommit)
+        static bool CommitCheck(out Tuple<int, long> writeStamp, out ICollection<IShielded> toCommit)
         {
             var items = _localItems;
             List<IShielded> enlisted = items.Enlisted.ToList();
@@ -376,13 +376,14 @@ namespace Shielded
                     int rolledBack = -1;
                     lock (_stampLock)
                     {
-                        writeStamp = Interlocked.Read(ref _lastStamp) + 1;
+                        writeStamp = Tuple.Create(Thread.CurrentThread.ManagedThreadId,
+                                                  Interlocked.Read(ref _lastStamp) + 1);
                         try
                         {
                             if (commEnlisted != null)
                             {
                                 for (int i = 0; i < commEnlisted.Count; i++)
-                                    if (!commEnlisted[i].CanCommit(writeStamp.Value))
+                                    if (!commEnlisted[i].CanCommit(writeStamp))
                                     {
                                         commit = false;
                                         rolledBack = i - 1;
@@ -397,7 +398,7 @@ namespace Shielded
                                 _currentTransactionStartStamp = oldStamp;
                                 brokeInCommutes = false;
                                 for (int i = 0; i < enlisted.Count; i++)
-                                    if (!enlisted[i].CanCommit(writeStamp.Value))
+                                    if (!enlisted[i].CanCommit(writeStamp))
                                     {
                                         commit = false;
                                         rolledBack = i - 1;
@@ -459,7 +460,7 @@ namespace Shielded
             bool hasChanges = items.Enlisted.Any(s => s.HasChanges) ||
                 (items.Commutes != null && items.Commutes.Count > 0);
 
-            long? writeStamp = null;
+            Tuple<int, long> writeStamp = null;
             ICollection<IShielded> enlisted = null;
             bool commit = true;
             if (!hasChanges)
@@ -481,7 +482,7 @@ namespace Shielded
                 var trigger = enlisted.Where(s => s.HasChanges).ToArray();
                 foreach (var item in enlisted)
                     item.Commit();
-                RegisterCopies(writeStamp.Value, trigger);
+                RegisterCopies(writeStamp.Item2, trigger);
 
                 _transactions.Remove(_currentTransactionStartStamp.Value);
                 _currentTransactionStartStamp = null;

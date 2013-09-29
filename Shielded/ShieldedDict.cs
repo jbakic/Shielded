@@ -121,7 +121,7 @@ namespace Shielded
             }
         }
 
-        bool IShielded.CanCommit(long writeStamp)
+        bool IShielded.CanCommit(Tuple<int, long> writeStamp)
         {
             // locals were prepared when we enlisted.
             if (_localDict.Value.Reads.Any(key =>
@@ -136,10 +136,7 @@ namespace Shielded
                 // touch only the ones we plan to change
                 if (_localDict.Value.Items != null)
                     foreach (var key in _localDict.Value.Items.Keys)
-                    {
-                        if (!_writeStamps.TryAdd(key, Tuple.Create(Thread.CurrentThread.ManagedThreadId, writeStamp)))
-                            throw new ApplicationException("Another transaction already has write lock on this key!");
-                    }
+                        _writeStamps[key] = writeStamp;
                 return true;
             }
         }

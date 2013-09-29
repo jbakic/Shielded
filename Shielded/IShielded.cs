@@ -9,7 +9,8 @@ namespace Shielded
         // spinwaited, all other threads' CanCommits() return false,
         // and only a Commit() or Rollback() release it.
         // it should lock only if it HasChanges!
-        bool CanCommit(long writeStamp);
+        // Item1 is ManagedThreadId, the tuple is shared among items.
+        bool CanCommit(Tuple<int, long> writeStamp);
         void Commit();
         void Rollback();
         void TrimCopies(long smallestOpenTransactionId);
