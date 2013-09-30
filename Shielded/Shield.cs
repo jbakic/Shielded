@@ -468,9 +468,7 @@ namespace Shielded
                 foreach (var item in items.Enlisted)
                     item.Commit();
 
-                _transactions.Remove(_currentTransactionStartStamp.Value);
-                _currentTransactionStartStamp = null;
-                _localItems = null;
+                CloseTransaction();
 
                 if (items.Fx != null)
                     foreach (var fx in items.Fx)
@@ -480,13 +478,15 @@ namespace Shielded
             else if (CommitCheck(out writeStamp, out enlisted))
             {
                 var trigger = enlisted.Where(s => s.HasChanges).ToArray();
-                foreach (var item in enlisted)
-                    item.Commit();
-                RegisterCopies(writeStamp.Item2, trigger);
-
-                _transactions.Remove(_currentTransactionStartStamp.Value);
-                _currentTransactionStartStamp = null;
-                _localItems = null;
+                // this must not be interrupted by a Thread.Abort!
+                try { }
+                finally
+                {
+                    RegisterCopies(writeStamp.Item2, trigger);
+                    foreach (var item in enlisted)
+                        item.Commit();
+                    CloseTransaction();
+                }
 
                 TriggerSubscriptions(trigger);
 
@@ -498,10 +498,7 @@ namespace Shielded
             else
             {
                 commit = false;
-
-                _transactions.Remove(_currentTransactionStartStamp.Value);
-                _currentTransactionStartStamp = null;
-                _localItems = null;
+                CloseTransaction();
 
                 if (items.Fx != null)
                     foreach (var fx in items.Fx)
@@ -515,12 +512,10 @@ namespace Shielded
 
         private static void DoRollback()
         {
-            _transactions.Remove(_currentTransactionStartStamp.Value);
             var items = _localItems;
-            _localItems = null;
             foreach (var item in items.Enlisted)
                 item.Rollback();
-            _currentTransactionStartStamp = null;
+            CloseTransaction();
 
             if (items.Fx != null)
                 foreach (var fx in items.Fx)
@@ -528,6 +523,17 @@ namespace Shielded
 
             TransItems.Bag(ref items);
             TrimCopies();
+        }
+
+        private static void CloseTransaction()
+        {
+            try { }
+            finally
+            {
+                _transactions.Remove(_currentTransactionStartStamp.Value);
+                _currentTransactionStartStamp = null;
+                _localItems = null;
+            }
         }
 
 
