@@ -195,12 +195,18 @@ namespace Shielded
             do
             {
                 repeat = false;
-                _localItems = TransItems.BagOrNew();
-                _currentTransactionStartStamp = _transactions.SafeAdd(
-                    () => Interlocked.Read(ref _lastStamp));
-
                 try
                 {
+                    _localItems = TransItems.BagOrNew();
+                    // this should not be interrupted by an Abort. the moment between
+                    // adding the version into the list, and writing it into _current..
+                    try { }
+                    finally
+                    {
+                        _currentTransactionStartStamp = _transactions.SafeAdd(
+                            () => Interlocked.Read(ref _lastStamp));
+                    }
+
                     act();
                     if (!DoCommit())
                         repeat = true;
