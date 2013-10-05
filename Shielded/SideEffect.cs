@@ -13,10 +13,9 @@ namespace Shielded
             _rollbackFx = rollbackFx;
         }
 
-        public bool Commit()
+        public void Commit()
         {
             if (_fx != null) _fx();
-            return true;
         }
 
         public void Rollback()
