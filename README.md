@@ -71,7 +71,7 @@ without conflict by simply incrementing whatever value you encounter there
 at commit time. Using commutes, when appropriate, reduces conflicts and
 improves concurrency. Incrementing an int, conflict-free:
 
-        n.Commute((ref int n) => n++);
+        n.Commute((ref int a) => a++);
 
     * Commutes are not performed under any lock, but rather in a special
     commute subtransaction, which reads the latest data, and tries to
