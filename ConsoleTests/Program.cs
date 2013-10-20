@@ -238,13 +238,13 @@ namespace ConsoleTests
                             Shield.InTransaction(() =>
                             {
                                 Interlocked.Increment(ref transactionCounter);
-                                var v = dict[rnd];
+                                var v = dict.ContainsKey(rnd) ? dict[rnd] : null;
                                 int? num = v != null ? (int?)v.Read : null;
                                 Thread.Sleep(1);
                                 if (v == null)
                                     dict[rnd] = new Shielded<int>(1);
                                 else if (v.Read == -1)
-                                    dict[rnd] = null;
+                                    dict.Remove(rnd);
                                 else
                                     v.Modify((ref int a) => a = num.Value + 1);
                             }
@@ -259,13 +259,13 @@ namespace ConsoleTests
                             Shield.InTransaction(() =>
                             {
                                 Interlocked.Increment(ref transactionCounter);
-                                var v = dict[rnd];
+                                var v = dict.ContainsKey(rnd) ? dict[rnd] : null;
                                 int? num = v != null ? (int?)v.Read : null;
                                 Thread.Sleep(1);
                                 if (v == null)
                                     dict[rnd] = new Shielded<int>(-1);
                                 else if (v.Read == 1)
-                                    dict[rnd] = null;
+                                    dict.Remove(rnd);
                                 else
                                     v.Modify((ref int a) => a = num.Value - 1);
                             }
@@ -274,7 +274,7 @@ namespace ConsoleTests
                         TaskCreationOptions.LongRunning
                         );
                 });
-                var sum = Enumerable.Range(0, 100).Sum(n => dict[n] == null ? 0 : dict[n]);
+                var sum = Enumerable.Range(0, 100).Sum(n => dict.ContainsKey(n) ? dict[n] : 0);
                 Console.WriteLine(" {0} ms with {1} iterations and sum {2}.",
                     time, transactionCounter, sum);
             }
@@ -304,10 +304,10 @@ namespace ConsoleTests
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
 
-            Shield.Conditional(() => betShop.TicketCount >= lastReport + reportEvery, () =>
+            Shield.Conditional(() => betShop.Tickets.Count >= lastReport + reportEvery, () =>
             {
                 DateTime newNow = DateTime.UtcNow;
-                int count = betShop.TicketCount;
+                int count = betShop.Tickets.Count;
                 int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
                 lastTime.Assign(newNow);
                 lastReport.Modify((ref int n) => n += reportEvery);
@@ -336,10 +336,9 @@ namespace ConsoleTests
                     betShop.BuyTicket(payIn, offer1, offer2, offer3);
                 }));
             });
-            int total;
-            var totalCorrect = betShop.VerifyTickets(out total);
+            var totalCorrect = betShop.VerifyTickets();
             Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
-                time, total, totalCorrect ? "correct" : "incorrect");
+                time, betShop.Tickets.Count, totalCorrect ? "correct" : "incorrect");
         }
 
         public static void BetShopPoolTest()
@@ -365,10 +364,10 @@ namespace ConsoleTests
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
 
-            Shield.Conditional(() => betShop.TicketCount >= lastReport + reportEvery, () =>
+            Shield.Conditional(() => betShop.Tickets.Count >= lastReport + reportEvery, () =>
             {
                 DateTime newNow = DateTime.UtcNow;
-                int count = betShop.TicketCount;
+                int count = betShop.Tickets.Count;
                 int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
                 lastTime.Assign(newNow);
                 lastReport.Modify((ref int n) => n += reportEvery);
@@ -421,10 +420,9 @@ namespace ConsoleTests
 
             barrier.SignalAndWait();
             var time = _timer.ElapsedMilliseconds;
-            int total;
-            var totalCorrect = betShop.VerifyTickets(out total);
+            var totalCorrect = betShop.VerifyTickets();
             Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
-                time, total, totalCorrect ? "correct" : "incorrect");
+                time, betShop.Tickets.Count, totalCorrect ? "correct" : "incorrect");
         }
 
         class TreeItem

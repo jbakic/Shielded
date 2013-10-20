@@ -40,18 +40,9 @@ namespace ConsoleTests
 
     public class BetShop
     {
-        public int TicketCount
-        {
-            get
-            {
-                return TicketIdSeq.Count;
-            }
-        }
-
         public readonly ShieldedDict<int, Shielded<Event>> Events;
 
         private int _ticketIdGenerator = 0;
-        public readonly ShieldedSeq<int> TicketIdSeq = new ShieldedSeq<int>();
         public readonly ShieldedDict<int, Shielded<Ticket>> Tickets =
             new ShieldedDict<int, Shielded<Ticket>>();
         private ShieldedDict<string, decimal> _sameTicketWins =
@@ -94,12 +85,13 @@ namespace ConsoleTests
                 });
 
                 var hash = GetOfferHash(newTicket);
-                if (_sameTicketWins[hash] + newTicket.Read.WinAmount > SameTicketWinLimit)
+                var totalWin = _sameTicketWins.ContainsKey(hash) ?
+                    _sameTicketWins[hash] + newTicket.Read.WinAmount : newTicket.Read.WinAmount;
+                if (totalWin > SameTicketWinLimit)
                     return false;
 
                 Tickets[newId] = newTicket;
-                TicketIdSeq.Append(newId);
-                _sameTicketWins[hash] = _sameTicketWins[hash] + newTicket.Read.WinAmount;
+                _sameTicketWins[hash] = totalWin;
                 return true;
             }) ? (int?)newId : null;
         }
@@ -161,33 +153,27 @@ namespace ConsoleTests
         /// <summary>
         /// Checks if the rule about limiting same tickets was violated.
         /// </summary>
-        public bool VerifyTickets(out int ticketCount)
+        public bool VerifyTickets()
         {
-            int count = 0;
-            bool result = false;
-            Shield.InTransaction(() =>
+            return Shield.InTransaction(() =>
             {
                 Dictionary<string, decimal> checkTable = new Dictionary<string, decimal>();
-                count = 0;
-                foreach (var id in TicketIdSeq)
+                var count = 0;
+                foreach (var t in Tickets.Values)
                 {
-                    var t = Tickets[id];
                     var hash = GetOfferHash(t);
                     if (!checkTable.ContainsKey(hash))
                         checkTable[hash] = t.Read.WinAmount;
                     else
                         checkTable[hash] = checkTable[hash] + t.Read.WinAmount;
                     if (checkTable[hash] > SameTicketWinLimit)
-                    {
-                        result = false;
-                        return;
-                    }
+                        return false;
                     count++;
                 }
-                result = true;
+                if (Tickets.Count != count)
+                    throw new ApplicationException("Wrong Count!");
+                return true;
             });
-            ticketCount = count;
-            return result;
         }
     }
 }
