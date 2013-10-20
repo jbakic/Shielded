@@ -31,12 +31,11 @@ namespace ShieldedTests
                 var t = new Thread(() =>
                 {
                     Assert.IsFalse(Shield.IsInTransaction);
-                    x1 = dict[2];
+                    Assert.IsFalse(dict.ContainsKey(2));
                 });
                 t.Start();
                 t.Join();
 
-                Assert.IsNull(x1);
                 Assert.IsNotNull(dict[2]);
             });
 
@@ -56,6 +55,7 @@ namespace ShieldedTests
         {
             // a race over just one element
             var dict = new ShieldedDict<int, int>();
+            Shield.InTransaction(() => dict[1] = 0);
             int transactionCount = 0;
             Task.WaitAll(
                 Enumerable.Repeat(1, 100).Select(i => Task.Factory.StartNew(() =>
