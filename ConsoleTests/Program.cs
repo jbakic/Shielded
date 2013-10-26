@@ -274,7 +274,7 @@ namespace ConsoleTests
                         TaskCreationOptions.LongRunning
                         );
                 });
-                var sum = Enumerable.Range(0, 100).Sum(n => dict.ContainsKey(n) ? dict[n] : 0);
+                var sum = Enumerable.Range(0, 10).Sum(n => dict.ContainsKey(n) ? dict[n] : 0);
                 Console.WriteLine(" {0} ms with {1} iterations and sum {2}.",
                     time, transactionCounter, sum);
             }
@@ -655,9 +655,9 @@ namespace ConsoleTests
 
             //ControlledRace();
 
-            //DictionaryTest();
+            DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
             //BetShopPoolTest();
 

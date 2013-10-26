@@ -226,7 +226,7 @@ namespace Shielded
                     {
                         // point is the last accessible - his Older is not needed.
                         point.Older = null;
-                        if (point.Value == null)
+                        if (point.Empty)
                         {
                             if (pointNewer != null)
                                 pointNewer.Older = null;
@@ -351,10 +351,11 @@ namespace Shielded
 
         public bool ContainsKey(TKey key)
         {
+            ItemKeeper v;
             if (!Shield.IsInTransaction)
-                return _dict.ContainsKey(key);
+                return _dict.TryGetValue(key, out v) && !v.Empty;
 
-            var v = _localDict.HasValue && _localDict.Value.Items != null &&
+            v = _localDict.HasValue && _localDict.Value.Items != null &&
                 _localDict.Value.Items.ContainsKey(key) ?
                     _localDict.Value.Items[key] : CurrentTransactionOldValue(key);
             return v != null && !v.Empty;
