@@ -37,11 +37,21 @@ namespace Shielded
         private void CheckLockAndEnlist()
         {
             var stamp = Shield.CurrentTransactionStartStamp;
+#if SERVER
+            var w = _writerStamp;
+            if (w != null && w.Item2 <= stamp)
+                lock (_locals)
+                {
+                    if ((w = _writerStamp) != null && w.Item2 <= stamp)
+                        Monitor.Wait(_locals);
+                }
+#else
             SpinWait.SpinUntil(() =>
             {
                 var w = _writerStamp;
                 return w == null || w.Item2 > stamp;
             });
+#endif
             Shield.Enlist(this);
         }
 
@@ -154,7 +164,15 @@ namespace Shielded
             newCurrent.Version = _writerStamp.Item2;
             _current = newCurrent;
             _locals.Value = null;
+#if SERVER
+            lock (_locals)
+            {
+                _writerStamp = null;
+                Monitor.PulseAll(_locals);
+            }
+#else
             _writerStamp = null;
+#endif
         }
 
         void IShielded.Rollback()
@@ -164,7 +182,17 @@ namespace Shielded
             _locals.Value = null;
             var ws = _writerStamp;
             if (ws != null && ws.Item1 == Thread.CurrentThread.ManagedThreadId)
+            {
+#if SERVER
+                lock (_locals)
+                {
+                    _writerStamp = null;
+                    Monitor.PulseAll(_locals);
+                }
+#else
                 _writerStamp = null;
+#endif
+            }
         }
         
         void IShielded.TrimCopies(long smallestOpenTransactionId)

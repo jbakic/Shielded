@@ -55,11 +55,21 @@ namespace Shielded
         private void CheckLockAndEnlist(TKey key)
         {
             var stamp = Shield.CurrentTransactionStartStamp;
+#if SERVER
+            Tuple<int, long> w;
+            if (_writeStamps.TryGetValue(key, out w) && w.Item2 <= stamp)
+                lock (_localDict)
+                {
+                    while (_writeStamps.TryGetValue(key, out w) && w.Item2 <= stamp)
+                        Monitor.Wait(_localDict);
+                }
+#else
             SpinWait.SpinUntil(() =>
             {
                 Tuple<int, long> w;
                 return !_writeStamps.TryGetValue(key, out w) || w.Item2 > stamp;
             });
+#endif
             Shield.Enlist(this);
         }
 
@@ -183,7 +193,15 @@ namespace Shielded
                         _dict[kvp.Key] = newCurrent;
                     _copies[kvp.Key] = ws.Item2;
 
+#if SERVER
+                    lock (_localDict)
+                    {
+                        _writeStamps.TryRemove(kvp.Key, out ws);
+                        Monitor.PulseAll(_localDict);
+                    }
+#else
                     _writeStamps.TryRemove(kvp.Key, out ws);
+#endif
                 }
             }
             _localDict.Value = null;
@@ -196,9 +214,19 @@ namespace Shielded
             if (_localDict.Value.Items != null)
             {
                 Tuple<int, long> ws;
+#if SERVER
+                lock (_localDict)
+                {
+                    foreach (var key in _localDict.Value.Items.Keys)
+                        if (_writeStamps.TryGetValue(key, out ws) && ws.Item1 == Thread.CurrentThread.ManagedThreadId)
+                            _writeStamps.TryRemove(key, out ws);
+                    Monitor.PulseAll(_localDict);
+                }
+#else
                 foreach (var key in _localDict.Value.Items.Keys)
                     if (_writeStamps.TryGetValue(key, out ws) && ws.Item1 == Thread.CurrentThread.ManagedThreadId)
                         _writeStamps.TryRemove(key, out ws);
+#endif
             }
             _localDict.Value = null;
         }

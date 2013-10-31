@@ -343,7 +343,7 @@ namespace ConsoleTests
 
         public static void BetShopPoolTest()
         {
-            int numThreads = 50;
+            int numThreads = 100;
             int numTickets = 50000;
             int numEvents = 100;
             var barrier = new Barrier(2);
@@ -655,13 +655,13 @@ namespace ConsoleTests
 
             //ControlledRace();
 
-            DictionaryTest();
+            //DictionaryTest();
 
             //BetShopTest();
 
             //BetShopPoolTest();
 
-            //TreeTest();
+            TreeTest();
 
             //SkewTest();
 
