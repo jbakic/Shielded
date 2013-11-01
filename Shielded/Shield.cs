@@ -561,10 +561,16 @@ namespace Shielded
         private static int _trimFlag = 0;
         private static void TrimCopies()
         {
-            if (Interlocked.CompareExchange(ref _trimFlag, 1, 0) != 0)
-                return;
+            bool tookFlag = false;
             try
             {
+                try { }
+                finally
+                {
+                    tookFlag = Interlocked.CompareExchange(ref _trimFlag, 1, 0) == 0;
+                }
+                if (!tookFlag) return;
+
                 var lastStamp = Interlocked.Read(ref _lastStamp);
                 var minTransactionNo = _transactions.Min() ?? lastStamp;
 
@@ -586,7 +592,8 @@ namespace Shielded
             }
             finally
             {
-                Interlocked.Decrement(ref _trimFlag);
+                if (tookFlag)
+                    Interlocked.Decrement(ref _trimFlag);
             }
         }
 
