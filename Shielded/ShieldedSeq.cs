@@ -79,10 +79,21 @@ namespace Shielded
             {
                 Value = val
             };
-            _head.Assign(keeper);
-            if (_tail.Read == null)
+            if (_head.Read == null)
                 _tail.Assign(keeper);
+            _head.Assign(keeper);
             _count.Commute((ref int c) => c++);
+        }
+
+        public T Head
+        {
+            get
+            {
+                // single read => safe out of transaction.
+                var h = _head.Read;
+                if (h == null) throw new InvalidOperationException();
+                return h.Value;
+            }
         }
 
         public T TakeHead()
@@ -221,6 +232,8 @@ namespace Shielded
             Shield.AssertInTransaction();
             if (index == 0)
             {
+                if (_head.Read == null)
+                    throw new IndexOutOfRangeException();
                 Skip(_head);
                 if (_head.Read == null)
                     _tail.Assign(null);
