@@ -317,13 +317,13 @@ namespace Shielded
 
         private static void TriggerSubscriptions(IShielded[] changes)
         {
-            // for speed, when conditionals are not used.
-            if (_subscriptions.Count == 0)
-                return;
-
             HashSet<Shielded<CommitSubscription>> triggered = null;
             Shield.InTransaction(() =>
             {
+                // for speed, when conditionals are not used.
+                if (_subscriptions.Count == 0)
+                    return;
+
                 foreach (var item in changes)
                 {
                     ShieldedSeq<Shielded<CommitSubscription>> l;
