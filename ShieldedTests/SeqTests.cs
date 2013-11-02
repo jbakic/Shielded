@@ -22,6 +22,15 @@ namespace ShieldedTests
             for (int i = 0; i < 20; i++)
                 Assert.AreEqual(i + 1, seq [i]);
 
+            Shield.InTransaction(() => {
+                int i = 1;
+                foreach (int x in seq)
+                {
+                    Assert.AreEqual(i, x);
+                    i++;
+                }
+            });
+
             ParallelEnumerable.Range(0, 20)
                 .ForAll(n => Shield.InTransaction(
                     () => seq [n] = seq [n] + 20)
