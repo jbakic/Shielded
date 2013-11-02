@@ -347,7 +347,7 @@ namespace Shielded
                         bool test = false;
                         var testItems = IsolatedRun(() => test = subscription.Test());
 
-                        if (test && !sub.Read.Trans())
+                        if (test && !subscription.Trans())
                         {
                             RemoveSubscription(sub);
                             TransItems.Bag(ref testItems);
