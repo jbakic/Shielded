@@ -102,7 +102,10 @@ namespace ShieldedTests
             Assert.IsTrue(seq4.HasAny);
 
             for (int i = 0; i < 10; i++)
-                Shield.InTransaction(() => { seq4.TakeHead(); });
+            {
+                Assert.AreEqual(i + 1, seq4.Head);
+                Assert.AreEqual(i + 1, Shield.InTransaction(() => seq4.TakeHead()));
+            }
 
             try
             {
