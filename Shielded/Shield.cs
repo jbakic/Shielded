@@ -159,17 +159,29 @@ namespace Shielded
         /// Test and trans are executed in single transaction, and if the commit fails, test
         /// is also retried!
         /// </summary>
-        public static void Conditional(Func<bool> test, Func<bool> trans)
+        public static ConditionalHandle Conditional(Func<bool> test, Func<bool> trans)
         {
-            Shield.InTransaction(() =>
+            return Shield.InTransaction(() =>
             {
                 var items = IsolatedRun(() => test());
-                _subscriptions.Append(new Shielded<CommitSubscription>(new CommitSubscription()
+                var sub = new Shielded<CommitSubscription>(new CommitSubscription()
                 {
                     Items = items.Enlisted,
                     Test = test,
                     Trans = trans
-                }));
+                });
+                AddSubscription(sub);
+                return new ConditionalHandleInternal() { Sub = sub };
+            });
+        }
+
+        /// <summary>
+        /// Removes the subscription of a previously made Conditional.
+        /// </summary>
+        public static void CancelConditional(ConditionalHandle handle)
+        {
+            Shield.InTransaction(() => {
+                RemoveSubscription(((ConditionalHandleInternal)handle).Sub);
             });
         }
 
@@ -254,44 +266,104 @@ namespace Shielded
 
         #region Conditional impl
 
+        /// <summary>
+        /// Just a reference for users to be able to cancel conditionals. It's contents are
+        /// visible to the Shield only.
+        /// </summary>
+        public class ConditionalHandle
+        {
+            protected ConditionalHandle() {}
+        }
+
+        private class ConditionalHandleInternal : ConditionalHandle
+        {
+            public Shielded<CommitSubscription> Sub;
+        }
+
         private struct CommitSubscription
         {
             public HashSet<IShielded> Items;
             public Func<bool> Test;
             public Func<bool> Trans;
         }
-        private static ShieldedSeq<Shielded<CommitSubscription>> _subscriptions = new ShieldedSeq<Shielded<CommitSubscription>>();
+        private static ShieldedDict<IShielded, ShieldedSeq<Shielded<CommitSubscription>>> _subscriptions =
+            new ShieldedDict<IShielded, ShieldedSeq<Shielded<CommitSubscription>>>();
+
+        private static void AddSubscription(Shielded<CommitSubscription> sub, IEnumerable<IShielded> items = null)
+        {
+            foreach (var item in items != null ? items : sub.Read.Items)
+            {
+                ShieldedSeq<Shielded<CommitSubscription>> l;
+                if (!_subscriptions.TryGetValue(item, out l))
+                    _subscriptions.Add(item, new ShieldedSeq<Shielded<CommitSubscription>>(sub));
+                else
+                    l.Append(sub);
+            }
+        }
+
+        private static void RemoveSubscription(Shielded<CommitSubscription> sub, IEnumerable<IShielded> items = null)
+        {
+            foreach (var item in items != null ? items : sub.Read.Items)
+            {
+                var l = _subscriptions[item];
+                if (l.Count == 1)
+                    _subscriptions.Remove(item);
+                else
+                    l.Remove(sub);
+            }
+            if (items == null)
+                sub.Modify((ref CommitSubscription cs) => { cs.Items = null; });
+        }
 
         private static void TriggerSubscriptions(IShielded[] changes)
         {
-            Shielded<CommitSubscription>[] triggered = null;
+            // for speed, when conditionals are not used.
+            if (_subscriptions.Count == 0)
+                return;
+
+            HashSet<Shielded<CommitSubscription>> triggered = null;
             Shield.InTransaction(() =>
             {
-                triggered = _subscriptions.Where(s => s.Read.Items.Overlaps(changes)).ToArray();
+                foreach (var item in changes)
+                {
+                    ShieldedSeq<Shielded<CommitSubscription>> l;
+                    if (_subscriptions.TryGetValue(item, out l))
+                    {
+                        if (triggered == null)
+                            triggered = new HashSet<Shielded<CommitSubscription>>(l);
+                        else
+                            triggered.UnionWith(l);
+                    }
+                }
             });
 
-            foreach (var sub in triggered)
-                Shield.InTransaction(() =>
-                {
-                    int i = _subscriptions.IndexOf(sub);
-                    if (i < 0) return; // not subscribed anymore..
-
-                    var subscription = sub.Read;
-                    bool test = false;
-                    var testItems = IsolatedRun(() => test = subscription.Test());
-
-                    if (!testItems.Enlisted.SetEquals(subscription.Items))
+            if (triggered != null)
+                foreach (var sub in triggered)
+                    Shield.InTransaction(() =>
                     {
-                        sub.Modify((ref CommitSubscription cs) =>
+                        var subscription = sub.Read;
+                        if (subscription.Items == null) return; // not subscribed anymore..
+
+                        bool test = false;
+                        var testItems = IsolatedRun(() => test = subscription.Test());
+
+                        if (test && !sub.Read.Trans())
                         {
-                            cs.Items = testItems.Enlisted;
-                        });
-                    }
-                    else
-                        TransItems.Bag(ref testItems);
-                    if (test && !sub.Read.Trans())
-                        _subscriptions.RemoveAt(i);
-                });
+                            RemoveSubscription(sub);
+                            TransItems.Bag(ref testItems);
+                        }
+                        else if (!testItems.Enlisted.SetEquals(subscription.Items))
+                        {
+                            RemoveSubscription(sub, subscription.Items.Except(testItems.Enlisted));
+                            AddSubscription(sub, testItems.Enlisted.Except(subscription.Items));
+                            sub.Modify((ref CommitSubscription cs) =>
+                            {
+                                cs.Items = testItems.Enlisted;
+                            });
+                        }
+                        else
+                            TransItems.Bag(ref testItems);
+                    });
         }
 
         #endregion

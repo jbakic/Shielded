@@ -249,6 +249,32 @@ namespace Shielded
             _count.Commute((ref int c) => c--);
         }
 
+        public bool Remove(T item, IEqualityComparer<T> comp = null)
+        {
+            Shield.AssertInTransaction();
+            if (comp == null) comp = EqualityComparer<T>.Default;
+
+            var curr = _head;
+            ItemKeeper previous = null;
+            while (curr.Read != null)
+            {
+                if (comp.Equals(item, curr.Read.Value))
+                {
+                    _count.Commute((ref int c) => c--);
+                    if (_tail.Read == curr.Read)
+                        _tail.Assign(previous);
+                    Skip(curr);
+                    return true;
+                }
+                else
+                {
+                    previous = curr;
+                    curr = curr.Read.Next;
+                }
+            }
+            return false;
+        }
+
         public int IndexOf(T item, IEqualityComparer<T> comp = null)
         {
             if (comp == null)

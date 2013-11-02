@@ -130,6 +130,37 @@ namespace ShieldedTests
             Assert.IsFalse(seq4.HasAny);
             Assert.AreEqual(0, seq4.Count);
         }
+
+        [Test]
+        public void RemoveTest()
+        {
+            var seq = new ShieldedSeq<int>(
+                Enumerable.Range(1, 20).ToArray());
+            Shield.InTransaction(() => { seq.Remove(5); });
+
+            Assert.AreEqual(19, seq.Count);
+            Assert.IsTrue(seq.HasAny);
+            Assert.AreEqual(1, seq.Head);
+
+            for (int i = 1; i <= 20; i++)
+                if (i == 5)
+                    continue;
+                else
+                    Assert.AreEqual(i, seq[i > 5 ? i - 2 : i - 1]);
+
+            Shield.InTransaction(() => { seq.Remove(1); });
+
+            Assert.AreEqual(18, seq.Count);
+            Assert.IsTrue(seq.HasAny);
+            Assert.AreEqual(2, seq.Head);
+
+            Shield.InTransaction(() => { seq.Remove(20); });
+
+            Assert.AreEqual(17, seq.Count);
+            Assert.IsTrue(seq.HasAny);
+            Assert.AreEqual(2, seq.Head);
+            Assert.AreEqual(19, seq[16]);
+        }
     }
 }
 

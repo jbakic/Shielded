@@ -280,14 +280,14 @@ namespace Shielded
         }
 
         #region IEnumerable implementation
-        public System.Collections.IEnumerator GetEnumerator()
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
         {
             return ((IEnumerable<KeyValuePair<TKey, TItem>>)this).GetEnumerator();
         }
         #endregion
 
         #region IEnumerable implementation
-        IEnumerator<KeyValuePair<TKey, TItem>> IEnumerable<KeyValuePair<TKey, TItem>>.GetEnumerator()
+        public IEnumerator<KeyValuePair<TKey, TItem>> GetEnumerator()
         {
             Shield.AssertInTransaction();
             // force conflict if _count changes. even if it changes back to same value!

@@ -304,7 +304,7 @@ namespace ConsoleTests
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
 
-            Shield.Conditional(() => betShop.Tickets.Count >= lastReport + reportEvery, () =>
+            var reportingCond = Shield.Conditional(() => betShop.Tickets.Count >= lastReport + reportEvery, () =>
             {
                 DateTime newNow = DateTime.UtcNow;
                 int count = betShop.Tickets.Count;
@@ -336,6 +336,9 @@ namespace ConsoleTests
                     betShop.BuyTicket(payIn, offer1, offer2, offer3);
                 }));
             });
+
+            Shield.CancelConditional(reportingCond);
+
             var totalCorrect = betShop.VerifyTickets();
             Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
                 time, betShop.Tickets.Count, totalCorrect ? "correct" : "incorrect");
@@ -657,11 +660,11 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
             //BetShopPoolTest();
 
-            TreeTest();
+            //TreeTest();
 
             //SkewTest();
 
