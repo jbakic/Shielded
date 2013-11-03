@@ -388,6 +388,55 @@ namespace ShieldedTests
                 Assert.AreEqual(11, a);
                 Assert.AreEqual(12, b);
             });
+
+            // two examples of a commmute reading from a field, in one the main t also reads,
+            // in other not. this alters the behaviour, the main trans can conflict if it reads,
+            // but the final outcome is the same in both cases!
+            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); });
+            transactionCount = 0;
+            oneTimer = null;
+            Shield.InTransaction(() => {
+                transactionCount++;
+                b.Commute((ref int n) => n = a * 2);
+                if (oneTimer == null)
+                {
+                    oneTimer = new Thread(() => Shield.InTransaction(() =>
+                    {
+                        // multiplication is not really commutative with addition, of course :)
+                        a.Commute((ref int n) => n += 5);
+                    }));
+                    oneTimer.Start();
+                    oneTimer.Join();
+                }
+            });
+            Assert.AreEqual(1, transactionCount);
+            Assert.AreEqual(5, a);
+            Assert.AreEqual(10, b);
+
+            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); });
+            transactionCount = 0;
+            oneTimer = null;
+            Shield.InTransaction(() => {
+                transactionCount++;
+                b.Commute((ref int n) => n = a * 2);
+                if (oneTimer == null)
+                {
+                    oneTimer = new Thread(() => Shield.InTransaction(() =>
+                    {
+                        // multiplication is not really commutative with addition, of course :)
+                        a.Commute((ref int n) => n += 5);
+                    }));
+                    oneTimer.Start();
+                    oneTimer.Join();
+                }
+                // this causes the a to become fixed in this transaction, and the commute cannot
+                // succeed - a is still checked against the main trans version, and causes a complete
+                // rollback. after that, we read a == 5.
+                int x = a;
+            });
+            Assert.AreEqual(2, transactionCount);
+            Assert.AreEqual(5, a);
+            Assert.AreEqual(10, b);
         }
     }
 }
