@@ -12,7 +12,7 @@ namespace Shielded
     /// </summary>
     public class ConditionalHandle
     {
-        protected ConditionalHandle() {}
+        internal ConditionalHandle() {}
     }
 
     public static class Shield
