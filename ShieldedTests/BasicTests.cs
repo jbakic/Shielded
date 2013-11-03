@@ -232,8 +232,133 @@ namespace ShieldedTests
         [Test]
         public void ComplexCommute()
         {
-            // some more complex commute combinations.
+            // some more complex commute combinations. first, with ShieldedSeq ops.
             var seq = new ShieldedSeq<int>();
+
+            Shield.InTransaction(() => {
+                // test for potential disorder of the nested commute in ShieldedSeq.Append().
+                seq.Append(1);
+                seq.Clear();
+                // this triggers only the head commutes, but the nested count commute
+                // should immediately execute, in Append, before Clear()!
+                Assert.IsFalse(seq.HasAny);
+                Assert.AreEqual(0, seq.Count);
+            });
+
+            Shield.InTransaction(() => { seq.Append(1); seq.Append(2); });
+            Assert.AreEqual(1, seq[0]);
+            Assert.AreEqual(2, seq[1]);
+            int transactionCount = 0;
+            Thread oneTimer = null;
+            Shield.InTransaction(() => {
+                // here's a weird one - the seq is only partially commuted, due to reading
+                // from the head, but it still commutes with a trans that is only appending.
+                transactionCount++;
+                Assert.AreEqual(1, seq.TakeHead());
+                // Count or tail were not read! Clearing can commute with appending.
+                seq.Clear();
+                if (oneTimer == null)
+                {
+                    oneTimer = new Thread(() => Shield.InTransaction(() =>
+                    {
+                        seq.Append(3);
+                    }));
+                    oneTimer.Start();
+                    oneTimer.Join();
+                }
+            });
+            Assert.AreEqual(1, transactionCount);
+            Assert.AreEqual(0, seq.Count);
+            Assert.IsFalse(seq.HasAny);
+
+            Shield.InTransaction(() => { seq.Append(1); seq.Append(2); });
+            Assert.AreEqual(1, seq[0]);
+            Assert.AreEqual(2, seq[1]);
+            transactionCount = 0;
+            oneTimer = null;
+            Shield.InTransaction(() => {
+                // same as above, but with appending, whose tail and count commutes still
+                // remain if only the head was accessed.
+                transactionCount++;
+                Assert.AreEqual(1, seq.TakeHead());
+                seq.Append(4);
+                if (oneTimer == null)
+                {
+                    oneTimer = new Thread(() => Shield.InTransaction(() =>
+                    {
+                        seq.Append(3);
+                    }));
+                    oneTimer.Start();
+                    oneTimer.Join();
+                }
+            });
+            Assert.AreEqual(1, transactionCount);
+            Assert.AreEqual(3, seq.Count);
+            Assert.IsTrue(seq.HasAny);
+            Assert.AreEqual(2, seq[0]);
+            Assert.AreEqual(3, seq[1]);
+            Assert.AreEqual(4, seq[2]);
+
+            Shield.InTransaction(() => { seq.Clear(); seq.Append(1); seq.Append(2); });
+            Assert.AreEqual(1, seq[0]);
+            Assert.AreEqual(2, seq[1]);
+            transactionCount = 0;
+            oneTimer = null;
+            Shield.InTransaction(() => {
+                // if we switch the order, then Append outer commute degenerates later, and the nested
+                // commutes no longer work. we get retried.
+                // it's because it's difficult to know when a nested commute must execute, and when not.
+                // mostly so because we don't have records of what a commute listed right after Append
+                // might want to read, and so if Append is degenerating, it does so fully!
+                transactionCount++;
+                seq.Append(4);
+                Assert.AreEqual(1, seq.TakeHead());
+                if (oneTimer == null)
+                {
+                    oneTimer = new Thread(() => Shield.InTransaction(() =>
+                    {
+                        seq.Append(3);
+                    }));
+                    oneTimer.Start();
+                    oneTimer.Join();
+                }
+            });
+            Assert.AreEqual(2, transactionCount);
+            Assert.AreEqual(3, seq.Count);
+            Assert.IsTrue(seq.HasAny);
+            Assert.AreEqual(2, seq[0]);
+            Assert.AreEqual(3, seq[1]);
+            Assert.AreEqual(4, seq[2]);
+
+            Shield.InTransaction(() => { seq.Clear(); seq.Append(1); });
+            Assert.AreEqual(1, seq[0]);
+            transactionCount = 0;
+            oneTimer = null;
+            Shield.InTransaction(() => {
+                // here the removal takes out the last element in the list. this cannot
+                // commute, because it read from the only element's Next field, and the Seq
+                // knew that it was the last element. it must conflict.
+                transactionCount++;
+                Assert.AreEqual(1, seq.TakeHead());
+                seq.Append(3);
+                if (oneTimer == null)
+                {
+                    oneTimer = new Thread(() => Shield.InTransaction(() =>
+                    {
+                        seq.Append(2);
+                    }));
+                    oneTimer.Start();
+                    oneTimer.Join();
+                }
+            });
+            Assert.AreEqual(2, transactionCount);
+            Assert.AreEqual(2, seq.Count);
+            Assert.IsTrue(seq.HasAny);
+            Assert.AreEqual(2, seq[0]);
+            Assert.AreEqual(3, seq[1]);
+
+
+            // future peeking section:
 
             var a = new Shielded<int>();
             var b = new Shielded<int>();

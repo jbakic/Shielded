@@ -128,10 +128,14 @@ namespace Shielded
                 }
                 else
                 {
-                    _tail.Read.Next.Assign(newItem);
-                    _tail.Assign(newItem);
+                    // if the outer commute degenerates imediately, this commute may
+                    // still remain a commute.
+                    _tail.Commute((ref ItemKeeper t) => {
+                        t.Next.Assign(newItem);
+                        t = newItem;
+                    });
                 }
-                _count.Modify((ref int c) => c++);
+                _count.Commute((ref int c) => c++);
             }, _head, _tail, _count); // the commute degenerates if you read from the seq..
         }
 
