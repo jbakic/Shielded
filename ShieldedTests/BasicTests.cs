@@ -367,8 +367,7 @@ namespace ShieldedTests
                 // it triggers the middle commute, which in turn triggers both others. but, the middle
                 // commute code should see the effect of the first commute only!
                 a.Commute((ref int n) => n++);
-                // note that reading another Shielded is actually OK in a commute. writing, however, would
-                // behave unpredictably.
+                // note that reading another Shielded is actually OK in a commute.
                 b.Commute((ref int n) => n = a);
                 a.Commute((ref int n) => n++);
                 Assert.AreEqual(1, b);
@@ -437,6 +436,51 @@ namespace ShieldedTests
             Assert.AreEqual(2, transactionCount);
             Assert.AreEqual(5, a);
             Assert.AreEqual(10, b);
+
+
+            ////////////////////////////////////////////
+            // a test set confirming why all commutes must degenerate
+
+            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); c.Assign(0); });
+            Shield.InTransaction(() => {
+                // in this case, commutes are undisturbed, and execute last. both operate on same value.
+                a.Modify((ref int n) => n = 1);
+                c.Commute((ref int n) => n = a * 3);
+                b.Commute((ref int n) => n = a * 2);
+                a.Modify((ref int n) => n = 2);
+            });
+            Assert.AreEqual(2, a);
+            Assert.AreEqual(4, b);
+            Assert.AreEqual(6, c);
+
+            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); c.Assign(0); });
+            Shield.InTransaction(() => {
+                // in this case, it executes when the main trans asks for it's result, which is now sooner!
+                // but still, both operate on same value.
+                a.Modify((ref int n) => n = 1);
+                c.Commute((ref int n) => n = a * 3);
+                b.Commute((ref int n) => n = a * 2);
+                int x = b;
+                a.Modify((ref int n) => n = 2);
+            });
+            Assert.AreEqual(2, a);
+            Assert.AreEqual(2, b);
+            Assert.AreEqual(3, c);
+
+            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); });
+            Shield.InTransaction(() => {
+                // changing the order of commutes will not produce an effect - commuting
+                // only b would be doable here, but then b and c would after be seen derived from
+                // different values, even though they were defined one after another, nothing in between..
+                a.Modify((ref int n) => n = 1);
+                b.Commute((ref int n) => n = a * 2);
+                c.Commute((ref int n) => n = a * 3);
+                int x = b;
+                a.Modify((ref int n) => n = 2);
+            });
+            Assert.AreEqual(2, a);
+            Assert.AreEqual(2, b);
+            Assert.AreEqual(3, c);
         }
     }
 }

@@ -103,53 +103,34 @@ namespace Shielded
         [ThreadStatic]
         private static TransItems _localItems;
 
-        [ThreadStatic]
-        private static int? _commutingTo;
-
         internal static void Enlist(IShielded item)
         {
             AssertInTransaction();
             if (!_localItems.Enlisted.Add(item))
                 return;
             // does a commute have to degenerate?
-            if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
+            if (!_blockCommute &&
+                _localItems.Commutes != null && _localItems.Commutes.Count > 0)
             {
                 // commutes will, if untouched, execute one by one in the sub-transaction before commit.
-                // so, the safest thing, since any of them can read whatever, is to execute them one
-                // by one until the last one needed runs.
-                if (_commutingTo.HasValue)
-                {
-                    for (int i = _localItems.Commutes.Count - 1; i > _commutingTo; i--)
-                        if (_localItems.Commutes[i].Affecting.Contains(item))
-                        {
-                            _commutingTo = i;
-                            return;
-                        }
-                    return;
-                }
-
+                // so, the safest thing, since any of them can read whatever, is to execute them all!
+                // otherwise, behaviour is inconsistent.
+                // it's better not to construct a Func with a closure here, that takes time! manual checking:
+                int i = 0;
+                for (; i < _localItems.Commutes.Count; i++)
+                    if (_localItems.Commutes[i].Affecting.Contains(item))
+                        break;
+                if (i == _localItems.Commutes.Count) return;
                 try
                 {
                     _blockCommute = true;
-                    for (int i = _localItems.Commutes.Count - 1; i >= 0; i--)
-                        if (_localItems.Commutes[i].Affecting.Contains(item))
-                        {
-                            _commutingTo = i;
-                            break;
-                        }
-
-                    if (_commutingTo.HasValue)
-                        for (int i = 0; i <= _commutingTo; i++)
-                            _localItems.Commutes[i].Perform();
+                    foreach (var comm in _localItems.Commutes)
+                        comm.Perform();
+                    _localItems.Commutes.Clear();
                 }
                 finally
                 {
                     _blockCommute = false;
-                    if (_commutingTo.HasValue)
-                    {
-                        _localItems.Commutes.RemoveRange(0, _commutingTo.Value + 1);
-                        _commutingTo = null;
-                    }
                 }
             }
         }
