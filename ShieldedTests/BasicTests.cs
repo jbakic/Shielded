@@ -228,6 +228,42 @@ namespace ShieldedTests
             });
             Assert.AreEqual(99, a);
         }
+
+        [Test]
+        public void ComplexCommute()
+        {
+            // some more complex commute combinations.
+            var seq = new ShieldedSeq<int>();
+
+            var a = new Shielded<int>();
+            var b = new Shielded<int>();
+            Shield.InTransaction(() => {
+                // this is a "peek into the future" test for commutes - when we read b at the end,
+                // it triggers the middle commute, which in turn triggers both others. but, the middle
+                // commute code should see the effect of the first commute only!
+                a.Commute((ref int n) => n++);
+                // note that reading another Shielded is actually OK in a commute. writing, however, would
+                // behave unpredictably.
+                b.Commute((ref int n) => n = a);
+                a.Commute((ref int n) => n++);
+                Assert.AreEqual(1, b);
+                Assert.AreEqual(2, a);
+            });
+
+            var c = new Shielded<int>();
+            Shield.InTransaction(() => {
+                // nested "peek into the future"
+                a.Assign(0);
+                b.Commute((ref int n) => n = a + 1);
+                a.Assign(10);
+                c.Commute((ref int n) => n = a + b);
+                a.Commute((ref int n) => n += b);
+                b.Commute((ref int n) => n = a + 1);
+                Assert.AreEqual(11, c);
+                Assert.AreEqual(11, a);
+                Assert.AreEqual(12, b);
+            });
+        }
     }
 }
 

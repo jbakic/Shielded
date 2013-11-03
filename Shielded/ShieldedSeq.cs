@@ -131,8 +131,7 @@ namespace Shielded
                     _tail.Read.Next.Assign(newItem);
                     _tail.Assign(newItem);
                 }
-                // in case the big one degenerates, this one does not necessarily have to.
-                _count.Commute((ref int c) => c++);
+                _count.Modify((ref int c) => c++);
             }, _head, _tail, _count); // the commute degenerates if you read from the seq..
         }
 

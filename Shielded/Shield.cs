@@ -6,6 +6,15 @@ using System.Linq;
 
 namespace Shielded
 {
+    /// <summary>
+    /// Just a reference for users to be able to cancel conditionals. It's contents are
+    /// visible to the Shield only.
+    /// </summary>
+    public class ConditionalHandle
+    {
+        protected ConditionalHandle() {}
+    }
+
     public static class Shield
     {
         private static long _lastStamp;
@@ -94,6 +103,9 @@ namespace Shielded
         [ThreadStatic]
         private static TransItems _localItems;
 
+        [ThreadStatic]
+        private static int? _commutingTo;
+
         internal static void Enlist(IShielded item)
         {
             AssertInTransaction();
@@ -102,19 +114,43 @@ namespace Shielded
             // does a commute have to degenerate?
             if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
             {
-                // first remove all, to avoid potential problems with commtes executing out of order of calling.
-                var commutes = new List<Commute>();
-                for (int i=0; i < _localItems.Commutes.Count; )
-                    if (_localItems.Commutes[i].Affecting.Contains(item))
-                    {
-                        commutes.Add(_localItems.Commutes[i]);
-                        _localItems.Commutes.RemoveAt(i);
-                    }
-                    else
-                        i++;
+                // commutes will, if untouched, execute one by one in the sub-transaction before commit.
+                // so, the safest thing, since any of them can read whatever, is to execute them one
+                // by one until the last one needed runs.
+                if (_commutingTo.HasValue)
+                {
+                    for (int i = _localItems.Commutes.Count - 1; i > _commutingTo; i--)
+                        if (_localItems.Commutes[i].Affecting.Contains(item))
+                        {
+                            _commutingTo = i;
+                            return;
+                        }
+                    return;
+                }
 
-                foreach (var comm in commutes)
-                    comm.Perform();
+                try
+                {
+                    _blockCommute = true;
+                    for (int i = _localItems.Commutes.Count - 1; i >= 0; i--)
+                        if (_localItems.Commutes[i].Affecting.Contains(item))
+                        {
+                            _commutingTo = i;
+                            break;
+                        }
+
+                    if (_commutingTo.HasValue)
+                        for (int i = 0; i <= _commutingTo; i++)
+                            _localItems.Commutes[i].Perform();
+                }
+                finally
+                {
+                    _blockCommute = false;
+                    if (_commutingTo.HasValue)
+                    {
+                        _localItems.Commutes.RemoveRange(0, _commutingTo.Value + 1);
+                        _commutingTo = null;
+                    }
+                }
             }
         }
 
@@ -265,15 +301,6 @@ namespace Shielded
         }
 
         #region Conditional impl
-
-        /// <summary>
-        /// Just a reference for users to be able to cancel conditionals. It's contents are
-        /// visible to the Shield only.
-        /// </summary>
-        public class ConditionalHandle
-        {
-            protected ConditionalHandle() {}
-        }
 
         private class ConditionalHandleInternal : ConditionalHandle
         {
@@ -450,8 +477,9 @@ namespace Shielded
                     if (items.Commutes != null && items.Commutes.Any())
                     {
                         RunCommutes(out commutedItems);
-                        if (commutedItems.Enlisted.Overlaps(enlisted))
-                            throw new ApplicationException("Incorrect commute affecting list, conflict with transaction.");
+                        // if in conflict with main trans, it has advantage, i.e. the criteria for intersecting
+                        // fields is the stricter one.
+                        commutedItems.Enlisted.ExceptWith(enlisted);
                         commEnlisted = commutedItems.Enlisted.ToList();
                     }
 
