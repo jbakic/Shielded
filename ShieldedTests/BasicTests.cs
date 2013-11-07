@@ -236,11 +236,9 @@ namespace ShieldedTests
             var seq = new ShieldedSeq<int>();
 
             Shield.InTransaction(() => {
-                // test for potential disorder of the nested commute in ShieldedSeq.Append().
+                // test for potential disorder of the seq commutes.
                 seq.Append(1);
                 seq.Clear();
-                // this triggers only the head commutes, but the nested count commute
-                // should immediately execute, in Append, before Clear()!
                 Assert.IsFalse(seq.HasAny);
                 Assert.AreEqual(0, seq.Count);
             });
@@ -277,8 +275,8 @@ namespace ShieldedTests
             transactionCount = 0;
             oneTimer = null;
             Shield.InTransaction(() => {
-                // same as above, but with appending, whose tail and count commutes still
-                // remain if only the head was accessed.
+                // same as above, but with appending, does not work. reading the _head screws it up,
+                // because you could continue from the head to the last item.
                 transactionCount++;
                 Assert.AreEqual(1, seq.TakeHead());
                 seq.Append(4);
@@ -292,7 +290,7 @@ namespace ShieldedTests
                     oneTimer.Join();
                 }
             });
-            Assert.AreEqual(1, transactionCount);
+            Assert.AreEqual(2, transactionCount);
             Assert.AreEqual(3, seq.Count);
             Assert.IsTrue(seq.HasAny);
             Assert.AreEqual(2, seq[0]);
@@ -305,11 +303,7 @@ namespace ShieldedTests
             transactionCount = 0;
             oneTimer = null;
             Shield.InTransaction(() => {
-                // if we switch the order, then Append outer commute degenerates later, and the nested
-                // commutes no longer work. we get retried.
-                // it's because it's difficult to know when a nested commute must execute, and when not.
-                // mostly so because we don't have records of what a commute listed right after Append
-                // might want to read, and so if Append is degenerating, it does so fully!
+                // if we switch the order, doesn't matter.
                 transactionCount++;
                 seq.Append(4);
                 Assert.AreEqual(1, seq.TakeHead());
@@ -358,129 +352,42 @@ namespace ShieldedTests
             Assert.AreEqual(3, seq[1]);
 
 
-            // future peeking section:
+            // it is not allowed to read another Shielded from a Shielded.Commute()!
+            // this greatly simplifies things. if you still want to use a value from another
+            // Shielded, you must read it in main trans, forcing it's commutes to degenerate.
 
             var a = new Shielded<int>();
             var b = new Shielded<int>();
+            try
+            {
+                Shield.InTransaction(() => {
+                    a.Commute((ref int n) => n = 1);
+                    b.Commute((ref int n) => n = a);
+                });
+                Assert.Fail();
+            }
+            catch (InvalidOperationException) {}
+
+            try
+            {
+                Shield.InTransaction(() => {
+                    a.Commute((ref int n) => n = 1);
+                    b.Commute((ref int n) => { n = 1; a.Commute((ref int n2) => n2 = 2); });
+                });
+                Assert.Fail();
+            }
+            catch (InvalidOperationException) {}
+
             Shield.InTransaction(() => {
-                // this is a "peek into the future" test for commutes - when we read b at the end,
-                // it triggers the middle commute, which in turn triggers both others. but, the middle
-                // commute code should see the effect of the first commute only!
-                a.Commute((ref int n) => n++);
-                // note that reading another Shielded is actually OK in a commute.
+                a.Commute((ref int n) => n = 1);
                 b.Commute((ref int n) => n = a);
-                a.Commute((ref int n) => n++);
-                Assert.AreEqual(1, b);
-                Assert.AreEqual(2, a);
-            });
-
-            var c = new Shielded<int>();
-            Shield.InTransaction(() => {
-                // nested "peek into the future"
-                a.Assign(0);
-                b.Commute((ref int n) => n = a + 1);
-                a.Assign(10);
-                c.Commute((ref int n) => n = a + b);
-                a.Commute((ref int n) => n += b);
-                b.Commute((ref int n) => n = a + 1);
-                Assert.AreEqual(11, c);
-                Assert.AreEqual(11, a);
-                Assert.AreEqual(12, b);
-            });
-
-            // two examples of a commmute reading from a field, in one the main t also reads,
-            // in other not. this alters the behaviour, the main trans can conflict if it reads,
-            // but the final outcome is the same in both cases!
-            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); });
-            transactionCount = 0;
-            oneTimer = null;
-            Shield.InTransaction(() => {
-                transactionCount++;
-                b.Commute((ref int n) => n = a * 2);
-                if (oneTimer == null)
+                try
                 {
-                    oneTimer = new Thread(() => Shield.InTransaction(() =>
-                    {
-                        // multiplication is not really commutative with addition, of course :)
-                        a.Commute((ref int n) => n += 5);
-                    }));
-                    oneTimer.Start();
-                    oneTimer.Join();
+                    var x = b.Read;
+                    Assert.Fail();
                 }
+                catch (InvalidOperationException) {}
             });
-            Assert.AreEqual(1, transactionCount);
-            Assert.AreEqual(5, a);
-            Assert.AreEqual(10, b);
-
-            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); });
-            transactionCount = 0;
-            oneTimer = null;
-            Shield.InTransaction(() => {
-                transactionCount++;
-                b.Commute((ref int n) => n = a * 2);
-                if (oneTimer == null)
-                {
-                    oneTimer = new Thread(() => Shield.InTransaction(() =>
-                    {
-                        // multiplication is not really commutative with addition, of course :)
-                        a.Commute((ref int n) => n += 5);
-                    }));
-                    oneTimer.Start();
-                    oneTimer.Join();
-                }
-                // this causes the a to become fixed in this transaction, and the commute cannot
-                // succeed - a is still checked against the main trans version, and causes a complete
-                // rollback. after that, we read a == 5.
-                int x = a;
-            });
-            Assert.AreEqual(2, transactionCount);
-            Assert.AreEqual(5, a);
-            Assert.AreEqual(10, b);
-
-
-            ////////////////////////////////////////////
-            // a test set confirming why all commutes must degenerate
-
-            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); c.Assign(0); });
-            Shield.InTransaction(() => {
-                // in this case, commutes are undisturbed, and execute last. both operate on same value.
-                a.Modify((ref int n) => n = 1);
-                c.Commute((ref int n) => n = a * 3);
-                b.Commute((ref int n) => n = a * 2);
-                a.Modify((ref int n) => n = 2);
-            });
-            Assert.AreEqual(2, a);
-            Assert.AreEqual(4, b);
-            Assert.AreEqual(6, c);
-
-            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); c.Assign(0); });
-            Shield.InTransaction(() => {
-                // in this case, it executes when the main trans asks for it's result, which is now sooner!
-                // but still, both operate on same value.
-                a.Modify((ref int n) => n = 1);
-                c.Commute((ref int n) => n = a * 3);
-                b.Commute((ref int n) => n = a * 2);
-                int x = b;
-                a.Modify((ref int n) => n = 2);
-            });
-            Assert.AreEqual(2, a);
-            Assert.AreEqual(2, b);
-            Assert.AreEqual(3, c);
-
-            Shield.InTransaction(() => { a.Assign(0); b.Assign(0); });
-            Shield.InTransaction(() => {
-                // changing the order of commutes will not produce an effect - commuting
-                // only b would be doable here, but then b and c would after be seen derived from
-                // different values, even though they were defined one after another, nothing in between..
-                a.Modify((ref int n) => n = 1);
-                b.Commute((ref int n) => n = a * 2);
-                c.Commute((ref int n) => n = a * 3);
-                int x = b;
-                a.Modify((ref int n) => n = 2);
-            });
-            Assert.AreEqual(2, a);
-            Assert.AreEqual(2, b);
-            Assert.AreEqual(3, c);
         }
     }
 }

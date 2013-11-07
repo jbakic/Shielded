@@ -48,6 +48,7 @@ namespace Shielded
         {
             public Action Perform;
             public ICommutableShielded[] Affecting;
+            public bool Broken;
         }
 
         private class TransItems
@@ -102,35 +103,59 @@ namespace Shielded
         private static VersionList _transactions = new VersionList();
         [ThreadStatic]
         private static TransItems _localItems;
+        [ThreadStatic]
+        private static ICommutableShielded[] _blockEnlist;
+        [ThreadStatic]
+        private static int? _commuteTime;
 
         internal static void Enlist(IShielded item)
         {
             AssertInTransaction();
+            if (_blockEnlist != null && !_blockEnlist.Contains(item))
+                throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
             if (!_localItems.Enlisted.Add(item))
                 return;
             // does a commute have to degenerate?
-            if (!_blockCommute &&
-                _localItems.Commutes != null && _localItems.Commutes.Count > 0)
+            if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
             {
-                // commutes will, if untouched, execute one by one in the sub-transaction before commit.
-                // so, the safest thing, since any of them can read whatever, is to execute them all!
-                // otherwise, behaviour is inconsistent.
-                // it's better not to construct a Func with a closure here, that takes time! manual checking:
-                int i = 0;
-                for (; i < _localItems.Commutes.Count; i++)
-                    if (_localItems.Commutes[i].Affecting.Contains(item))
-                        break;
-                if (i == _localItems.Commutes.Count) return;
+                // first, mark newly broken
+                bool any = false;
+                foreach (var comm in _localItems.Commutes)
+                    if (!comm.Broken && comm.Affecting.Contains(item))
+                    {
+                        comm.Broken = true;
+                        any = true;
+                    }
+                if (!any) return;
+
+                // in case one commute triggers others, we mark where we were in _comuteTime,
+                // and any recursive call will not execute commutes beyond where we are.
+                // so, clean "dependency resolution" - we trigger only those before us. those 
+                // after us just get marked, and executed after us.
+                var oldTime = _commuteTime;
                 try
                 {
-                    _blockCommute = true;
-                    foreach (var comm in _localItems.Commutes)
-                        comm.Perform();
-                    _localItems.Commutes.Clear();
+                    if (!oldTime.HasValue)
+                        _blockCommute = true;
+
+                    var limit = oldTime ?? _localItems.Commutes.Count;
+                    for (int i = 0; i < limit; i++)
+                    {
+                        if (_localItems.Commutes[i].Broken)
+                        {
+                            _commuteTime = i;
+                            _localItems.Commutes[i].Perform();
+                        }
+                    }
                 }
                 finally
                 {
-                    _blockCommute = false;
+                    _commuteTime = oldTime;
+                    if (!oldTime.HasValue)
+                    {
+                        _localItems.Commutes.RemoveAll(c => c.Broken);
+                        _blockCommute = false;
+                    }
                 }
             }
         }
@@ -148,19 +173,46 @@ namespace Shielded
         /// </summary>
         internal static void EnlistCommute(Action perform, params ICommutableShielded[] affecting)
         {
-            if (affecting == null || affecting.Length == 0)
+            EnlistCommute(true, perform, affecting);
+        }
+
+        /// <summary>
+        /// The strict version does not allow access outside affecting items.
+        /// </summary>
+        internal static void EnlistCommute(bool strict, Action perform, params ICommutableShielded[] affecting)
+        {
+            if (affecting == null)
                 throw new ArgumentException();
             AssertInTransaction();
 
+            Action actual;
+            if (strict)
+                actual =
+                () => {
+                    if (_blockEnlist != null)
+                        throw new InvalidOperationException("No shielded field access is allowed in this context.");
+                    try
+                    {
+                        _blockEnlist = affecting;
+                        perform();
+                    }
+                    finally
+                    {
+                        _blockEnlist = null;
+                    }
+                };
+            else
+                actual = perform;
+
             if (_blockCommute || _localItems.Enlisted.Overlaps(affecting))
-                perform(); // immediate degeneration. should be some warning.
+                actual(); // immediate degeneration. should be some warning.
             else
             {
                 if (_localItems.Commutes == null)
                     _localItems.Commutes = new List<Commute>();
                 _localItems.Commutes.Add(new Commute()
                 {
-                    Perform = perform,
+                    Perform = actual,
                     Affecting = affecting
                 });
             }
@@ -453,14 +505,11 @@ namespace Shielded
                 do
                 {
                     commit = true;
-                    // first perform the commutes, if any, in a "sub-transaction". each commute may
-                    // involve waiting for a spinlock to be released, this is why out of lock is better.
                     if (items.Commutes != null && items.Commutes.Any())
                     {
                         RunCommutes(out commutedItems);
-                        // if in conflict with main trans, it has advantage, i.e. the criteria for intersecting
-                        // fields is the stricter one.
-                        commutedItems.Enlisted.ExceptWith(enlisted);
+                        if (commutedItems.Enlisted.Overlaps(enlisted))
+                            throw new InvalidOperationException("Invalid commute - conflict with transaction.");
                         commEnlisted = commutedItems.Enlisted.ToList();
                     }
 

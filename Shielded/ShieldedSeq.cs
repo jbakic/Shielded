@@ -119,8 +119,7 @@ namespace Shielded
             {
                 Value = val
             };
-            Shield.EnlistCommute(() =>
-            {
+            Shield.EnlistCommute(false, () => {
                 if (_head.Read == null)
                 {
                     _head.Assign(newItem);
@@ -128,15 +127,15 @@ namespace Shielded
                 }
                 else
                 {
-                    // if the outer commute degenerates imediately, this commute may
-                    // still remain a commute.
-                    _tail.Commute((ref ItemKeeper t) => {
+                    // this cannot be a commute. if someone reads _head, he
+                    // can read through the items to the last one...
+                    _tail.Modify((ref ItemKeeper t) => {
                         t.Next.Assign(newItem);
                         t = newItem;
                     });
                 }
-                _count.Commute((ref int c) => c++);
-            }, _head, _tail, _count); // the commute degenerates if you read from the seq..
+            }, _head, _tail); // the commute degenerates if you read from the seq..
+            _count.Commute((ref int c) => c++);
         }
 
         private Shielded<ItemKeeper> RefToIndex(int index)
