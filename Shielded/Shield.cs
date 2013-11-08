@@ -44,11 +44,18 @@ namespace Shielded
                 throw new InvalidOperationException("Operation needs to be in a transaction.");
         }
 
+        private enum CommuteState
+        {
+            Ok = 0,
+            Broken,
+            Executed
+        }
+
         private class Commute
         {
             public Action Perform;
             public ICommutableShielded[] Affecting;
-            public bool Broken;
+            public CommuteState State;
         }
 
         private class TransItems
@@ -120,12 +127,17 @@ namespace Shielded
             {
                 // first, mark newly broken
                 bool any = false;
-                foreach (var comm in _localItems.Commutes)
-                    if (!comm.Broken && comm.Affecting.Contains(item))
+                int? limit = null;
+                for (int i = 0; i < _localItems.Commutes.Count; i++)
+                {
+                    var comm = _localItems.Commutes[i];
+                    if (comm.State == CommuteState.Ok && comm.Affecting.Contains(item))
                     {
-                        comm.Broken = true;
-                        any = true;
+                        comm.State = CommuteState.Broken;
+                        // lazy loading :)
+                        any = any || i < (limit ?? (limit = _commuteTime ?? _localItems.Commutes.Count));
                     }
+                }
                 if (!any) return;
 
                 // in case one commute triggers others, we mark where we were in _comuteTime,
@@ -138,13 +150,14 @@ namespace Shielded
                     if (!oldTime.HasValue)
                         _blockCommute = true;
 
-                    var limit = oldTime ?? _localItems.Commutes.Count;
                     for (int i = 0; i < limit; i++)
                     {
-                        if (_localItems.Commutes[i].Broken)
+                        var comm = _localItems.Commutes[i];
+                        if (comm.State == CommuteState.Broken)
                         {
                             _commuteTime = i;
-                            _localItems.Commutes[i].Perform();
+                            comm.State = CommuteState.Executed;
+                            comm.Perform();
                         }
                     }
                 }
@@ -153,8 +166,9 @@ namespace Shielded
                     _commuteTime = oldTime;
                     if (!oldTime.HasValue)
                     {
-                        _localItems.Commutes.RemoveAll(c => c.Broken);
                         _blockCommute = false;
+                        // in case of an exception, they all go, no matter which one threw!
+                        _localItems.Commutes.RemoveAll(c => c.State != CommuteState.Ok);
                     }
                 }
             }

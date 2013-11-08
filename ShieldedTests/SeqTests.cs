@@ -181,7 +181,7 @@ namespace ShieldedTests
             });
 
             Shield.InTransaction(() => {
-                // this causes immediate degeneration of the Append outer commute.
+                // this causes immediate degeneration of the Append commute.
                 var h = tailPass.HasAny;
                 tailPass.Append(7);
                 int counter = 0;
@@ -189,6 +189,17 @@ namespace ShieldedTests
                     counter++;
                 Assert.AreEqual(7, counter);
             });
+
+            Shield.InTransaction(() => {
+                tailPass.Append(8);
+                tailPass.Append(9);
+                Assert.AreEqual(1, tailPass.Head);
+                int counter = 0;
+                foreach (var i in tailPass)
+                    Assert.AreEqual(++counter, i);
+                Assert.AreEqual(9, counter);
+            });
+            Assert.AreEqual(9, tailPass.Count);
         }
 
         [Test]
