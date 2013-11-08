@@ -111,14 +111,14 @@ namespace Shielded
         [ThreadStatic]
         private static TransItems _localItems;
         [ThreadStatic]
-        private static ICommutableShielded[] _blockEnlist;
+        private static ICommutableShielded _blockEnlist;
         [ThreadStatic]
         private static int? _commuteTime;
 
         internal static void Enlist(IShielded item)
         {
             AssertInTransaction();
-            if (_blockEnlist != null && !_blockEnlist.Contains(item))
+            if (_blockEnlist != null && _blockEnlist != item)
                 throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
             if (!_localItems.Enlisted.Add(item))
                 return;
@@ -178,55 +178,49 @@ namespace Shielded
         private static bool _blockCommute;
 
         /// <summary>
+        /// The strict version of EnlistCommute(), which will monitor that the code in
+        /// perform does not enlist anything except the one item, affecting.
+        /// </summary>
+        internal static void EnlistStrictCommute(Action perform, ICommutableShielded affecting)
+        {
+            EnlistCommute(() => {
+                try
+                {
+                    _blockEnlist = affecting;
+                    perform();
+                }
+                finally
+                {
+                    _blockEnlist = null;
+                }
+            }, affecting);
+        }
+
+        /// <summary>
         /// The action is performed just before commit, and reads the latest
         /// data. If it conflicts, only it is retried. If it succeeds,
         /// we (try to) commit with the same write stamp along with it.
         /// The affecting param determines the IShieldeds that this transaction must
         /// not access, otherwise this commute must degenerate - it gets executed
-        /// now, or at the moment when one of these IShieldeds enlists.
+        /// now, or at the moment when any of these IShieldeds enlists.
         /// </summary>
         internal static void EnlistCommute(Action perform, params ICommutableShielded[] affecting)
         {
-            EnlistCommute(true, perform, affecting);
-        }
-
-        /// <summary>
-        /// The strict version does not allow access outside affecting items.
-        /// </summary>
-        internal static void EnlistCommute(bool strict, Action perform, params ICommutableShielded[] affecting)
-        {
             if (affecting == null)
                 throw new ArgumentException();
+            if (_blockEnlist != null)
+                throw new InvalidOperationException("No shielded field access is allowed in this context.");
             AssertInTransaction();
 
-            Action actual;
-            if (strict)
-                actual =
-                () => {
-                    if (_blockEnlist != null)
-                        throw new InvalidOperationException("No shielded field access is allowed in this context.");
-                    try
-                    {
-                        _blockEnlist = affecting;
-                        perform();
-                    }
-                    finally
-                    {
-                        _blockEnlist = null;
-                    }
-                };
-            else
-                actual = perform;
-
             if (_blockCommute || _localItems.Enlisted.Overlaps(affecting))
-                actual(); // immediate degeneration. should be some warning.
+                perform(); // immediate degeneration. should be some warning.
             else
             {
                 if (_localItems.Commutes == null)
                     _localItems.Commutes = new List<Commute>();
                 _localItems.Commutes.Add(new Commute()
                 {
-                    Perform = actual,
+                    Perform = perform,
                     Affecting = affecting
                 });
             }

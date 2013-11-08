@@ -119,7 +119,7 @@ namespace Shielded
             {
                 Value = val
             };
-            Shield.EnlistCommute(false, () => {
+            Shield.EnlistCommute(() => {
                 if (_head.Read == null)
                 {
                     _head.Assign(newItem);

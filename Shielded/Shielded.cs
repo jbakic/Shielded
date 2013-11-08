@@ -126,7 +126,7 @@ namespace Shielded
         /// </summary>
         public void Commute(ModificationDelegate perform)
         {
-            Shield.EnlistCommute(() => Modify(perform), this);
+            Shield.EnlistStrictCommute(() => Modify(perform), this);
         }
 
         public static implicit operator T(Shielded<T> obj)
