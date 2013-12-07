@@ -61,6 +61,7 @@
     <Compile Include="ShieldedTree.cs" />
     <Compile Include="LocalStorage.cs" />
     <Compile Include="VersionList.cs" />
+    <Compile Include="ShieldedEvent.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

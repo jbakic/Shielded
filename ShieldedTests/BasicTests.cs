@@ -243,6 +243,20 @@ namespace ShieldedTests
                 Assert.AreEqual(0, seq.Count);
             });
 
+            Shield.InTransaction(() => {
+                seq.Append(1);
+                seq.Append(2);
+                seq.Append(3);
+                seq.Remove(2);
+                Assert.IsTrue(seq.HasAny);
+                Assert.AreEqual(2, seq.Count);
+                Assert.AreEqual(1, seq[0]);
+                Assert.AreEqual(3, seq[1]);
+                seq.Clear();
+                Assert.IsFalse(seq.HasAny);
+                Assert.AreEqual(0, seq.Count);
+            });
+
             Shield.InTransaction(() => { seq.Append(1); seq.Append(2); });
             Assert.AreEqual(1, seq[0]);
             Assert.AreEqual(2, seq[1]);
@@ -388,6 +402,75 @@ namespace ShieldedTests
                 }
                 catch (InvalidOperationException) {}
             });
+        }
+
+        [Test]
+        public void EventTest()
+        {
+            var a = new Shielded<int>(1);
+            var eventCount = new Shielded<int>();
+            EventHandler<EventArgs> ev =
+                (sender, arg) => eventCount.Commute((ref int e) => e++);
+
+            try
+            {
+                a.Changed.Subscribe(ev);
+                Assert.Fail();
+            }
+            catch (InvalidOperationException) {}
+
+            Shield.InTransaction(() =>
+            {
+                a.Changed.Subscribe(ev);
+
+                var t = new Thread(() =>
+                {
+                    Shield.InTransaction(() => {
+                        a.Modify((ref int x) => x++);
+                    });
+                });
+                t.Start();
+                t.Join();
+
+                var t2 = new Thread(() =>
+                {
+                    Shield.InTransaction(() => {
+                        a.Modify((ref int x) => x++);
+                    });
+                });
+                t2.Start();
+                t2.Join();
+            });
+            Assert.AreEqual(0, eventCount);
+
+            Shield.InTransaction(() => {
+                a.Modify((ref int x) => x++);
+            });
+            Assert.AreEqual(1, eventCount);
+
+            Thread tUnsub = null;
+            Shield.InTransaction(() => {
+                a.Changed.Unsubscribe(ev);
+                a.Modify((ref int x) => x++);
+
+                if (tUnsub == null)
+                {
+                    tUnsub = new Thread(() =>
+                    {
+                        Shield.InTransaction(() => {
+                            a.Modify((ref int x) => x++);
+                            a.Modify((ref int x) => x++);
+                        });
+                    });
+                    tUnsub.Start();
+                    tUnsub.Join();
+                }
+            });
+            // the other thread must still see the subscription...
+            Assert.AreEqual(3, eventCount);
+
+            Shield.InTransaction(() => a.Modify((ref int x) => x++));
+            Assert.AreEqual(3, eventCount);
         }
     }
 }

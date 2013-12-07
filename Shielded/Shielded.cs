@@ -105,6 +105,7 @@ namespace Shielded
         {
             PrepareForWriting(true);
             d(ref _locals.Value.Value);
+            Changed.Raise(this, EventArgs.Empty);
         }
 
         /// <summary>
@@ -116,6 +117,7 @@ namespace Shielded
                 PrepareForWriting(false);
                 _locals.Value.Value = value;
             }, this);
+            Changed.Raise(this, EventArgs.Empty);
         }
 
         /// <summary>
@@ -127,7 +129,16 @@ namespace Shielded
         public void Commute(ModificationDelegate perform)
         {
             Shield.EnlistStrictCommute(() => Modify(perform), this);
+            Changed.Raise(this, EventArgs.Empty);
         }
+
+        /// <summary>
+        /// Event raised after any change, and directly in the transaction that changed it.
+        /// Subscriptions are transactional. In case of a commute, event is raised immediately
+        /// after the commute is enlisted, and your handler can easily cause commutes to
+        /// degenerate.
+        /// </summary>
+        public readonly ShieldedEvent<EventArgs> Changed = new ShieldedEvent<EventArgs>();
 
         public static implicit operator T(Shielded<T> obj)
         {
