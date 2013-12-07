@@ -5,10 +5,10 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>10.0.0</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{7BBF29FE-3683-4290-B39D-485E7DEE5388}</ProjectGuid>
+    <ProjectGuid>{FA5D7038-DDDC-4E0F-B40A-488ECC566F42}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>ShieldedTests</RootNamespace>
-    <AssemblyName>ShieldedTests</AssemblyName>
+    <RootNamespace>Shielded.ProxyGen</RootNamespace>
+    <AssemblyName>Shielded.ProxyGen</AssemblyName>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -30,18 +30,14 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
-    <Reference Include="nunit.framework">
-      <Private>False</Private>
-      <Package>mono-nunit</Package>
-    </Reference>
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DictionaryTests.cs" />
-    <Compile Include="BasicTests.cs" />
-    <Compile Include="SeqTests.cs" />
-    <Compile Include="TreeTests.cs" />
-    <Compile Include="ProxyTests.cs" />
+    <Compile Include="AssemblyInfo.cs" />
+    <Compile Include="NothingToDo.cs" />
+    <Compile Include="ProxyGen.cs" />
+    <Compile Include="ProxyGenerationException.cs" />
+    <Compile Include="Factory.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
@@ -49,9 +45,8 @@
       <Project>{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}</Project>
       <Name>Shielded</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Shielded.ProxyGen\Shielded.ProxyGen.csproj">
-      <Project>{FA5D7038-DDDC-4E0F-B40A-488ECC566F42}</Project>
-      <Name>Shielded.ProxyGen</Name>
-    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.txt" />
   </ItemGroup>
 </Project>
