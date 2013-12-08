@@ -9,7 +9,16 @@ namespace ShieldedTests
     public class Test
     {
         public virtual Guid Id { get; set; }
-        public virtual string Name { get; set; }
+        public virtual string Name
+        {
+            get { return null; }
+            set
+            {
+                NameChanges.Commute((ref int i) => i++);
+            }
+        }
+
+        public readonly Shielded<int> NameChanges = new Shielded<int>();
     }
 
     [TestFixture]
@@ -67,6 +76,8 @@ namespace ShieldedTests
             });
             Assert.AreEqual(2, transactionCount);
             Assert.AreEqual("testing conflict...", test.Name);
+            // it was first "conflicting", then "testing conflict..."
+            Assert.AreEqual(2, test.NameChanges);
         }
     }
 }

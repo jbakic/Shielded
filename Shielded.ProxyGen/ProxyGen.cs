@@ -41,7 +41,7 @@ namespace Shielded.ProxyGen
             CompilerParameters cp = new CompilerParameters();
             cp.GenerateInMemory = true;
             CodeCompileUnit cu = new CodeCompileUnit();
-            AddAllAssemblyAsReference(cu);
+            AddAssemblyReference(cu, t);
             cu.Namespaces.Add(CreateNamespace(t));
 
 #if DEBUG
@@ -59,12 +59,10 @@ namespace Shielded.ProxyGen
             return cr.CompiledAssembly.GetTypes()[0];
         }
 
-        private static void AddAllAssemblyAsReference(CodeCompileUnit cu)
+        private static void AddAssemblyReference(CodeCompileUnit cu, Type t)
         {
-            foreach (var v in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                cu.ReferencedAssemblies.Add(v.Location);
-            }
+            cu.ReferencedAssemblies.Add(t.Assembly.Location);
+            cu.ReferencedAssemblies.Add("Shielded");
         }
 
         private static void ThrowErrors(CompilerErrorCollection compilerErrorCollection)
@@ -167,6 +165,11 @@ namespace Shielded.ProxyGen
             };
             assignCall.Parameters.Add(new CodeVariableReferenceExpression("a"));
             mp.SetStatements.Add(assignCall);
+            mp.SetStatements.Add(new CodeAssignStatement(
+                new CodePropertyReferenceExpression() {
+                    TargetObject = new CodeBaseReferenceExpression(),
+                    PropertyName = pi.Name,
+                }, new CodePropertySetValueReferenceExpression()));
 
             return mp;
         }
