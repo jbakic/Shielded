@@ -138,6 +138,11 @@ namespace Shielded.ProxyGen
                 FieldName = pi.Name,
             }));
 
+            mp.SetStatements.Add(new CodeAssignStatement(
+                new CodePropertyReferenceExpression() {
+                    TargetObject = new CodeBaseReferenceExpression(),
+                    PropertyName = pi.Name,
+                }, new CodePropertySetValueReferenceExpression()));
             mp.SetStatements.Add(new CodeVariableDeclarationStatement(structType, "a") {
                 InitExpression = new CodePropertyReferenceExpression() {
                     TargetObject = new CodeFieldReferenceExpression() {
@@ -165,11 +170,6 @@ namespace Shielded.ProxyGen
             };
             assignCall.Parameters.Add(new CodeVariableReferenceExpression("a"));
             mp.SetStatements.Add(assignCall);
-            mp.SetStatements.Add(new CodeAssignStatement(
-                new CodePropertyReferenceExpression() {
-                    TargetObject = new CodeBaseReferenceExpression(),
-                    PropertyName = pi.Name,
-                }, new CodePropertySetValueReferenceExpression()));
 
             return mp;
         }

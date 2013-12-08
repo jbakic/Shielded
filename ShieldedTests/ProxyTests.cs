@@ -14,6 +14,9 @@ namespace ShieldedTests
             get { return null; }
             set
             {
+                if (Name == "conflicting")
+                    // see test below.
+                    Assert.AreEqual("testing conflict...", value);
                 NameChanges.Commute((ref int i) => i++);
             }
         }
