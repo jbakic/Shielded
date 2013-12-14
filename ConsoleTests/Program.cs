@@ -660,7 +660,7 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
             //BetShopPoolTest();
 
@@ -673,6 +673,8 @@ namespace ConsoleTests
             //SimpleCommuteTest();
 
             //new Queue().Run();
+
+            SequentialTests.Run();
         }
     }
 }

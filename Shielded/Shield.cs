@@ -697,8 +697,14 @@ namespace Shielded
         }
 
         private static int _trimFlag = 0;
+        private static int _trimClock = 0;
+
         private static void TrimCopies()
         {
+            // trimming won't start every time..
+            if ((Interlocked.Increment(ref _trimClock) & 0xF) != 0)
+                return;
+
             bool tookFlag = false;
             try
             {
@@ -714,15 +720,10 @@ namespace Shielded
 
                 Tuple<long, IEnumerable<IShielded>> curr;
                 HashSet<IShielded> toTrim = new HashSet<IShielded>();
-                while (_copiesByVersion.TryPeek(out curr))
+                while (_copiesByVersion.TryPeek(out curr) && curr.Item1 < minTransactionNo)
                 {
-                    if (curr.Item1 < minTransactionNo)
-                    {
-                        toTrim.UnionWith(curr.Item2);
-                        _copiesByVersion.TryDequeue(out curr);
-                    }
-                    else
-                        break;
+                    toTrim.UnionWith(curr.Item2);
+                    _copiesByVersion.TryDequeue(out curr);
                 }
 
                 foreach (var sh in toTrim)
@@ -731,7 +732,7 @@ namespace Shielded
             finally
             {
                 if (tookFlag)
-                    Interlocked.Decrement(ref _trimFlag);
+                    Interlocked.Exchange(ref _trimFlag, 0);
             }
         }
 

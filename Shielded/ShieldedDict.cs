@@ -174,25 +174,28 @@ namespace Shielded
             }
         }
 
-        private ConcurrentDictionary<TKey, long> _copies = new ConcurrentDictionary<TKey, long>();
+        private ConcurrentQueue<Tuple<long, List<TKey>>> _copies =
+            new ConcurrentQueue<Tuple<long, List<TKey>>>();
 
         void IShielded.Commit()
         {
             if (_localDict.Value.Items != null)
             {
+                long version = _writeStamps[_localDict.Value.Items.First().Key].Item2;
+                var copyList = new List<TKey>(_localDict.Value.Items.Count);
                 foreach (var kvp in _localDict.Value.Items)
                 {
-                    var ws = _writeStamps[kvp.Key];
                     ItemKeeper v = null;
-                    _dict.TryGetValue(kvp.Key, out v);
+                    if (_dict.TryGetValue(kvp.Key, out v))
+                        copyList.Add(kvp.Key);
 
                     var newCurrent = kvp.Value;
-                    newCurrent.Version = ws.Item2;
+                    newCurrent.Version = version;
                     newCurrent.Older = v;
                     lock (_dict)
                         _dict[kvp.Key] = newCurrent;
-                    _copies[kvp.Key] = ws.Item2;
 
+                    Tuple<int, long> ws;
 #if SERVER
                     lock (_localDict)
                     {
@@ -203,6 +206,7 @@ namespace Shielded
                     _writeStamps.TryRemove(kvp.Key, out ws);
 #endif
                 }
+                _copies.Enqueue(Tuple.Create(version, copyList));
             }
             _localDict.Value = null;
         }
@@ -235,15 +239,15 @@ namespace Shielded
         {
             // NB the "smallest transaction" and others can freely read while
             // we're doing this.
-            var keys = _copies.Keys;
-            foreach (var key in keys)
+            Tuple<long, List<TKey>> item;
+            while (_copies.TryPeek(out item) && item.Item1 < smallestOpenTransactionId)
             {
-                if (_copies[key] > smallestOpenTransactionId)
-                    continue;
-
-                if (_dict.ContainsKey(key))
+                _copies.TryDequeue(out item);
+                foreach (var key in item.Item2)
                 {
-                    var point = _dict[key];
+                    ItemKeeper point;
+                    if (!_dict.TryGetValue(key, out point))
+                        continue;
                     ItemKeeper pointNewer = null;
                     while (point != null && point.Version > smallestOpenTransactionId)
                     {
@@ -272,10 +276,6 @@ namespace Shielded
                         }
                     }
                 }
-                long version;
-                _copies.TryRemove(key, out version);
-                if (version > smallestOpenTransactionId)
-                    _copies.TryAdd(key, version);
             }
         }
 
