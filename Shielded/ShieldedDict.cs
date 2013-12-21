@@ -128,16 +128,17 @@ namespace Shielded
                 if ((hasValue = _dict.TryGetValue(key, out curr)) && curr.Version > Shield.CurrentTransactionStartStamp)
                     throw new TransException("Write collision.");
 
+                ItemKeeper localItem;
                 if (_localDict.Value.Items == null)
                     _localDict.Value.Items = new Dictionary<TKey, ItemKeeper>();
-                else if (_localDict.Value.Items.ContainsKey(key))
+                else if (_localDict.Value.Items.TryGetValue(key, out localItem))
                 {
-                    if (_localDict.Value.Items[key].Empty)
+                    if (localItem.Empty)
                     {
                         _count.Commute((ref int n) => n++);
-                        _localDict.Value.Items[key].Empty = false;
+                        localItem.Empty = false;
                     }
-                    _localDict.Value.Items[key].Value = value;
+                    localItem.Value = value;
                     return;
                 }
                 _localDict.Value.Items[key] = new ItemKeeper() { Value = value };
