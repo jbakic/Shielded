@@ -14,15 +14,6 @@ using Shielded;
 
 namespace Shielded.ProxyGen
 {
-    static class PropertyInfoExtension
-    {
-        public static bool IsVirtual(this PropertyInfo pi)
-        {
-            return (pi.CanRead == false || pi.GetGetMethod().IsVirtual)
-                    &&
-                    (pi.CanWrite == false || pi.GetSetMethod().IsVirtual);
-        }
-    }
     static class ProxyGen
     {
         static ConcurrentDictionary<Type, Type> proxies = new ConcurrentDictionary<Type, Type>();
@@ -98,7 +89,7 @@ namespace Shielded.ProxyGen
             theShieldedField.InitExpression = new CodeObjectCreateExpression(theShieldedType);
             decl.Members.Add(theShieldedField);
 
-            foreach (PropertyInfo pi in t.GetProperties().Where(p => p.IsVirtual() && p.CanWrite && p.CanRead))
+            foreach (PropertyInfo pi in t.GetProperties().Where(IsInteresting))
             {
                 theStruct.Members.Add(CreateStructField(pi));
                 decl.Members.Add(CreatePropertyOverride(theStruct.Name, pi));
@@ -108,6 +99,12 @@ namespace Shielded.ProxyGen
 
             nsp.Types.Add(decl);
             return nsp;
+        }
+
+        internal static bool IsInteresting(PropertyInfo pi)
+        {
+            return pi.CanRead && pi.GetGetMethod().IsVirtual &&
+                pi.CanWrite && pi.GetSetMethod().IsVirtual;
         }
 
         private static CodeTypeMember CreateStructField(PropertyInfo pi)

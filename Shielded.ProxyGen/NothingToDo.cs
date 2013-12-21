@@ -10,11 +10,7 @@ namespace Shielded.ProxyGen
     {
         public static bool With(Type t)
         {
-            if (!t.IsSealed && t.IsPublic)
-            {
-                return !t.GetProperties().Any(q => q.IsVirtual() && q.CanRead && q.CanWrite );
-            }
-            return true;
+            return t.IsSealed || !t.IsPublic || !t.GetProperties().Any(ProxyGen.IsInteresting);
         }
     }
 }
