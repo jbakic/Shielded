@@ -241,6 +241,9 @@ namespace Shielded
             return Shield.InTransaction(() =>
             {
                 var items = IsolatedRun(() => test());
+                if (!items.Enlisted.Any())
+                    throw new InvalidOperationException(
+                        "A conditional test function must access at least one shielded field.");
                 var sub = new Shielded<CommitSubscription>(new CommitSubscription()
                 {
                     Items = items.Enlisted,
@@ -423,6 +426,12 @@ namespace Shielded
                         else if (!testItems.Enlisted.SetEquals(subscription.Items))
                         {
                             RemoveSubscription(sub, subscription.Items.Except(testItems.Enlisted));
+
+                            // we allow it to get unsubscribed completely, and then we bitch.
+                            if (!testItems.Enlisted.Any())
+                                throw new InvalidOperationException(
+                                    "A conditional test function must access at least one shielded field.");
+
                             AddSubscription(sub, testItems.Enlisted.Except(subscription.Items));
                             sub.Modify((ref CommitSubscription cs) =>
                             {

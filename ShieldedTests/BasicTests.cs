@@ -183,6 +183,39 @@ namespace ShieldedTests
             // every change triggers it, but by the time it starts, another transaction might have
             // committed, so this is not a fixed number.
             Assert.Greater(triggerCommits, 0);
+
+
+            // a conditional which does not depend on any Shielded is not allowed!
+            try
+            {
+                int a = 5;
+                Shield.Conditional(() => a > 10, () => true);
+                Assert.Fail();
+            }
+            catch (InvalidOperationException) { }
+
+            bool firstTime = true;
+            var x2 = new Shielded<int>();
+            // this one succeeds in registering, but fails as soon as it gets triggered, due to changing it's
+            // test's access pattern to an empty set.
+            Shield.Conditional(() => {
+                if (firstTime)
+                {
+                    firstTime = false;
+                    return x2 == 0;
+                }
+                else
+                    // this is of course invalid, and when reaching here we have not touched any Shielded obj.
+                    return true;
+            }, () => true);
+
+            try
+            {
+                // this will trigger the conditional
+                Shield.InTransaction(() => x2.Modify((ref int n) => n++));
+                Assert.Fail();
+            }
+            catch (InvalidOperationException) { }
         }
 
         [Test]
