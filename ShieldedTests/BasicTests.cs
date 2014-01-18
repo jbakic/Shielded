@@ -241,19 +241,19 @@ namespace ShieldedTests
             });
             Assert.AreEqual(3, a);
 
-            int transactionCount = 0;
-            Task.WaitAll(
-                Enumerable.Repeat(1, 100).Select(i => Task.Factory.StartNew(() =>
-                {
-                    Shield.InTransaction(() =>
-                    {
-                        Interlocked.Increment(ref transactionCount);
-                        a.Commute((ref int n) => n++);
-                    });
-                }, TaskCreationOptions.LongRunning)).ToArray());
+            int transactionCount = 0, commuteCount = 0;
+            ParallelEnumerable.Repeat(1, 100).ForAll(i => Shield.InTransaction(() => {
+                Interlocked.Increment(ref transactionCount);
+                a.Commute((ref int n) => {
+                    Interlocked.Increment(ref commuteCount);
+                    Thread.Sleep(10); // needs this.. (running on Mono 2.10)
+                    n++;
+                });
+            }));
             Assert.AreEqual(103, a);
-            // commutes never conflict!
+            // commutes never conflict (!)
             Assert.AreEqual(100, transactionCount);
+            Assert.Greater(commuteCount, 100);
 
             Shield.InTransaction(() => {
                 a.Commute((ref int n) => n -= 3);

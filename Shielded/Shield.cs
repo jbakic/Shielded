@@ -208,7 +208,8 @@ namespace Shielded
         {
             if (affecting == null)
                 throw new ArgumentException();
-            if (_blockEnlist != null)
+            if (_blockEnlist != null &&
+                (affecting.Length != 1 || affecting[0] != _blockEnlist))
                 throw new InvalidOperationException("No shielded field access is allowed in this context.");
             AssertInTransaction();
 

@@ -95,6 +95,27 @@ namespace Shielded.ProxyGen
                 decl.Members.Add(CreatePropertyOverride(theStruct.Name, pi));
             }
 
+            MethodInfo commMethod;
+            if ((commMethod = t.GetMethod("Commute")) != null &&
+                commMethod.IsVirtual)
+            {
+                var commOverride = new CodeMemberMethod() {
+                    Attributes = MemberAttributes.Override | MemberAttributes.Public,
+                    Name = "Commute",
+                };
+                commOverride.Parameters.Add(new CodeParameterDeclarationExpression(
+                    new CodeTypeReference(typeof(Action)),
+                    "a"));
+                commOverride.ReturnType = new CodeTypeReference(typeof(void));
+                commOverride.Statements.Add(new CodeMethodInvokeExpression(
+                    new CodeFieldReferenceExpression(
+                        new CodeThisReferenceExpression(),
+                        "_data"),
+                    "Commute",
+                    new CodeArgumentReferenceExpression("a")));
+                decl.Members.Add(commOverride);
+            }
+
             decl.Members.Add(theStruct);
 
             nsp.Types.Add(decl);

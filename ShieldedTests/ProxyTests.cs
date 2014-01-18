@@ -3,12 +3,16 @@ using NUnit.Framework;
 using Shielded;
 using Shielded.ProxyGen;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Linq;
 
 namespace ShieldedTests
 {
-    public class Test
+    public class TestEntity
     {
         public virtual Guid Id { get; set; }
+        public virtual int Counter { get; set; }
+
         public virtual string Name
         {
             get { return null; }
@@ -22,6 +26,12 @@ namespace ShieldedTests
         }
 
         public readonly Shielded<int> NameChanges = new Shielded<int>();
+
+        // by convention, if this exists, it gets overriden.
+        public virtual void Commute(Action a)
+        {
+            a();
+        }
     }
 
     [TestFixture]
@@ -30,7 +40,7 @@ namespace ShieldedTests
         [Test]
         public void BasicTest()
         {
-            var test = Factory.NewShielded<Test>();
+            var test = Factory.NewShielded<TestEntity>();
 
             try
             {
@@ -81,6 +91,27 @@ namespace ShieldedTests
             Assert.AreEqual("testing conflict...", test.Name);
             // it was first "conflicting", then "testing conflict..."
             Assert.AreEqual(2, test.NameChanges);
+        }
+
+        [Test]
+        public void ProxyCommuteTest()
+        {
+            var test = Factory.NewShielded<TestEntity>();
+
+            int transactionCount = 0, commuteCount = 0;
+            Task.WaitAll(Enumerable.Range(1, 100).Select(i => Task.Factory.StartNew(() => {
+                Shield.InTransaction(() => {
+                    Interlocked.Increment(ref transactionCount);
+                    test.Commute(() => {
+                        Interlocked.Increment(ref commuteCount);
+                        test.Counter = test.Counter + i;
+                    });
+                });
+            }, TaskCreationOptions.LongRunning)).ToArray());
+            Assert.AreEqual(5050, test.Counter);
+            // commutes never conflict (!)
+            Assert.AreEqual(100, transactionCount);
+            Assert.Greater(commuteCount, 100);
         }
     }
 }

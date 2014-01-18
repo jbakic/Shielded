@@ -133,6 +133,15 @@ namespace Shielded
         }
 
         /// <summary>
+        /// For use by the ProxyGen, since I cannot create a ModificationDelegate closure in CodeDom..
+        /// </summary>
+        public void Commute(Action perform)
+        {
+            Shield.EnlistStrictCommute(perform, this);
+            Changed.Raise(this, EventArgs.Empty);
+        }
+
+        /// <summary>
         /// Event raised after any change, and directly in the transaction that changed it.
         /// Subscriptions are transactional. In case of a commute, event is raised immediately
         /// after the commute is enlisted, and your handler can easily cause commutes to

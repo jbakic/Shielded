@@ -12,6 +12,8 @@ namespace Shielded.ProxyGen
         /// for all virtual properties (with virtual getters and setters) in one
         /// Shielded struct container. Base setters will be called before any change,
         /// and may use the getter to obtain the old value.
+        /// If the class has a virtual method Commute(Action), this will be overriden
+        /// and the override will perform the action as a commute.
         /// The subtype is generated once per type, and cached for future calls.
         /// </summary>
         public static Type ShieldedType(Type t)
