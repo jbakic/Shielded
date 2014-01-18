@@ -115,23 +115,22 @@ namespace Shielded
                     curr = curr.Read.Left;
                 }
 
-                if (_comparer.Compare(curr.Read.Key, from) >= 0 &&
-                    _comparer.Compare(curr.Read.Key, to) <= 0)
+                if (_comparer.Compare(curr.Read.Key, to) > 0)
+                    yield break;
+
+                if (_comparer.Compare(curr.Read.Key, from) >= 0)
                     yield return curr;
 
                 while (curr.Read.Right == null &&
-                       _comparer.Compare(curr.Read.Key, to) <= 0 &&
                        centerStack.Count > 0)
                 {
                     curr = centerStack.Pop();
-                    if (_comparer.Compare(curr.Read.Key, from) >= 0 &&
-                        _comparer.Compare(curr.Read.Key, to) <= 0)
+                    if (_comparer.Compare(curr.Read.Key, to) <= 0)
                         yield return curr;
+                    else
+                        yield break;
                 }
-                if (_comparer.Compare(curr.Read.Key, to) <= 0)
-                    curr = curr.Read.Right;
-                else
-                    break;
+                curr = curr.Read.Right;
             }
         }
 
