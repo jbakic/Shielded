@@ -21,6 +21,7 @@ namespace ShieldedTests
                 if (Name == "conflicting")
                     // see test below.
                     Assert.AreEqual("testing conflict...", value);
+                // this should be avoided! see ProxyCommuteTest for reason.
                 NameChanges.Commute((ref int i) => i++);
             }
         }
@@ -112,6 +113,21 @@ namespace ShieldedTests
             // commutes never conflict (!)
             Assert.AreEqual(100, transactionCount);
             Assert.Greater(commuteCount, 100);
+
+            try
+            {
+                Shield.InTransaction(() => {
+                    test.Commute(() => {
+                        // this will throw, because it tries to run a commute on NameChanges, which
+                        // is a separate shielded obj from the backing storage of the proxy.
+                        // test.Commute can only touch the virtual fields, or non-shielded objects.
+                        // a setter that commutes over another shielded field should be avoided!
+                        test.Name = "something";
+                        Assert.Fail();
+                    });
+                });
+            }
+            catch (InvalidOperationException) { }
         }
     }
 }
