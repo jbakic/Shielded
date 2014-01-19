@@ -346,13 +346,13 @@ namespace ConsoleTests
 
         public static void BetShopPoolTest()
         {
-            int numThreads = 100;
-            int numTickets = 50000;
+            int numThreads = 3;
+            int numTickets = 200000;
             int numEvents = 100;
             var barrier = new Barrier(2);
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
-            int reportEvery = 1000;
+            int reportEvery = 10000;
             //Shielded<int> nextReport = new Shielded<int>(reportEvery);
 
             //Shield.Conditional(() => betShop.TicketCount >= nextReport, () =>
@@ -431,6 +431,92 @@ namespace ConsoleTests
         class TreeItem
         {
             public Guid Id = Guid.NewGuid();
+        }
+
+        public static void TreePoolTest()
+        {
+            int numThreads = 3;
+            int numItems = 200000;
+            // for some reason, if this is replaced with ShieldedDict, KeyAlreadyPresent
+            // exception is thrown. under one key you can then find an entity which does
+            // not have that key. complete mystery.
+            var tree = new ShieldedTree<Guid, TreeItem>();
+            var barrier = new Barrier(numThreads + 1);
+            int reportEvery = 10000;
+            Shielded<int> lastReport = new Shielded<int>(0);
+            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
+
+            Shield.Conditional(() => tree.Count >= lastReport + reportEvery, () =>
+            {
+                DateTime newNow = DateTime.UtcNow;
+                int count = tree.Count;
+                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
+                lastTime.Assign(newNow);
+                lastReport.Modify((ref int n) => n += reportEvery);
+                Shield.SideEffect(() =>
+                {
+                    Console.Write("\n{0} at {1} item/s", count, speed);
+                });
+                return true;
+            });
+
+
+            var bags = new List<Action>[numThreads];
+            var threads = new Thread[numThreads];
+            for (int i = 0; i < numThreads; i++)
+            {
+                var bag = bags[i] = new List<Action>();
+                threads[i] = new Thread(() => {
+                    foreach (var a in bag)
+                        a();
+                    barrier.SignalAndWait();
+                });
+            }
+
+            foreach (var i in Enumerable.Range(0, numItems))
+            {
+                var item1 = new TreeItem();
+                bags[i % numThreads].Add(() => Shield.InTransaction(() =>
+                {
+                    tree.Add(item1.Id, item1);
+                }));
+            }
+            _timer = new Stopwatch();
+            _timer.Start();
+            for (int i = 0; i < numThreads; i++)
+                threads[i].Start();
+
+            barrier.SignalAndWait();
+            var time = _timer.ElapsedMilliseconds;
+            Console.WriteLine(" {0} ms.", time);
+
+            Console.WriteLine("\nReading sequentially...");
+            time = _timer.ElapsedMilliseconds;
+            var keys = Shield.InTransaction(() => tree.Keys);
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("Keys read in {0} ms.", time);
+
+            TreeItem x = null;
+
+            time = _timer.ElapsedMilliseconds;
+            Shield.InTransaction(() => {
+                foreach (var kvp in tree)
+                    x = kvp.Value;
+            });
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("Items read by enumerator in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in keys)
+                x = tree[k];
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("Items read by key in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => x.Id = x.Id);
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("Empty transactions in {0} ms.", time);
         }
 
         public static void TreeTest()
@@ -622,7 +708,7 @@ namespace ConsoleTests
             });
             Shield.InTransaction(() =>
             {
-                foreach (var kvp in tree.Range(100, 110))
+                foreach (var kvp in tree.Range(505, 525))
                     Console.WriteLine("Item: {0}", kvp.Key);
             });
         }
@@ -664,7 +750,9 @@ namespace ConsoleTests
 
             //BetShopPoolTest();
 
-            TreeTest();
+            //TreeTest();
+
+            TreePoolTest();
 
             //SkewTest();
 

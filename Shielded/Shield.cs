@@ -64,6 +64,9 @@ namespace Shielded
             public List<SideEffect> Fx;
             public List<Commute> Commutes;
 
+            /// <summary>
+            /// Unions the other items into this. Does not include commutes!
+            /// </summary>
             public void UnionWith(TransItems other)
             {
                 Enlisted.UnionWith(other.Enlisted);
@@ -72,38 +75,6 @@ namespace Shielded
                         Fx = new List<SideEffect>(other.Fx);
                     else
                         Fx.AddRange(other.Fx);
-//                if (other.Commutes != null && other.Commutes.Count > 0)
-//                    if (Commutes == null)
-//                        Commutes = new List<Commute>(other.Commutes);
-//                    else
-//                        Commutes.AddRange(other.Commutes);
-            }
-
-            private TransItems() {}
-
-            private static ConcurrentBag<TransItems> _itemPool = new ConcurrentBag<TransItems>();
-            public static TransItems BagOrNew()
-            {
-                TransItems result;
-                if (_itemPool.TryTake(out result))
-                    return result;
-                return new TransItems();
-            }
-
-            /// <summary>
-            /// Bag the items, for this or other threads to reuse. Will clear your
-            /// reference before adding the items into the bag, for safety.
-            /// </summary>
-            public static void Bag(ref TransItems items)
-            {
-                items.Enlisted.Clear();
-                if (items.Fx != null)
-                    items.Fx.Clear();
-                if (items.Commutes != null)
-                    items.Commutes.Clear();
-                var t = items;
-                items = null;
-                _itemPool.Add(t);
             }
         }
 
@@ -294,7 +265,7 @@ namespace Shielded
                 repeat = false;
                 try
                 {
-                    _localItems = TransItems.BagOrNew();
+                    _localItems = new TransItems();
                     // this should not be interrupted by an Abort. the moment between
                     // adding the version into the list, and writing it into _current..
                     try { }
@@ -340,7 +311,7 @@ namespace Shielded
         /// </summary>
         private static TransItems IsolatedRun(Action act)
         {
-            var isolated = TransItems.BagOrNew();
+            var isolated = new TransItems();
             WithTransactionContext(isolated, act);
             return isolated;
         }
@@ -422,7 +393,6 @@ namespace Shielded
                         if (test && !subscription.Trans())
                         {
                             RemoveSubscription(sub);
-                            TransItems.Bag(ref testItems);
                         }
                         else if (!testItems.Enlisted.SetEquals(subscription.Items))
                         {
@@ -439,8 +409,6 @@ namespace Shielded
                                 cs.Items = testItems.Enlisted;
                             });
                         }
-                        else
-                            TransItems.Bag(ref testItems);
                     });
         }
 
@@ -485,7 +453,7 @@ namespace Shielded
             while (true)
             {
                 _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
-                commutedItems = TransItems.BagOrNew();
+                commutedItems = new TransItems();
                 try
                 {
                     WithTransactionContext(commutedItems, () =>
@@ -499,7 +467,7 @@ namespace Shielded
                 {
                     foreach (var item in commutedItems.Enlisted)
                         item.Rollback();
-                    TransItems.Bag(ref commutedItems);
+                    commutedItems = null;
 
                     if (ex is NoRepeatTransException)
                         throw;
@@ -605,10 +573,7 @@ namespace Shielded
                 if (_currentTransactionStartStamp != oldStamp)
                     _currentTransactionStartStamp = oldStamp;
                 if (commutedItems != null)
-                {
                     _localItems.UnionWith(commutedItems);
-                    TransItems.Bag(ref commutedItems);
-                }
             }
         }
 
@@ -663,7 +628,6 @@ namespace Shielded
                         fx.Rollback();
             }
 
-            TransItems.Bag(ref items);
             TrimCopies();
             return commit;
         }
@@ -679,7 +643,6 @@ namespace Shielded
                 foreach (var fx in items.Fx)
                     fx.Rollback();
 
-            TransItems.Bag(ref items);
             TrimCopies();
         }
 
