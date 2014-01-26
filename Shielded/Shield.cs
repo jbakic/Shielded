@@ -25,7 +25,6 @@ namespace Shielded
         {
             get
             {
-                AssertInTransaction();
                 return _currentTransactionStartStamp.Value;
             }
         }

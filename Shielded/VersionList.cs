@@ -19,8 +19,9 @@ namespace Shielded
             lock (_lock)
             {
                 var i = generator();
-                if (_items.ContainsKey(i))
-                    _items [i] = _items [i] + 1;
+                int old;
+                if (_items.TryGetValue(i, out old))
+                    _items[i] = old + 1;
                 else
                 {
                     _items.Add(i, 1);
@@ -34,16 +35,13 @@ namespace Shielded
         {
             lock (_lock)
             {
-                if (_items.ContainsKey(i))
+                int x;
+                _items[i] = x = _items[i] - 1;
+                if (x == 0)
                 {
-                    if (_items [i] > 1)
-                        _items [i] = _items [i] - 1;
-                    else
-                    {
-                        _items.Remove(i);
-                        if (_min == i)
-                            _min = _items.Any() ? _items.Keys.Min() : (long?)null;
-                    }
+                    _items.Remove(i);
+                    if (_min == i)
+                        _min = _items.Any() ? _items.Keys.Min() : (long?)null;
                 }
             }
         }
