@@ -17,6 +17,38 @@ namespace ConsoleTests
             public decimal Amount;
         }
 
+        private static class ProcessorSlot
+        {
+            private static Shielded<int> _count = new Shielded<int>();
+
+            public static bool Free
+            {
+                get
+                {
+                    return _count > 0;
+                }
+            }
+
+            public static void Take()
+            {
+                Shield.InTransaction(() => {
+                    if (_count == 0)
+                        throw new InvalidOperationException();
+                    _count.Modify((ref int c) => c--);
+                });
+            }
+
+            public static void Release()
+            {
+                Shield.InTransaction(() => _count.Modify((ref int c) => c++));
+            }
+
+            public static void Set(int level)
+            {
+                Shield.InTransaction(() => _count.Modify((ref int c) => c = level));
+            }
+        }
+
         private ShieldedSeq<Item> _queue = new ShieldedSeq<Item>();
         private Shielded<int> _processed = new Shielded<int>();
         private const int ItemCount = 500000;
@@ -26,6 +58,8 @@ namespace ConsoleTests
         {
             Console.WriteLine("Queue test...");
 
+            ProcessorSlot.Set(Environment.ProcessorCount - 1);
+            CountTracking();
             Subscribe();
 
             var maxQueueCount = new Shielded<int>();
@@ -39,11 +73,11 @@ namespace ConsoleTests
             var items = Enumerable.Range(1, ItemCount).Select(
                 i => new Item() { Id = Guid.NewGuid(), Code = i, Amount = 100m * i }).ToArray();
             stopwatch.Start();
-            for (int i = 0; i < ItemCount / 10; i++)
+            for (int i = 0; i < ItemCount / 100; i++)
             {
                 Shield.InTransaction(() => {
-                    for (int j = 0; j < 10; j++)
-                        _queue.Append(items[i*10 + j]);
+                    for (int j = 0; j < 100; j++)
+                        _queue.Append(items[i*100 + j]);
                 });
             }
 
@@ -53,36 +87,72 @@ namespace ConsoleTests
             Console.WriteLine(" -- completed in {0} ms, with {1} max queue count.", time, maxQueueCount.Read);
         }
 
-        private void Subscribe()
+        private void CountTracking()
         {
-            Shield.Conditional(() => _queue.HasAny, () => {
-                Shield.SideEffect(() => Task.Factory.StartNew(Process));
-                return false;
-            }
-            );
+            int reportEvery = 10000;
+            Shielded<int> lastReport = new Shielded<int>(0);
+            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
+
+            Shield.Conditional(() => _processed >= lastReport + reportEvery, () =>
+            {
+                DateTime newNow = DateTime.UtcNow;
+                int count = _processed;
+                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
+                lastTime.Assign(newNow);
+                lastReport.Modify((ref int n) => n += reportEvery);
+                int sc = _subscribeCount;
+                int ptc = _processTestCount;
+                int pbc = _processBodyCount;
+                Shield.SideEffect(() =>
+                {
+                    Console.WriteLine(
+                        "{0} at {1} item/s, stats ( {2}, {3}, {4} )",
+                        count, speed, sc, ptc, pbc);
+                });
+                return true;
+            });
         }
 
+        private static int _subscribeCount;
+        private static int _processTestCount;
+        private static int _processBodyCount;
 
-        private int _procCount = 0;
+        private void Subscribe()
+        {
+            Shield.Conditional(() => ProcessorSlot.Free && _queue.HasAny, () => {
+                Interlocked.Increment(ref _subscribeCount);
+                ProcessorSlot.Take();
+                Shield.SideEffect(() => Task.Factory.StartNew(Process));
+                return true;
+            });
+        }
 
         private void Process()
         {
-            if (Interlocked.Increment(ref _procCount) != 1)
-                throw new ApplicationException("Multiple procesors started!");
-            while (Shield.InTransaction(() => {
+            Item item;
+            while ((item = Shield.InTransaction(() => {
+                Interlocked.Increment(ref _processTestCount);
                 if (!_queue.HasAny)
                 {
-                    Subscribe();
-                    return false;
+                    ProcessorSlot.Release();
+                    return null;
                 }
-                var item = _queue.TakeHead();
-                //Shield.SideEffect(() => Console.WriteLine("Item {0}", item.Code));
-                _processed.Modify((ref int n) => n++);
+                return _queue.TakeHead();
+            })) != null)
+                Shield.InTransaction(() => {
+                    Interlocked.Increment(ref _processBodyCount);
+                    //if (item.Code % 10000 == 0)
+                    //    Shield.SideEffect(() => Console.WriteLine("-- Item {0}", item.Code));
+                    _processed.Commute((ref int n) => n++);
+                });
+
+            Shield.InTransaction(() => {
                 if (_processed == ItemCount)
+                {
+                    _processed.Modify((ref int p) => p++);
                     Shield.SideEffect(() => _barrier.SignalAndWait());
-                return true;
-            })) ;
-            Interlocked.Decrement(ref _procCount);
+                }
+            });
         }
     }
 }
