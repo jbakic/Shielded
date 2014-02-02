@@ -122,15 +122,23 @@ namespace ConsoleTests
             Shield.Conditional(() => ProcessorSlot.Free && _queue.HasAny, () => {
                 Interlocked.Increment(ref _subscribeCount);
                 ProcessorSlot.Take();
-                Shield.SideEffect(() => Task.Factory.StartNew(Process));
+                var first = _queue.TakeHead();
+                Shield.SideEffect(() => Task.Factory.StartNew(() => Process(first)));
                 return true;
             });
         }
 
-        private void Process()
+        private void Process(Item item)
         {
-            Item item;
-            while ((item = Shield.InTransaction(() => {
+            do
+            {
+                Shield.InTransaction(() => {
+                    Interlocked.Increment(ref _processBodyCount);
+                    //if (item.Code % 10000 == 0)
+                    //    Shield.SideEffect(() => Console.WriteLine("-- Item {0}", item.Code));
+                    _processed.Commute((ref int n) => n++);
+                });
+            } while ((item = Shield.InTransaction(() => {
                 Interlocked.Increment(ref _processTestCount);
                 if (!_queue.HasAny)
                 {
@@ -138,13 +146,7 @@ namespace ConsoleTests
                     return null;
                 }
                 return _queue.TakeHead();
-            })) != null)
-                Shield.InTransaction(() => {
-                    Interlocked.Increment(ref _processBodyCount);
-                    //if (item.Code % 10000 == 0)
-                    //    Shield.SideEffect(() => Console.WriteLine("-- Item {0}", item.Code));
-                    _processed.Commute((ref int n) => n++);
-                });
+            })) != null);
 
             Shield.InTransaction(() => {
                 if (_processed == ItemCount)
