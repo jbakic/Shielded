@@ -57,8 +57,8 @@ namespace Shielded
             if (!Shield.Enlist(this) && _localDict.Value.Reads.Contains(key))
                 return;
 
-            var stamp = Shield.CurrentTransactionStartStamp;
 #if SERVER
+            var stamp = Shield.CurrentTransactionStartStamp;
             Tuple<int, long> w;
             if (_writeStamps.TryGetValue(key, out w) && w.Item2 <= stamp)
                 lock (_localDict)
@@ -70,7 +70,7 @@ namespace Shielded
             SpinWait.SpinUntil(() =>
             {
                 Tuple<int, long> w;
-                return !_writeStamps.TryGetValue(key, out w) || w.Item2 > stamp;
+                return !_writeStamps.TryGetValue(key, out w) || w.Item2 > Shield.CurrentTransactionStartStamp;
             });
 #endif
         }

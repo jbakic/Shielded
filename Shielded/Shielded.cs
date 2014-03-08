@@ -39,8 +39,8 @@ namespace Shielded
             if (!Shield.Enlist(this))
                 return;
 
-            var stamp = Shield.CurrentTransactionStartStamp;
 #if SERVER
+            var stamp = Shield.CurrentTransactionStartStamp;
             var w = _writerStamp;
             if (w != null && w.Item2 <= stamp)
                 lock (_locals)
@@ -52,7 +52,7 @@ namespace Shielded
             SpinWait.SpinUntil(() =>
             {
                 var w = _writerStamp;
-                return w == null || w.Item2 > stamp;
+                return w == null || w.Item2 > Shield.CurrentTransactionStartStamp;
             });
 #endif
         }

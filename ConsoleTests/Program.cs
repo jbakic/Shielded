@@ -35,7 +35,7 @@ namespace ConsoleTests
             var randomizr = new Random();
             int transactionCounter;
             int sleepTime = 1;
-            int taskCount = 1000;
+            int taskCount = 10000;
 
             foreach (var i in Enumerable.Repeat(0, 5))
             {
