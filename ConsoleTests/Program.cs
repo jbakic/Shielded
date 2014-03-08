@@ -435,7 +435,7 @@ namespace ConsoleTests
 
         public static void TreePoolTest()
         {
-            int numThreads = 3;
+            int numThreads = 4;
             int numItems = 100000;
             // for some reason, if this is replaced with ShieldedDict, KeyAlreadyPresent
             // exception is thrown. under one key you can then find an entity which does
@@ -569,7 +569,7 @@ namespace ConsoleTests
                         var item1 = new TreeItem();
                         Shield.InTransaction(() =>
                         {
-                            Interlocked.Increment(ref transactionCount);
+                            //Interlocked.Increment(ref transactionCount);
                             tree.Add(item1.Id, item1);
 //                            countComplete.Commute((ref int c) => c++);
                         }
@@ -618,7 +618,7 @@ namespace ConsoleTests
                         var item1 = new TreeItem();
                         Shield.InTransaction(() =>
                         {
-                            Interlocked.Increment(ref transactionCount);
+                            //Interlocked.Increment(ref transactionCount);
                             dict[item1.Id] = item1;
 //                            countComplete.Commute((ref int c) => c++);
                         }
@@ -766,7 +766,7 @@ namespace ConsoleTests
 
             //TreeTest();
 
-            //TreePoolTest();
+            TreePoolTest();
 
             //SkewTest();
 
@@ -774,7 +774,7 @@ namespace ConsoleTests
 
             //SimpleCommuteTest();
 
-            new Queue().Run();
+            //new Queue().Run();
 
             //SequentialTests.Run();
         }

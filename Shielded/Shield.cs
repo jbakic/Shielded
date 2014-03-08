@@ -21,6 +21,10 @@ namespace Shielded
 
         [ThreadStatic]
         private static long? _currentTransactionStartStamp;
+        /// <summary>
+        /// Current transaction's start stamp. Thread-static. Throws if called out of
+        /// transaction.
+        /// </summary>
         public static long CurrentTransactionStartStamp
         {
             get
@@ -29,6 +33,9 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Gets a value indicating whether the current thread is in a transaction.
+        /// </summary>
         public static bool IsInTransaction
         {
             get
@@ -85,13 +92,17 @@ namespace Shielded
         [ThreadStatic]
         private static int? _commuteTime;
 
-        internal static void Enlist(IShielded item)
+        /// <summary>
+        /// Enlist the specified item in the transaction. Returns true if this is the
+        /// first time in this transaction that this item is enlisted.
+        /// </summary>
+        internal static bool Enlist(IShielded item)
         {
             AssertInTransaction();
             if (_blockEnlist != null && _blockEnlist != item)
                 throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
             if (!_localItems.Enlisted.Add(item))
-                return;
+                return false;
             // does a commute have to degenerate?
             if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
             {
@@ -108,7 +119,7 @@ namespace Shielded
                         any = any || i < (limit ?? (limit = _commuteTime ?? _localItems.Commutes.Count));
                     }
                 }
-                if (!any) return;
+                if (!any) return true;
 
                 // in case one commute triggers others, we mark where we were in _comuteTime,
                 // and any recursive call will not execute commutes beyond where we are.
@@ -142,6 +153,7 @@ namespace Shielded
                     }
                 }
             }
+            return true;
         }
 
         [ThreadStatic]
@@ -236,6 +248,11 @@ namespace Shielded
             });
         }
 
+        /// <summary>
+        /// Enlists a side-effect - an operation to be performed only if the transaction
+        /// commits. Optionally receives an action to perform in case of a rollback.
+        /// If the transaction is rolled back, all enlisted side-effects are (also) cleared.
+        /// </summary>
         public static void SideEffect(Action fx, Action rollbackFx = null)
         {
             if (_localItems.Fx == null)
@@ -243,6 +260,11 @@ namespace Shielded
             _localItems.Fx.Add(new SideEffect(fx, rollbackFx));
         }
 
+        /// <summary>
+        /// Executes the function in a transaction, and returns it's final result. If the
+        /// transaction fails (by calling Rollback(false)), returns the default value of type T.
+        /// Nesting allowed.
+        /// </summary>
         public static T InTransaction<T>(Func<T> act)
         {
             T retVal = default(T);
@@ -250,6 +272,9 @@ namespace Shielded
             return retVal;
         }
 
+        /// <summary>
+        /// Executes the action in a transaction. Nesting allowed, it's a NOP.
+        /// </summary>
         public static void InTransaction(Action act)
         {
             if (_currentTransactionStartStamp.HasValue)
@@ -296,6 +321,9 @@ namespace Shielded
             public NoRepeatTransException(string message) : base(message) {}
         }
 
+        /// <summary>
+        /// Rolls the transaction back. If given false as argument, there will be no repetitions.
+        /// </summary>
         public static void Rollback(bool retry)
         {
             throw (retry ?
@@ -359,25 +387,27 @@ namespace Shielded
 
         private static void TriggerSubscriptions(IShielded[] changes)
         {
-            HashSet<Shielded<CommitSubscription>> triggered = null;
-            Shield.InTransaction(() =>
-            {
-                // for speed, when conditionals are not used.
-                if (_subscriptions.Count == 0)
-                    return;
-
-                foreach (var item in changes)
+            HashSet<Shielded<CommitSubscription>> triggered =
+                Shield.InTransaction(() =>
                 {
-                    ShieldedSeq<Shielded<CommitSubscription>> l;
-                    if (_subscriptions.TryGetValue(item, out l))
+                    // for speed, when conditionals are not used.
+                    if (_subscriptions.Count == 0)
+                        return null;
+
+                    HashSet<Shielded<CommitSubscription>> res = null;
+                    foreach (var item in changes)
                     {
-                        if (triggered == null)
-                            triggered = new HashSet<Shielded<CommitSubscription>>(l);
-                        else
-                            triggered.UnionWith(l);
+                        ShieldedSeq<Shielded<CommitSubscription>> l;
+                        if (_subscriptions.TryGetValue(item, out l))
+                        {
+                            if (res == null)
+                                res = new HashSet<Shielded<CommitSubscription>>(l);
+                            else
+                                res.UnionWith(l);
+                        }
                     }
-                }
-            });
+                    return res;
+                });
 
             if (triggered != null)
                 foreach (var sub in triggered)

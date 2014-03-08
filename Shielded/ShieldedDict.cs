@@ -54,6 +54,9 @@ namespace Shielded
 
         private void CheckLockAndEnlist(TKey key)
         {
+            if (!Shield.Enlist(this) && _localDict.Value.Reads.Contains(key))
+                return;
+
             var stamp = Shield.CurrentTransactionStartStamp;
 #if SERVER
             Tuple<int, long> w;
@@ -70,7 +73,6 @@ namespace Shielded
                 return !_writeStamps.TryGetValue(key, out w) || w.Item2 > stamp;
             });
 #endif
-            Shield.Enlist(this);
         }
 
         private ItemKeeper CurrentTransactionOldValue(TKey key)

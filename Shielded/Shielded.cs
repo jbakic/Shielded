@@ -36,6 +36,9 @@ namespace Shielded
 
         private void CheckLockAndEnlist()
         {
+            if (!Shield.Enlist(this))
+                return;
+
             var stamp = Shield.CurrentTransactionStartStamp;
 #if SERVER
             var w = _writerStamp;
@@ -52,7 +55,6 @@ namespace Shielded
                 return w == null || w.Item2 > stamp;
             });
 #endif
-            Shield.Enlist(this);
         }
 
         private ValueKeeper CurrentTransactionOldValue()
