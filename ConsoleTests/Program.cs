@@ -436,11 +436,11 @@ namespace ConsoleTests
         public static void TreePoolTest()
         {
             int numThreads = 4;
-            int numItems = 100000;
+            int numItems = 200000;
             // for some reason, if this is replaced with ShieldedDict, KeyAlreadyPresent
             // exception is thrown. under one key you can then find an entity which does
             // not have that key. complete mystery.
-            var tree = new ShieldedTree<Guid, TreeItem>();
+            var tree = new ShieldedDict<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);
             int reportEvery = 10000;
             Shielded<int> lastReport = new Shielded<int>(0);
@@ -467,9 +467,9 @@ namespace ConsoleTests
             _timer.Start();
             var time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => x.Id = x.Id);
+                Shield.InTransaction(() => x.Id);
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("Empty transactions in {0} ms.", time);
+            Console.WriteLine("1 read transactions in {0} ms.", time);
 
             var bags = new List<Action>[numThreads];
             var threads = new Thread[numThreads];
@@ -478,7 +478,16 @@ namespace ConsoleTests
                 var bag = bags[i] = new List<Action>();
                 threads[i] = new Thread(() => {
                     foreach (var a in bag)
-                        a();
+                    {
+                        try
+                        {
+                            a();
+                        }
+                        catch
+                        {
+                            Console.Write(" * ");
+                        }
+                    }
                     barrier.SignalAndWait();
                 });
             }
@@ -527,10 +536,15 @@ namespace ConsoleTests
             Console.WriteLine("Items read by key separately in {0} ms.", time);
 
             time = _timer.ElapsedMilliseconds;
-            foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => x.Id = x.Id);
+            keys.AsParallel().ForAll(k => x = tree[k]);
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("Empty transactions in {0} ms.", time);
+            Console.WriteLine("Items read by key in parallel in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => x.Id);
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1 read transactions in {0} ms.", time);
         }
 
         public static void TreeTest()

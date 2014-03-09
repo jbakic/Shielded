@@ -295,21 +295,17 @@ namespace Shielded
             Shield.AssertInTransaction();
             // force conflict if _count changes. even if it changes back to same value!
             var c = _count.Read;
-            var keys = _localDict.HasValue && _localDict.Value.Items != null ?
-                _dict.Keys.Except(_localDict.Value.Items.Keys) : _dict.Keys;
+            var locals = _localDict.HasValue ? _localDict.Value.Items : null;
+            var keys = locals != null ? _dict.Keys.Except(locals.Keys) : _dict.Keys;
             foreach (var key in keys)
             {
                 var v = CurrentTransactionOldValue(key);
                 if (v == null || v.Empty) continue;
                 yield return new KeyValuePair<TKey, TItem>(key, v.Value);
             }
-            if (_localDict.HasValue && _localDict.Value.Items != null)
-                foreach (var key in _localDict.Value.Items.Keys)
-                {
-                    var v = _localDict.Value.Items[key];
-                    if (v.Empty) continue;
-                    yield return new KeyValuePair<TKey, TItem>(key, v.Value);
-                }
+            if (locals != null)
+                foreach (var kvp in locals.Where(l => !l.Value.Empty))
+                    yield return new KeyValuePair<TKey, TItem>(kvp.Key, kvp.Value.Value);
         }
         #endregion
 
