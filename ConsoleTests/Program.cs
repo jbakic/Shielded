@@ -467,7 +467,7 @@ namespace ConsoleTests
             _timer.Start();
             var time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => x.Id);
+                Shield.InTransaction(() => { var a = x.Id; });
             time = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("Empty transactions in {0} ms.", time);
 
@@ -542,7 +542,7 @@ namespace ConsoleTests
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => x.Id);
+                Shield.InTransaction(() => { var a = x.Id; });
             time = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("Empty transactions in {0} ms.", time);
         }
@@ -551,21 +551,44 @@ namespace ConsoleTests
         {
             long time;
             _timer = Stopwatch.StartNew();
-            var numItems = 200000;
+            var numItems = 100000;
+            var repeatsPerTrans = 100;
 
             var x = new TreeItem();
 
-            Console.WriteLine("Testing simple ops with {0} repetitions", numItems);
+            Console.WriteLine(
+                "Testing simple ops with {0} iterations, and repeats per trans (N) = {1}",
+                numItems, repeatsPerTrans);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => { var a = x.Id; });
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("WARM UP - 1 non-transactional read in transactions in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => { var a = x.Id; });
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1 non-transactional read in transactions in {0} ms.", time);
+
+            // this version uses the generic, result-returning InTransaction, which involves creation
+            // of a closure, i.e. an allocation.
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => x.Id);
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1 non-transactional read w/ returning result in {0} ms.", time);
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
                     Guid a;
-                    for (int i = 0; i < 100; i++)
+                    for (int i = 0; i < repeatsPerTrans; i++)
                         a = x.Id;
                 });
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("100 non-transactional reads in transactions in {0} ms.", time);
+            Console.WriteLine("N non-transactional reads in transactions in {0} ms.", time);
 
             // the purpose here is to get a better picture of the expense of using Shielded. a more
             // complex project would probably, during one transaction, repeatedly access the same
@@ -575,7 +598,7 @@ namespace ConsoleTests
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => accessTest.Read);
+                Shield.InTransaction(() => { var a = accessTest.Read; });
             time = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("1-read transactions in {0} ms.", time);
 
@@ -583,11 +606,11 @@ namespace ConsoleTests
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
                     int a;
-                    for (int i = 0; i < 100; i++)
+                    for (int i = 0; i < repeatsPerTrans; i++)
                         a = accessTest.Read;
                 });
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("100-repeated-reads transactions in {0} ms.", time);
+            Console.WriteLine("N-repeated-reads transactions in {0} ms.", time);
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
@@ -598,11 +621,26 @@ namespace ConsoleTests
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
-                    for (int i = 0; i < 100; i++)
+                    for (int i = 0; i < repeatsPerTrans; i++)
                         accessTest.Modify((ref int n) => n = 1);
                 });
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("100-repeated-modify transactions in {0} ms.", time);
+            Console.WriteLine("N-repeated-modify transactions in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    int a;
+                    for (int i = 0; i < repeatsPerTrans << 1; i++)
+                    {
+                        if (i % 2 == 0)
+                            a = accessTest.Read;
+                        else
+                            accessTest.Modify((ref int n) => n = 1);
+                    }
+                });
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("2N-read-and-modify transactions in {0} ms.", time);
 
             // Assign is commutable, and thus incurs extra expense.
             time = _timer.ElapsedMilliseconds;
@@ -614,17 +652,19 @@ namespace ConsoleTests
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
-                    for (int i = 0; i < 100; i++)
+                    for (int i = 0; i < repeatsPerTrans; i++)
                         accessTest.Assign(1);
                 });
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("100-repeated-assign transactions in {0} ms.", time);
+            Console.WriteLine("N-repeated-assign transactions in {0} ms.", time);
 
+            // in this test, due to the reading, the Assign commutes degenerate. a Read is
+            // first, so all Assigns actually just execute immediately.
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
                     int a;
-                    for (int i = 0; i < 200; i++)
+                    for (int i = 0; i < repeatsPerTrans << 1; i++)
                     {
                         if (i % 2 == 0)
                             a = accessTest.Read;
@@ -633,7 +673,7 @@ namespace ConsoleTests
                     }
                 });
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("200-read-and-assign transactions in {0} ms.", time);
+            Console.WriteLine("2N-read-and-assign transactions in {0} ms.", time);
         }
 
         public static void TreeTest()
@@ -869,7 +909,7 @@ namespace ConsoleTests
 
             //TreeTest();
 
-            TreePoolTest();
+            //TreePoolTest();
 
             SimpleOps();
 
