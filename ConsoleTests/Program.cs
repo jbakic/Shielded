@@ -469,7 +469,7 @@ namespace ConsoleTests
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => x.Id);
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("1 read transactions in {0} ms.", time);
+            Console.WriteLine("1-read transactions in {0} ms.", time);
 
             var bags = new List<Action>[numThreads];
             var threads = new Thread[numThreads];
@@ -544,7 +544,30 @@ namespace ConsoleTests
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => x.Id);
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("1 read transactions in {0} ms.", time);
+            Console.WriteLine("1-read transactions in {0} ms.", time);
+
+            // the purpose here is to get a better picture of the expense of using Shielded. a more
+            // complex project would probably, during one transaction, repeatedly access the same
+            // field. does this cost much more than a single-access transaction? if it is the same
+            // field, then any significant extra expense is unacceptable.
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => Enumerable.Repeat(0, 100).Select(i => x.Id));
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("100-repeated-reads transactions in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => x.Id = x.Id);
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-write transactions in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => Enumerable.Repeat(0, 200).Select(
+                    i => i % 2 == 0 ? x.Id : (x.Id = x.Id)));
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("200-repeated-reads-and-writes transactions in {0} ms.", time);
         }
 
         public static void TreeTest()
