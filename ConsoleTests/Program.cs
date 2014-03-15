@@ -558,11 +558,17 @@ namespace ConsoleTests
                 "Testing simple ops with {0} iterations, and repeats per trans (N) = {1}",
                 numItems, repeatsPerTrans);
 
+            var accessTest = new Shielded<int>();
+
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => { });
+                Shield.InTransaction(() => {
+                    accessTest.Assign(3);
+                    var a = accessTest.Read;
+                    accessTest.Modify((ref int n) => n = 5);
+                });
             time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("WARM UP - empty transactions in {0} ms.", time);
+            Console.WriteLine("WARM UP in {0} ms.", time);
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
@@ -582,7 +588,6 @@ namespace ConsoleTests
             // complex project would probably, during one transaction, repeatedly access the same
             // field. does this cost much more than a single-access transaction? if it is the same
             // field, then any significant extra expense is unacceptable.
-            var accessTest = new Shielded<int>();
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
@@ -654,11 +659,20 @@ namespace ConsoleTests
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
                     var a = accessTest.Read;
+                    accessTest.Assign(1);
+                });
+            var oneDegAssignTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-read-1-assign transactions in {0} ms.", oneDegAssignTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    var a = accessTest.Read;
                     for (int i = 0; i < repeatsPerTrans; i++)
                         accessTest.Assign(1);
                 });
-            var degAssignTime = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("1-read-N-assigns transactions in {0} ms.", degAssignTime);
+            var nDegAssignTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-read-N-assigns transactions in {0} ms.", nDegAssignTime);
 
             Console.WriteLine("\ncost of empty transaction = {0:0.000} us", emptyTime / (numItems / 1000.0));
             Console.WriteLine("cost of the closure in InTransaction<T> = {0:0.000} us",
@@ -677,8 +691,10 @@ namespace ConsoleTests
                               (oneAssignTime - emptyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of an additional Assign = {0:0.000} us",
                               (nAssignTime - oneAssignTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
-            Console.WriteLine("cost of a degenerated Assign = {0:0.000} us",
-                              (degAssignTime - oneReadTime) / (repeatsPerTrans * numItems / 1000.0));
+            Console.WriteLine("cost of the first degenerated Assign = {0:0.000} us",
+                              (oneDegAssignTime - oneReadTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of an additional degenerated Assign = {0:0.000} us",
+                              (nDegAssignTime - oneDegAssignTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
         }
 
         public static void TreeTest()
