@@ -111,14 +111,12 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Commutative, which means it won't conflict unless you read this shielded.
+        /// Writes the value into the Shielded. Not commutable, for performance reasons.
         /// </summary>
         public void Assign(T value)
         {
-            Shield.EnlistCommute(() => {
-                PrepareForWriting(false);
-                _locals.Value.Value = value;
-            }, this);
+            PrepareForWriting(false);
+            _locals.Value.Value = value;
             Changed.Raise(this, EventArgs.Empty);
         }
 
@@ -127,10 +125,15 @@ namespace Shielded
         /// data. If it conflicts, only it is retried. If it succeeds,
         /// we (try to) commit with the same write stamp along with it.
         /// But, if you access this Shielded, it gets executed directly in this transaction.
+        /// The Changed event is raised only when the commute is enlisted, and not
+        /// when (and every time, given possible repetitions..) it executes.
         /// </summary>
         public void Commute(ModificationDelegate perform)
         {
-            Shield.EnlistStrictCommute(() => Modify(perform), this);
+            Shield.EnlistStrictCommute(() => {
+                PrepareForWriting(true);
+                perform(ref _locals.Value.Value);
+            }, this);
             Changed.Raise(this, EventArgs.Empty);
         }
 

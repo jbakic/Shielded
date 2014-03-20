@@ -127,8 +127,6 @@ namespace Shielded
                 }
                 else
                 {
-                    // this cannot be a commute. if someone reads _head, he
-                    // can read through the items to the last one...
                     _tail.Modify((ref ItemKeeper t) => {
                         t.Next.Assign(newItem);
                         t = newItem;

@@ -268,14 +268,7 @@ namespace ShieldedTests
             // some more complex commute combinations. first, with ShieldedSeq ops.
             var seq = new ShieldedSeq<int>();
 
-            Shield.InTransaction(() => {
-                // test for potential disorder of the seq commutes.
-                seq.Append(1);
-                seq.Clear();
-                Assert.IsFalse(seq.HasAny);
-                Assert.AreEqual(0, seq.Count);
-            });
-
+            // just a test for proper commute ordering
             Shield.InTransaction(() => {
                 seq.Append(1);
                 seq.Append(2);
@@ -285,45 +278,43 @@ namespace ShieldedTests
                 Assert.AreEqual(2, seq.Count);
                 Assert.AreEqual(1, seq[0]);
                 Assert.AreEqual(3, seq[1]);
-                seq.Clear();
-                Assert.IsFalse(seq.HasAny);
-                Assert.AreEqual(0, seq.Count);
             });
 
-            Shield.InTransaction(() => { seq.Append(1); seq.Append(2); });
-            Assert.AreEqual(1, seq[0]);
-            Assert.AreEqual(2, seq[1]);
+            // a test for commutability of Append()
+            Shield.InTransaction(() => { seq.Clear(); });
             int transactionCount = 0;
             Thread oneTimer = null;
             Shield.InTransaction(() => {
-                // here's a weird one - the seq is only partially commuted, due to reading
-                // from the head, but it still commutes with a trans that is only appending.
                 transactionCount++;
-                Assert.AreEqual(1, seq.TakeHead());
-                // Count or tail were not read! Clearing can commute with appending.
-                seq.Clear();
+                seq.Append(1);
                 if (oneTimer == null)
                 {
                     oneTimer = new Thread(() => Shield.InTransaction(() =>
                     {
-                        seq.Append(3);
+                        seq.Append(2);
                     }));
                     oneTimer.Start();
                     oneTimer.Join();
                 }
             });
             Assert.AreEqual(1, transactionCount);
-            Assert.AreEqual(0, seq.Count);
-            Assert.IsFalse(seq.HasAny);
+            Assert.AreEqual(2, seq.Count);
+            // the "subthread" commited the append first, so:
+            Assert.AreEqual(2, seq[0]);
+            Assert.AreEqual(1, seq[1]);
+            Assert.IsTrue(seq.HasAny);
 
-            Shield.InTransaction(() => { seq.Append(1); seq.Append(2); });
+            // test for a commute degeneration - reading the head of a list causes
+            // appends done in the same transaction to stop being commutable. for
+            // simplicity - you could continue from the head on to the tail, and it cannot
+            // thus be a commute, you read it. it could, of course, be done that it still
+            // is a commute, but that would make it pretty complicated.
+            Shield.InTransaction(() => { seq.Clear(); seq.Append(1); seq.Append(2); });
             Assert.AreEqual(1, seq[0]);
             Assert.AreEqual(2, seq[1]);
             transactionCount = 0;
             oneTimer = null;
             Shield.InTransaction(() => {
-                // same as above, but with appending, does not work. reading the _head screws it up,
-                // because you could continue from the head to the last item.
                 transactionCount++;
                 Assert.AreEqual(1, seq.TakeHead());
                 seq.Append(4);
@@ -371,14 +362,14 @@ namespace ShieldedTests
             Assert.AreEqual(3, seq[1]);
             Assert.AreEqual(4, seq[2]);
 
+            // here the removal takes out the last element in the list. this absolutely cannot
+            // commute, because it read from the only element's Next field, and the Seq
+            // knew that it was the last element. it must conflict.
             Shield.InTransaction(() => { seq.Clear(); seq.Append(1); });
             Assert.AreEqual(1, seq[0]);
             transactionCount = 0;
             oneTimer = null;
             Shield.InTransaction(() => {
-                // here the removal takes out the last element in the list. this cannot
-                // commute, because it read from the only element's Next field, and the Seq
-                // knew that it was the last element. it must conflict.
                 transactionCount++;
                 Assert.AreEqual(1, seq.TakeHead());
                 seq.Append(3);
