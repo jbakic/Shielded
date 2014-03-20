@@ -105,8 +105,7 @@ improves concurrency. Incrementing an int, conflict-free:
     will stay as read when you commit. But, it is now a potential conflict.
     * Shield has various commutable operations defined in it. Appending to a
     sequence is commutable - if you do not touch the seq, it never conflicts.
-    Assigning a value to a Shielded<> by using Assign (which means, without
-    reading the old value) is also commutable.
+    Collection Count fields are comuted over, to avoid unnecessary conflicts.
 * **Transactional collections**: Included in the library are ShieldedDict<>
 (dictionary), ShieldedSeq<> (singly linked list) and ShieldedTree<> (a
 red-black tree implementation).
