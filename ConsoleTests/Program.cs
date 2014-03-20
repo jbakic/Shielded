@@ -59,7 +59,7 @@ namespace ConsoleTests
                     time, transactionCounter, correct ? "correct" : "incorrect");
             }
 
-            var lockCount = 10;
+            var lockCount = 100;
             foreach (var i in Enumerable.Repeat(0, 5))
             {
                 var x = new int[100];
@@ -100,7 +100,7 @@ namespace ConsoleTests
                             Interlocked.Increment(ref transactionCounter);
                             int v = shx[rnd];
                             if (sleepTime > 0) Thread.Sleep(sleepTime);
-                            shx[rnd].Modify((ref int a) => a = v + 1);
+                            shx[rnd].Assign(v + 1);
                         });
                     },
                     sleepTime > 0 ? TaskCreationOptions.LongRunning : TaskCreationOptions.None
@@ -916,7 +916,7 @@ namespace ConsoleTests
 
         public static void Main(string[] args)
         {
-            //TimeTests();
+            TimeTests();
 
             //OneTransaction();
 
@@ -932,7 +932,7 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            SimpleOps();
+            //SimpleOps();
 
             //SkewTest();
 
