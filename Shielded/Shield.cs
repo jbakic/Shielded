@@ -385,7 +385,7 @@ namespace Shielded
                 sub.Modify((ref CommitSubscription cs) => { cs.Items = null; });
         }
 
-        private static void TriggerSubscriptions(IShielded[] changes)
+        private static void TriggerSubscriptions(IList<IShielded> changes)
         {
             HashSet<Shielded<CommitSubscription>> triggered =
                 Shield.InTransaction(() =>
@@ -478,7 +478,7 @@ namespace Shielded
         /// </summary>
         static void RunCommutes(out TransItems commutedItems)
         {
-            var items = _localItems;
+            var commutes = _localItems.Commutes;
             while (true)
             {
                 _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
@@ -487,7 +487,7 @@ namespace Shielded
                 {
                     WithTransactionContext(commutedItems, () =>
                     {
-                        foreach (var comm in items.Commutes)
+                        foreach (var comm in commutes)
                             comm.Perform();
                     }, merge: false);
                     return;
@@ -506,7 +506,7 @@ namespace Shielded
 
         private static object _stampLock = new object();
 
-        static bool CommitCheck(out Tuple<int, long> writeStamp, out ICollection<IShielded> toCommit)
+        static bool CommitCheck(out Tuple<int, long> writeStamp, out IEnumerable<IShielded> toCommit)
         {
             var items = _localItems;
             List<IShielded> enlisted = items.Enlisted.ToList();
@@ -592,9 +592,7 @@ namespace Shielded
                     }
                 } while (brokeInCommutes);
 
-                if (commEnlisted != null)
-                    enlisted.InsertRange(0, commEnlisted);
-                toCommit = enlisted;
+                toCommit = commEnlisted != null ? commEnlisted.Concat(enlisted) : enlisted;
                 return commit;
             }
             finally
@@ -613,7 +611,7 @@ namespace Shielded
                 (items.Commutes != null && items.Commutes.Count > 0);
 
             Tuple<int, long> writeStamp = null;
-            ICollection<IShielded> enlisted = null;
+            IEnumerable<IShielded> toCommit = null;
             bool commit = true;
             if (!hasChanges)
             {
@@ -627,16 +625,19 @@ namespace Shielded
                         // caller beware.
                         fx.Commit();
             }
-            else if (CommitCheck(out writeStamp, out enlisted))
+            else if (CommitCheck(out writeStamp, out toCommit))
             {
-                var trigger = enlisted.Where(s => s.HasChanges).ToArray();
+                var trigger = new List<IShielded>();
                 // this must not be interrupted by a Thread.Abort!
                 try { }
                 finally
                 {
-                    RegisterCopies(writeStamp.Item2, trigger);
-                    foreach (var item in enlisted)
+                    foreach (var item in toCommit)
+                    {
+                        if (item.HasChanges) trigger.Add(item);
                         item.Commit();
+                    }
+                    RegisterCopies(writeStamp.Item2, trigger);
                     CloseTransaction();
                 }
 

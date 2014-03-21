@@ -658,7 +658,7 @@ namespace ConsoleTests
             var oneModifyNReadTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("1-modify-N-reads transactions in {0} ms.", oneModifyNReadTime);
 
-            // Assign is commutable, and thus incurs extra expense.
+
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => accessTest.Assign(1));
@@ -673,6 +673,23 @@ namespace ConsoleTests
                 });
             var nAssignTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("N-assigns transactions in {0} ms.", nAssignTime);
+
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => accessTest.Commute((ref int n) => n = 1));
+            var oneCommuteTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-commute transactions in {0} ms.", oneCommuteTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    for (int i = 0; i < repeatsPerTrans; i++)
+                        accessTest.Commute((ref int n) => n = 1);
+                });
+            var nCommuteTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("N-commute transactions in {0} ms.", nCommuteTime);
+
 
             Console.WriteLine("\ncost of empty transaction = {0:0.000} us", emptyTime / (numItems / 1000.0));
             Console.WriteLine("cost of the closure in InTransaction<T> = {0:0.000} us",
@@ -695,6 +712,10 @@ namespace ConsoleTests
                               (oneAssignTime - emptyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of an additional Assign = {0:0.000} us",
                               (nAssignTime - oneAssignTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
+            Console.WriteLine("cost of the first commute = {0:0.000} us",
+                              (oneCommuteTime - emptyTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of an additional commute = {0:0.000} us",
+                              (nCommuteTime - oneCommuteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
         }
 
         public static void TreeTest()
@@ -916,7 +937,7 @@ namespace ConsoleTests
 
         public static void Main(string[] args)
         {
-            TimeTests();
+            //TimeTests();
 
             //OneTransaction();
 
@@ -932,7 +953,7 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            //SimpleOps();
+            SimpleOps();
 
             //SkewTest();
 
