@@ -21,7 +21,7 @@ namespace Shielded
         private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
         private volatile Tuple<int, long> _writerStamp;
-        private LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
+        private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
 
         public Shielded()
         {
@@ -36,7 +36,8 @@ namespace Shielded
 
         private void CheckLockAndEnlist()
         {
-            if (!Shield.Enlist(this))
+            Shield.AssertAccessAllowed(this);
+            if (_locals.HasValue || !Shield.Enlist(this))
                 return;
 
 #if SERVER

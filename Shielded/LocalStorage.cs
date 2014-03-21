@@ -4,11 +4,14 @@ using System.Collections.Generic;
 
 namespace Shielded
 {
-    public class LocalStorage<T> where T : class
+    internal class LocalStorageHold
     {
         [ThreadStatic]
-        private static Dictionary<LocalStorage<T>, T> _storage;
+        public static Dictionary<object, object> Storage;
+    }
 
+    public class LocalStorage<T> where T : class
+    {
         // These two are faster, immediate storage, which can be used by one thread only.
         // If there is more than one, the _storage is used by the others.
         private volatile int _holderThreadId;
@@ -19,7 +22,7 @@ namespace Shielded
             get
             {
                 return _holderThreadId == Thread.CurrentThread.ManagedThreadId ||
-                    (_storage != null && _storage.ContainsKey(this));
+                    (LocalStorageHold.Storage != null && LocalStorageHold.Storage.ContainsKey(this));
             }
         }
 
@@ -27,7 +30,8 @@ namespace Shielded
         {
             get
             {
-                return _holderThreadId == Thread.CurrentThread.ManagedThreadId ? _heldValue : _storage[this];
+                return _holderThreadId == Thread.CurrentThread.ManagedThreadId ?
+                    _heldValue : (T)LocalStorageHold.Storage[this];
             }
             set
             {
@@ -39,9 +43,9 @@ namespace Shielded
                         _heldValue = value;
                     else
                     {
-                        if (_storage == null)
-                            _storage = new Dictionary<LocalStorage<T>, T>();
-                        _storage[this] = value;
+                        if (LocalStorageHold.Storage == null)
+                            LocalStorageHold.Storage = new Dictionary<object, object>();
+                        LocalStorageHold.Storage[this] = value;
                     }
                 }
                 else if (_holderThreadId == threadId)
@@ -49,9 +53,9 @@ namespace Shielded
                     _heldValue = null;
                     _holderThreadId = 0;
                 }
-                else if (_storage != null)
+                else if (LocalStorageHold.Storage != null)
                 {
-                    _storage.Remove(this);
+                    LocalStorageHold.Storage.Remove(this);
                 }
             }
         }

@@ -93,14 +93,25 @@ namespace Shielded
         private static int? _commuteTime;
 
         /// <summary>
+        /// IShielded implementors are free to keep track of enlisting themselves, reducing
+        /// the number of calls to <see cref="Shield.Enlist"/>. Since they keep local data,
+        /// sometimes this can work and be much faster. However, if they do this, they must
+        /// at least check if accessing them is allowed in the current context. This method
+        /// serves that purpose.
+        /// </summary>
+        internal static void AssertAccessAllowed(ICommutableShielded item)
+        {
+            if (_blockEnlist != null && _blockEnlist != item)
+                throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
+        }
+
+        /// <summary>
         /// Enlist the specified item in the transaction. Returns true if this is the
         /// first time in this transaction that this item is enlisted.
         /// </summary>
         internal static bool Enlist(IShielded item)
         {
             AssertInTransaction();
-            if (_blockEnlist != null && _blockEnlist != item)
-                throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
             if (!_localItems.Enlisted.Add(item))
                 return false;
             // does a commute have to degenerate?
