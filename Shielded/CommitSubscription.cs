@@ -13,7 +13,7 @@ namespace Shielded
     /// </summary>
     internal class CommitSubscription : IDisposable
     {
-        private Shielded<HashSet<IShielded>> _items = new Shielded<HashSet<IShielded>>();
+        private readonly Shielded<HashSet<IShielded>> _items = new Shielded<HashSet<IShielded>>();
         private readonly Func<bool> Test;
         private readonly Func<bool> Trans;
 

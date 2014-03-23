@@ -603,7 +603,7 @@ namespace Shielded
 
                 Tuple<long, IEnumerable<IShielded>> curr;
                 HashSet<IShielded> toTrim = new HashSet<IShielded>();
-                while (_copiesByVersion.TryPeek(out curr) && curr.Item1 < minTransactionNo)
+                while (_copiesByVersion.TryPeek(out curr) && curr.Item1 <= minTransactionNo)
                 {
                     toTrim.UnionWith(curr.Item2);
                     _copiesByVersion.TryDequeue(out curr);

@@ -718,6 +718,48 @@ namespace ConsoleTests
                               (nCommuteTime - oneCommuteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
         }
 
+        public static void MultiFieldOps()
+        {
+            long time;
+            _timer = Stopwatch.StartNew();
+            var numTrans = 100000;
+            var fields = 50;
+
+            Console.WriteLine(
+                "Testing multi-field ops with {0} iterations, and nuber of fields (N) = {1}",
+                numTrans, fields);
+
+            var accessTest = new Shielded<int>[fields];
+            for (int i = 0; i < fields; i++)
+                accessTest[i] = new Shielded<int>();
+            var dummy = new Shielded<int>();
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numTrans))
+                Shield.InTransaction(() => {
+                    dummy.Assign(3);
+                    var a = dummy.Read;
+                    dummy.Modify((ref int n) => n = 5);
+                    a = dummy.Read;
+                });
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("WARM UP in {0} ms.", time);
+
+
+            var results = new long[fields];
+            foreach (var i in Enumerable.Range(0, fields))
+            {
+                time = _timer.ElapsedMilliseconds;
+                foreach (var k in Enumerable.Repeat(1, numTrans))
+                    Shield.InTransaction(() => {
+                        for (int j = 0; j <= i; j++)
+                            accessTest[j].Modify((ref int n) => n = 1);
+                    });
+                results[i] = _timer.ElapsedMilliseconds - time;
+                Console.WriteLine("{0} field modifiers in {1} ms.", i + 1, results[i]);
+            }
+        }
+
         public static void TreeTest()
         {
             int numTasks = 100000;
@@ -953,7 +995,9 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            SimpleOps();
+            //SimpleOps();
+
+            MultiFieldOps();
 
             //SkewTest();
 
