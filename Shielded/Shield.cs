@@ -6,15 +6,6 @@ using System.Linq;
 
 namespace Shielded
 {
-    /// <summary>
-    /// Just a reference for users to be able to cancel conditionals. It's contents are
-    /// visible to the Shield only.
-    /// </summary>
-    public class ConditionalHandle
-    {
-        internal ConditionalHandle() {}
-    }
-
     public static class Shield
     {
         private static long _lastStamp;
@@ -230,33 +221,11 @@ namespace Shielded
         /// Test and trans are executed in single transaction, and if the commit fails, test
         /// is also retried!
         /// </summary>
-        public static ConditionalHandle Conditional(Func<bool> test, Func<bool> trans)
+        /// <returns>An IDisposable which can be used to cancel the conditional by calling
+        /// Dispose on it.</returns>
+        public static IDisposable Conditional(Func<bool> test, Func<bool> trans)
         {
-            return Shield.InTransaction(() =>
-            {
-                var items = IsolatedRun(() => test());
-                if (!items.Enlisted.Any())
-                    throw new InvalidOperationException(
-                        "A conditional test function must access at least one shielded field.");
-                var sub = new Shielded<CommitSubscription>(new CommitSubscription()
-                {
-                    Items = items.Enlisted,
-                    Test = test,
-                    Trans = trans
-                });
-                AddSubscription(sub);
-                return new ConditionalHandleInternal() { Sub = sub };
-            });
-        }
-
-        /// <summary>
-        /// Removes the subscription of a previously made Conditional.
-        /// </summary>
-        public static void CancelConditional(ConditionalHandle handle)
-        {
-            Shield.InTransaction(() => {
-                RemoveSubscription(((ConditionalHandleInternal)handle).Sub);
-            });
+            return new CommitSubscription(test, trans);
         }
 
         /// <summary>
@@ -347,112 +316,12 @@ namespace Shielded
         /// It will make sure to restore original enlisted items, merged with the ones
         /// that the action enlisted, before returning.
         /// </summary>
-        private static TransItems IsolatedRun(Action act)
+        internal static HashSet<IShielded> IsolatedRun(Action act)
         {
             var isolated = new TransItems();
             WithTransactionContext(isolated, act);
-            return isolated;
+            return isolated.Enlisted;
         }
-
-        #region Conditional impl
-
-        private class ConditionalHandleInternal : ConditionalHandle
-        {
-            public Shielded<CommitSubscription> Sub;
-        }
-
-        private struct CommitSubscription
-        {
-            public HashSet<IShielded> Items;
-            public Func<bool> Test;
-            public Func<bool> Trans;
-        }
-        private static ShieldedDict<IShielded, ShieldedSeq<Shielded<CommitSubscription>>> _subscriptions =
-            new ShieldedDict<IShielded, ShieldedSeq<Shielded<CommitSubscription>>>();
-
-        private static void AddSubscription(Shielded<CommitSubscription> sub, IEnumerable<IShielded> items = null)
-        {
-            foreach (var item in items != null ? items : sub.Read.Items)
-            {
-                ShieldedSeq<Shielded<CommitSubscription>> l;
-                if (!_subscriptions.TryGetValue(item, out l))
-                    _subscriptions.Add(item, new ShieldedSeq<Shielded<CommitSubscription>>(sub));
-                else
-                    l.Append(sub);
-            }
-        }
-
-        private static void RemoveSubscription(Shielded<CommitSubscription> sub, IEnumerable<IShielded> items = null)
-        {
-            foreach (var item in items != null ? items : sub.Read.Items)
-            {
-                var l = _subscriptions[item];
-                if (l.Count == 1)
-                    _subscriptions.Remove(item);
-                else
-                    l.Remove(sub);
-            }
-            if (items == null)
-                sub.Modify((ref CommitSubscription cs) => { cs.Items = null; });
-        }
-
-        private static void TriggerSubscriptions(IList<IShielded> changes)
-        {
-            HashSet<Shielded<CommitSubscription>> triggered =
-                Shield.InTransaction(() =>
-                {
-                    // for speed, when conditionals are not used.
-                    if (_subscriptions.Count == 0)
-                        return null;
-
-                    HashSet<Shielded<CommitSubscription>> res = null;
-                    foreach (var item in changes)
-                    {
-                        ShieldedSeq<Shielded<CommitSubscription>> l;
-                        if (_subscriptions.TryGetValue(item, out l))
-                        {
-                            if (res == null)
-                                res = new HashSet<Shielded<CommitSubscription>>(l);
-                            else
-                                res.UnionWith(l);
-                        }
-                    }
-                    return res;
-                });
-
-            if (triggered != null)
-                foreach (var sub in triggered)
-                    Shield.InTransaction(() =>
-                    {
-                        var subscription = sub.Read;
-                        if (subscription.Items == null) return; // not subscribed anymore..
-
-                        bool test = false;
-                        var testItems = IsolatedRun(() => test = subscription.Test());
-
-                        if (test && !subscription.Trans())
-                        {
-                            RemoveSubscription(sub);
-                        }
-                        else if (!testItems.Enlisted.SetEquals(subscription.Items))
-                        {
-                            RemoveSubscription(sub, subscription.Items.Except(testItems.Enlisted));
-
-                            // we allow it to get unsubscribed completely, and then we bitch.
-                            if (!testItems.Enlisted.Any())
-                                throw new InvalidOperationException(
-                                    "A conditional test function must access at least one shielded field.");
-
-                            AddSubscription(sub, testItems.Enlisted.Except(subscription.Items));
-                            sub.Modify((ref CommitSubscription cs) =>
-                            {
-                                cs.Items = testItems.Enlisted;
-                            });
-                        }
-                    });
-        }
-
-        #endregion
 
         #region Commit & rollback
 
@@ -652,7 +521,7 @@ namespace Shielded
                     CloseTransaction();
                 }
 
-                TriggerSubscriptions(trigger);
+                CommitSubscription.Trigger(trigger);
 
                 if (items.Fx != null)
                     foreach (var fx in items.Fx)

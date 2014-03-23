@@ -14,7 +14,7 @@ namespace Shielded
     {
         // These two are faster, immediate storage, which can be used by one thread only.
         // If there is more than one, the _storage is used by the others.
-        private volatile int _holderThreadId;
+        private int _holderThreadId;
         private T _heldValue;
 
         public bool HasValue

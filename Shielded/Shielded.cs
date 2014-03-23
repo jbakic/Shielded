@@ -68,6 +68,16 @@ namespace Shielded
             return point;
         }
 
+        /// <summary>
+        /// Gets the value that this Shielded contained at transaction opening. During
+        /// a transaction, this is constant.
+        /// </summary>
+        public T GetOldValue()
+        {
+            CheckLockAndEnlist();
+            return CurrentTransactionOldValue().Value;
+        }
+
         private void PrepareForWriting(bool prepareOld)
         {
             CheckLockAndEnlist();

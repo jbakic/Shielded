@@ -337,7 +337,7 @@ namespace ConsoleTests
                 }));
             });
 
-            Shield.CancelConditional(reportingCond);
+            reportingCond.Dispose();
 
             var totalCorrect = betShop.VerifyTickets();
             Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",

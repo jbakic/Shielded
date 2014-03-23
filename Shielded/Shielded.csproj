@@ -62,6 +62,7 @@
     <Compile Include="LocalStorage.cs" />
     <Compile Include="VersionList.cs" />
     <Compile Include="ShieldedEvent.cs" />
+    <Compile Include="CommitSubscription.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>
