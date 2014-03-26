@@ -119,13 +119,14 @@ namespace Shielded
                 if (preAdd != null)
                     foreach (var newKey in preAdd)
                     {
-                        _dict.AddOrUpdate(newKey, k => Enumerable.Repeat(this, 1),
-                            (k, existing) => {
-                                var list = existing != null ?
-                                    new List<CommitSubscription>(existing) : new List<CommitSubscription>();
-                                list.Add(this);
-                                return list;
-                            });
+                        lock (_dict)
+                            _dict.AddOrUpdate(newKey, k => Enumerable.Repeat(this, 1),
+                                (k, existing) => {
+                                    var list = existing != null ?
+                                        new List<CommitSubscription>(existing) : new List<CommitSubscription>();
+                                    list.Add(this);
+                                    return list;
+                                });
                     }
                 // on commit, remove no longer needed entries, or on rollback, remove the preAdd entries.
                 // please note that onRollback executes even if the Trans throws!
@@ -143,7 +144,7 @@ namespace Shielded
                 List<CommitSubscription> newList;
                 do
                 {
-                    if (!_dict.TryGetValue(remKey, out oldList)) break;
+                    oldList = _dict[remKey];
                     if (oldList.Count() > 1)
                     {
                         newList = new List<CommitSubscription>(oldList);
@@ -153,6 +154,13 @@ namespace Shielded
                         newList = null;
                 }
                 while (!_dict.TryUpdate(remKey, newList, oldList));
+
+                if (newList == null)
+                {
+                    lock (_dict)
+                        if (_dict.TryGetValue(remKey, out oldList) && oldList == null)
+                            _dict.TryRemove(remKey, out oldList);
+                }
             }
         }
     }
