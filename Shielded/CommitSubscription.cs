@@ -127,8 +127,9 @@ namespace Shielded
                                 return list;
                             });
                     }
-                // on commit, remove no longer needed entries, or on rollback, remove the preAdd entries
-                Shield.SideEffect(
+                // on commit, remove no longer needed entries, or on rollback, remove the preAdd entries.
+                // please note that onRollback executes even if the Trans throws!
+                Shield.PrivilegedSideEffect(
                     commitRemove != null ? () => Remover(commitRemove) : (Action)null,
                     preAdd != null ? () => Remover(preAdd) : (Action)null);
             }

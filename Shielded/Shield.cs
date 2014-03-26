@@ -108,35 +108,22 @@ namespace Shielded
             // does a commute have to degenerate?
             if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
             {
-                // first, mark newly broken
-                bool any = false;
-                int? limit = null;
-                for (int i = 0; i < _localItems.Commutes.Count; i++)
-                {
-                    var comm = _localItems.Commutes[i];
-                    if (comm.State == CommuteState.Ok && comm.Affecting.Contains(item))
-                    {
-                        comm.State = CommuteState.Broken;
-                        // lazy loading :)
-                        any = any || i < (limit ?? (limit = _commuteTime ?? _localItems.Commutes.Count));
-                    }
-                }
-                if (!any) return true;
-
-                // in case one commute triggers others, we mark where we were in _comuteTime,
-                // and any recursive call will not execute commutes beyond where we are.
+                // in case one commute triggers others, we mark where we are in _comuteTime,
+                // and no recursive call will execute commutes beyond that point.
                 // so, clean "dependency resolution" - we trigger only those before us. those 
-                // after us just get marked, and executed after us.
+                // after us just get marked, and then we execute them (or, someone lower in the stack).
                 var oldTime = _commuteTime;
+                int execLimit = oldTime ?? _localItems.Commutes.Count;
                 try
                 {
                     if (!oldTime.HasValue)
                         _blockCommute = true;
-
-                    for (int i = 0; i < limit; i++)
+                    for (int i = 0; i < _localItems.Commutes.Count; i++)
                     {
                         var comm = _localItems.Commutes[i];
-                        if (comm.State == CommuteState.Broken)
+                        if (comm.State == CommuteState.Ok && comm.Affecting.Contains(item))
+                            comm.State = CommuteState.Broken;
+                        if (comm.State == CommuteState.Broken && i < execLimit)
                         {
                             _commuteTime = i;
                             comm.State = CommuteState.Executed;
@@ -144,13 +131,19 @@ namespace Shielded
                         }
                     }
                 }
+                catch
+                {
+                    // not sure if this matters, but i like it. please note that this and the Remove in finally
+                    // do not necessarily affect the same commutes.
+                    _localItems.Commutes.RemoveAll(c => c.Affecting.Contains(item));
+                    throw;
+                }
                 finally
                 {
                     _commuteTime = oldTime;
                     if (!oldTime.HasValue)
                     {
                         _blockCommute = false;
-                        // in case of an exception, they all go, no matter which one threw!
                         _localItems.Commutes.RemoveAll(c => c.State != CommuteState.Ok);
                     }
                 }
@@ -238,6 +231,19 @@ namespace Shielded
             if (_localItems.Fx == null)
                 _localItems.Fx = new List<SideEffect>();
             _localItems.Fx.Add(new SideEffect(fx, rollbackFx));
+        }
+
+        /// <summary>
+        /// A privileged side effect is one that will be pushed to the front of the list,
+        /// executing before any non-privileged side effect. Used only by CommitSubscription,
+        /// to make sure that no exception-throwing side effect, enlisted by the conditional
+        /// transaction, can cause it's dictionary maintenance code to go unexecuted.
+        /// </summary>
+        internal static void PrivilegedSideEffect(Action fx, Action rollbackFx = null)
+        {
+            if (_localItems.Fx == null)
+                _localItems.Fx = new List<SideEffect>();
+            _localItems.Fx.Insert(0, new SideEffect(fx, rollbackFx));
         }
 
         /// <summary>
