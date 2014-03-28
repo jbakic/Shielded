@@ -312,6 +312,7 @@ namespace Shielded
         /// </summary>
         public static void Rollback(bool retry)
         {
+            AssertInTransaction();
             throw (retry ?
                    new TransException("Requested rollback and retry.") :
                    new NoRepeatTransException("Requested rollback without retry."));
