@@ -393,7 +393,7 @@ namespace Shielded
 
         private static object _stampLock = new object();
 
-        static bool CommitCheck(out Tuple<int, long> writeStamp, out IEnumerable<IShielded> toCommit)
+        static bool CommitCheck(out Tuple<int, long> writeStamp)
         {
             var items = _localItems;
             IEnumerable<IShielded> enlisted = items.Enlisted;
@@ -466,14 +466,14 @@ namespace Shielded
                         }
                     }
                 } while (brokeInCommutes);
-
-                toCommit = commEnlisted != null ? commEnlisted.Concat(enlisted) : enlisted;
                 return commit;
             }
             finally
             {
                 if (_currentTransactionStartStamp != oldStamp)
                     _currentTransactionStartStamp = oldStamp;
+                // note that this changes the _localItems.Enlisted hashset to contain the
+                // commute-enlists as well, regardless of the check outcome.
                 if (commutedItems != null)
                     _localItems.UnionWith(commutedItems);
             }
@@ -486,7 +486,6 @@ namespace Shielded
                 items.Enlisted.Any(s => s.HasChanges);
 
             Tuple<int, long> writeStamp = null;
-            IEnumerable<IShielded> toCommit = null;
             bool commit = true;
             if (!hasChanges)
             {
@@ -500,14 +499,14 @@ namespace Shielded
                         // caller beware.
                         fx.Commit();
             }
-            else if (CommitCheck(out writeStamp, out toCommit))
+            else if (CommitCheck(out writeStamp))
             {
                 var trigger = new List<IShielded>();
                 // this must not be interrupted by a Thread.Abort!
                 try { }
                 finally
                 {
-                    foreach (var item in toCommit)
+                    foreach (var item in items.Enlisted)
                     {
                         if (item.HasChanges) trigger.Add(item);
                         item.Commit();
