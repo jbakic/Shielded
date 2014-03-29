@@ -396,11 +396,11 @@ namespace Shielded
         static bool CommitCheck(out Tuple<int, long> writeStamp, out IEnumerable<IShielded> toCommit)
         {
             var items = _localItems;
-            List<IShielded> enlisted = items.Enlisted.ToList();
+            IEnumerable<IShielded> enlisted = items.Enlisted;
             TransItems commutedItems = null;
-            List<IShielded> commEnlisted = null;
+            IEnumerable<IShielded> commEnlisted = null;
             long oldStamp = _currentTransactionStartStamp.Value;
-            bool commit = true;
+            bool commit;
             try
             {
                 bool brokeInCommutes = true;
@@ -412,7 +412,7 @@ namespace Shielded
                         RunCommutes(out commutedItems);
                         if (commutedItems.Enlisted.Overlaps(enlisted))
                             throw new InvalidOperationException("Invalid commute - conflict with transaction.");
-                        commEnlisted = commutedItems.Enlisted.ToList();
+                        commEnlisted = commutedItems.Enlisted;
                     }
 
                     int rolledBack = -1;
@@ -424,13 +424,10 @@ namespace Shielded
                         {
                             if (commEnlisted != null)
                             {
-                                for (int i = 0; i < commEnlisted.Count; i++)
-                                    if (!commEnlisted[i].CanCommit(writeStamp))
+                                foreach (var item in commEnlisted)
+                                    if (!item.CanCommit(writeStamp))
                                     {
                                         commit = false;
-                                        rolledBack = i - 1;
-                                        for (int j = rolledBack; j >= 0; j--)
-                                            commEnlisted[j].Rollback();
                                         break;
                                     }
                             }
@@ -439,16 +436,10 @@ namespace Shielded
                             {
                                 _currentTransactionStartStamp = oldStamp;
                                 brokeInCommutes = false;
-                                for (int i = 0; i < enlisted.Count; i++)
-                                    if (!enlisted[i].CanCommit(writeStamp))
+                                foreach (var item in enlisted)
+                                    if (!item.CanCommit(writeStamp))
                                     {
                                         commit = false;
-                                        rolledBack = i - 1;
-                                        for (int j = i - 1; j >= 0; j--)
-                                            enlisted[j].Rollback();
-                                        if (commEnlisted != null)
-                                            for (int j = 0; j < commEnlisted.Count; j++)
-                                                commEnlisted[j].Rollback();
                                         break;
                                     }
 
@@ -458,24 +449,21 @@ namespace Shielded
                         }
                         catch
                         {
-                            // we roll them all back. it's good to get rid of the write lock.
-                            if (commEnlisted != null)
-                                foreach (var item in commEnlisted)
-                                    item.Rollback();
-                            if (!brokeInCommutes)
-                                foreach (var item in enlisted)
-                                    item.Rollback();
+                            commit = false;
                             throw;
                         }
-                    }
-                    if (!commit)
-                    {
-                        if (brokeInCommutes)
-                            for (int i = rolledBack + 1; i < commEnlisted.Count; i++)
-                                commEnlisted[i].Rollback();
-                        else
-                            for (int i = rolledBack + 1; i < enlisted.Count; i++)
-                                enlisted[i].Rollback();
+                        finally
+                        {
+                            if (!commit)
+                            {
+                                if (commEnlisted != null)
+                                    foreach (var item in commEnlisted)
+                                        item.Rollback();
+                                if (!brokeInCommutes)
+                                    foreach (var item in enlisted)
+                                        item.Rollback();
+                            }
+                        }
                     }
                 } while (brokeInCommutes);
 
@@ -494,8 +482,8 @@ namespace Shielded
         private static bool DoCommit()
         {
             var items = _localItems;
-            bool hasChanges = items.Enlisted.Any(s => s.HasChanges) ||
-                (items.Commutes != null && items.Commutes.Count > 0);
+            bool hasChanges = (items.Commutes != null && items.Commutes.Count > 0) ||
+                items.Enlisted.Any(s => s.HasChanges);
 
             Tuple<int, long> writeStamp = null;
             IEnumerable<IShielded> toCommit = null;

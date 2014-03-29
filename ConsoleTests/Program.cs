@@ -551,7 +551,7 @@ namespace ConsoleTests
         {
             long time;
             _timer = Stopwatch.StartNew();
-            var numItems = 100000;
+            var numItems = 200000;
             var repeatsPerTrans = 100;
 
             Console.WriteLine(
@@ -723,7 +723,7 @@ namespace ConsoleTests
             long time;
             _timer = Stopwatch.StartNew();
             var numTrans = 100000;
-            var fields = 50;
+            var fields = 20;
 
             Console.WriteLine(
                 "Testing multi-field ops with {0} iterations, and nuber of fields (N) = {1}",
@@ -995,9 +995,9 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            //SimpleOps();
+            SimpleOps();
 
-            MultiFieldOps();
+            //MultiFieldOps();
 
             //SkewTest();
 
