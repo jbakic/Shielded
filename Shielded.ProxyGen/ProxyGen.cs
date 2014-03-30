@@ -124,8 +124,9 @@ namespace Shielded.ProxyGen
 
         internal static bool IsInteresting(PropertyInfo pi)
         {
-            return pi.CanRead && pi.GetGetMethod().IsVirtual &&
-                pi.CanWrite && pi.GetSetMethod().IsVirtual;
+            MethodInfo getter, setter;
+            return pi.CanRead && (getter = pi.GetGetMethod()) != null && getter.IsVirtual &&
+                pi.CanWrite && (setter = pi.GetSetMethod()) != null && setter.IsVirtual;
         }
 
         private static CodeTypeMember CreateStructField(PropertyInfo pi)

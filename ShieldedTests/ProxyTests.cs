@@ -12,6 +12,14 @@ namespace ShieldedTests
     {
         public virtual Guid Id { get; set; }
         public virtual int Counter { get; set; }
+        public virtual int ProtectedSetter { get; protected set; }
+
+        public void SetProtectedField(int v)
+        {
+            // just to test if this field will also be transactional. it won't, since
+            // CodeDom does not support defining access flags for getter and setter separately. lame.
+            ProtectedSetter = v;
+        }
 
         public virtual string Name
         {
@@ -128,6 +136,15 @@ namespace ShieldedTests
                 });
             }
             catch (InvalidOperationException) { }
+        }
+
+        [Test]
+        public void ProtectedSetterTest()
+        {
+            var t = Factory.NewShielded<TestEntity>();
+
+            // just confirms that the ProtectedSetter field is not transactional.
+            t.SetProtectedField(1);
         }
     }
 }
