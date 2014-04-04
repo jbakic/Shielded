@@ -401,11 +401,11 @@ namespace Shielded
             bool commit;
             try
             {
-                bool brokeInCommutes = true;
+                bool brokeInCommutes = items.Commutes != null && items.Commutes.Any();
                 do
                 {
                     commit = true;
-                    if (items.Commutes != null && items.Commutes.Any())
+                    if (brokeInCommutes)
                     {
                         RunCommutes(out commutedItems);
                         if (commutedItems.Enlisted.Overlaps(items.Enlisted))
@@ -418,7 +418,7 @@ namespace Shielded
                                                   Interlocked.Read(ref _lastStamp) + 1);
                         try
                         {
-                            if (commutedItems != null)
+                            if (brokeInCommutes)
                             {
                                 foreach (var item in commutedItems.Enlisted)
                                     if (!item.CanCommit(writeStamp))
@@ -426,22 +426,20 @@ namespace Shielded
                                         commit = false;
                                         break;
                                     }
+                                if (!commit) continue;
                             }
 
-                            if (commit)
-                            {
-                                _currentTransactionStartStamp = oldStamp;
-                                brokeInCommutes = false;
-                                foreach (var item in items.Enlisted)
-                                    if (!item.CanCommit(writeStamp))
-                                    {
-                                        commit = false;
-                                        break;
-                                    }
+                            _currentTransactionStartStamp = oldStamp;
+                            brokeInCommutes = false;
+                            foreach (var item in items.Enlisted)
+                                if (!item.CanCommit(writeStamp))
+                                {
+                                    commit = false;
+                                    break;
+                                }
+                            if (!commit) break;
 
-                                if (commit)
-                                    Interlocked.Increment(ref _lastStamp);
-                            }
+                            Interlocked.Increment(ref _lastStamp);
                         }
                         catch
                         {
