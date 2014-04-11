@@ -494,13 +494,9 @@ namespace Shielded
                     CloseTransaction();
                 }
 
-                var subscriptions = CommitSubscription.Trigger(trigger);
-                if (items.Fx != null)
-                    items.Fx.Select(f => (Action)f.Commit)
-                        .Concat(subscriptions)
-                        .Run();
-                else
-                    subscriptions.Run();
+                (items.Fx != null ? items.Fx.Select(f => (Action)f.Commit) : null)
+                    .SafeConcat(CommitSubscription.Trigger(trigger))
+                    .Run();
             }
             else
             {
@@ -513,6 +509,16 @@ namespace Shielded
 
             TrimCopies();
             return commit;
+        }
+
+        private static IEnumerable<T> SafeConcat<T>(this IEnumerable<T> first, IEnumerable<T> second)
+        {
+            if (first != null && second != null)
+                return first.Concat(second);
+            else if (first != null)
+                return first;
+            else
+                return second;
         }
 
         private static void DoRollback()

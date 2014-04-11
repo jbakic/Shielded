@@ -49,7 +49,7 @@ namespace Shielded
         public static IEnumerable<Action> Trigger(IList<IShielded> changes)
         {
             if (_dict.Count == 0)
-                return Enumerable.Empty<Action>();
+                return null;
 
             HashSet<CommitSubscription> result = null;
             foreach (var item in changes)
@@ -61,8 +61,7 @@ namespace Shielded
             }
 
             return result != null ?
-                result.Select(cs => (Action)( () => cs.Run(changes) ) ) :
-                Enumerable.Empty<Action>();
+                result.Select(cs => (Action)( () => cs.Run(changes) ) ) : null;
         }
 
         // runs, updates and commits itself, all in one. called out of transaction.
