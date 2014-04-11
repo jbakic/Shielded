@@ -995,7 +995,7 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            SimpleOps();
+            //SimpleOps();
 
             //MultiFieldOps();
 
@@ -1005,7 +1005,7 @@ namespace ConsoleTests
 
             //SimpleCommuteTest();
 
-            //new Queue().Run();
+            new Queue().Run();
 
             //SequentialTests.Run();
         }

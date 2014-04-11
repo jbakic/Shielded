@@ -234,19 +234,6 @@ namespace Shielded
         }
 
         /// <summary>
-        /// A privileged side effect is one that will be pushed to the front of the list,
-        /// executing before any non-privileged side effect. Used only by CommitSubscription,
-        /// to make sure that no exception-throwing side effect, enlisted by the conditional
-        /// transaction, can cause it's dictionary maintenance code to go unexecuted.
-        /// </summary>
-        internal static void PrivilegedSideEffect(Action fx, Action rollbackFx = null)
-        {
-            if (_localItems.Fx == null)
-                _localItems.Fx = new List<SideEffect>();
-            _localItems.Fx.Insert(0, new SideEffect(fx, rollbackFx));
-        }
-
-        /// <summary>
         /// Executes the function in a transaction, and returns it's final result. If the
         /// transaction fails (by calling Rollback(false)), returns the default value of type T.
         /// Nesting allowed.

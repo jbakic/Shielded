@@ -11,7 +11,7 @@ namespace Shielded
     /// <see cref="Shield.Conditional"/>. Internally keeps a dictionary to find out
     /// which instances are triggered by a certain commit.
     /// </summary>
-    internal class CommitSubscription : IDisposable
+    internal class CommitSubscription : IDisposable, IShielded
     {
         private readonly Shielded<HashSet<IShielded>> _items = new Shielded<HashSet<IShielded>>();
         private readonly Func<bool> Test;
@@ -98,6 +98,13 @@ namespace Shielded
             });
         }
 
+        private class Locals
+        {
+            public List<IShielded> PreAdd;
+            public List<IShielded> CommitRemove;
+        }
+        private readonly LocalStorage<Locals> _locals = new LocalStorage<Locals>();
+
         /// <summary>
         /// Updates our entries in the dictionary. To be immediately visible as soon as
         /// the _items.CanCommit() passes, we add ourselves into the dict straight away,
@@ -106,18 +113,22 @@ namespace Shielded
         /// </summary>
         void UpdateEntries()
         {
+            Shield.Enlist(this);
+            var l = new Locals();
+
             var oldItems = _items.GetOldValue();
             var newItems = _items.Read;
-            var preAdd = newItems == null ? null :
+            l.PreAdd = newItems == null ? null :
                 (oldItems != null ? newItems.Except(oldItems).ToList() : newItems.ToList());
-            var commitRemove = oldItems == null ? null :
+            l.CommitRemove = oldItems == null ? null :
                 (newItems != null ? oldItems.Except(newItems).ToList() : oldItems.ToList());
             try { }
             finally
             {
+                _locals.Value = l;
                 // early adding
-                if (preAdd != null)
-                    foreach (var newKey in preAdd)
+                if (l.PreAdd != null)
+                    foreach (var newKey in l.PreAdd)
                     {
                         lock (_dict)
                             _dict.AddOrUpdate(newKey, k => Enumerable.Repeat(this, 1),
@@ -128,11 +139,6 @@ namespace Shielded
                                     return list;
                                 });
                     }
-                // on commit, remove no longer needed entries, or on rollback, remove the preAdd entries.
-                // please note that onRollback executes even if the Trans throws!
-                Shield.PrivilegedSideEffect(
-                    commitRemove != null ? () => Remover(commitRemove) : (Action)null,
-                    preAdd != null ? () => Remover(preAdd) : (Action)null);
             }
         }
 
@@ -142,27 +148,53 @@ namespace Shielded
             {
                 IEnumerable<CommitSubscription> oldList;
                 List<CommitSubscription> newList;
-                do
+                lock (_dict)
                 {
                     oldList = _dict[remKey];
                     if (oldList.Count() > 1)
                     {
                         newList = new List<CommitSubscription>(oldList);
                         newList.Remove(this);
+                        _dict[remKey] = newList;
                     }
                     else
-                        newList = null;
-                }
-                while (!_dict.TryUpdate(remKey, newList, oldList));
-
-                if (newList == null)
-                {
-                    lock (_dict)
-                        if (_dict.TryGetValue(remKey, out oldList) && oldList == null)
-                            _dict.TryRemove(remKey, out oldList);
+                        _dict.TryRemove(remKey, out oldList);
                 }
             }
         }
+
+        #region IShielded implementation
+        bool IShielded.CanCommit(Tuple<int, long> writeStamp)
+        {
+            return true;
+        }
+
+        void IShielded.Commit()
+        {
+            if (_locals.Value.CommitRemove != null)
+                Remover(_locals.Value.CommitRemove);
+            _locals.Value = null;
+        }
+
+        void IShielded.Rollback()
+        {
+            if (!_locals.HasValue)
+                return;
+            if (_locals.Value.PreAdd != null)
+                Remover(_locals.Value.PreAdd);
+            _locals.Value = null;
+        }
+
+        void IShielded.TrimCopies(long smallestOpenTransactionId) { }
+
+        bool IShielded.HasChanges
+        {
+            get
+            {
+                return true;
+            }
+        }
+        #endregion
     }
 }
 
