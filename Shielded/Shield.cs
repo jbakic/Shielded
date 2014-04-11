@@ -476,9 +476,7 @@ namespace Shielded
                 CloseTransaction();
 
                 if (items.Fx != null)
-                    foreach (var fx in items.Fx)
-                        // caller beware.
-                        fx.Commit();
+                    items.Fx.Select(f => (Action)f.Commit).Run();
             }
             else if (CommitCheck(out writeStamp))
             {
@@ -496,12 +494,13 @@ namespace Shielded
                     CloseTransaction();
                 }
 
-                CommitSubscription.Trigger(trigger);
-
+                var subscriptions = CommitSubscription.Trigger(trigger);
                 if (items.Fx != null)
-                    foreach (var fx in items.Fx)
-                        // caller beware.
-                        fx.Commit();
+                    items.Fx.Select(f => (Action)f.Commit)
+                        .Concat(subscriptions)
+                        .Run();
+                else
+                    subscriptions.Run();
             }
             else
             {
@@ -509,8 +508,7 @@ namespace Shielded
                 CloseTransaction();
 
                 if (items.Fx != null)
-                    foreach (var fx in items.Fx)
-                        fx.Rollback();
+                    items.Fx.Select(f => (Action)f.Rollback).Run();
             }
 
             TrimCopies();
@@ -526,7 +524,7 @@ namespace Shielded
 
             if (items.Fx != null)
                 foreach (var fx in items.Fx)
-                    fx.Rollback();
+                    items.Fx.Select(f => (Action)f.Rollback).Run();
 
             TrimCopies();
         }

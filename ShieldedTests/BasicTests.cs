@@ -142,7 +142,11 @@ namespace ShieldedTests
                 });
                 Assert.Fail("Suicide transaction did not throw.");
             }
-            catch (IgnoreMe) {}
+            catch (AggregateException aggr)
+            {
+                Assert.AreEqual(1, aggr.InnerExceptions.Count);
+                Assert.AreEqual(typeof(IgnoreMe), aggr.InnerException.GetType());
+            }
 
             bool commitFx = false;
             Shield.InTransaction(() => {
@@ -215,7 +219,11 @@ namespace ShieldedTests
                 Shield.InTransaction(() => x2.Modify((ref int n) => n++));
                 Assert.Fail();
             }
-            catch (InvalidOperationException) { }
+            catch (AggregateException aggr)
+            {
+                Assert.AreEqual(1, aggr.InnerExceptions.Count);
+                Assert.AreEqual(typeof(InvalidOperationException), aggr.InnerException.GetType());
+            }
         }
 
         [Test]

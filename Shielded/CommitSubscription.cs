@@ -44,13 +44,12 @@ namespace Shielded
             new ConcurrentDictionary<IShielded, IEnumerable<CommitSubscription>>();
 
         /// <summary>
-        /// Runs the subscriptions triggered by the given changes. Should be called outside of
-        /// a transaction.
+        /// Prepares subscriptions for execution based on the items that were committed.
         /// </summary>
-        public static void Trigger(IList<IShielded> changes)
+        public static IEnumerable<Action> Trigger(IList<IShielded> changes)
         {
             if (_dict.Count == 0)
-                return;
+                return Enumerable.Empty<Action>();
 
             HashSet<CommitSubscription> result = null;
             foreach (var item in changes)
@@ -61,9 +60,9 @@ namespace Shielded
                 result.UnionWith(list);
             }
 
-            if (result != null)
-                foreach (var sub in result)
-                    sub.Run(changes);
+            return result != null ?
+                result.Select(cs => (Action)( () => cs.Run(changes) ) ) :
+                Enumerable.Empty<Action>();
         }
 
         // runs, updates and commits itself, all in one. called out of transaction.
