@@ -73,20 +73,28 @@ without entering the global lock!
 all touched locations, read or written, still contain the same version
 of data that they had when the transaction opened. This means it does not
 suffer from the Write Skew issue.
-* To perform **side-effects** (IO, and all other operations which are not
-shielded, should not be repeated if we retry, and which should only take
-effect if you commit) you use the SideEffect method of the Shield class,
-which takes optional onCommit and onRollback lambdas.
-* **Conditional transactions**: The Shield’s method Conditional enables you
-to define something similar to a database trigger. It receives a test, and
+* **Transactional collections**: Included in the library are ShieldedDict<>
+(dictionary), ShieldedSeq<> (singly linked list) and ShieldedTree<> (a
+red-black tree implementation).
+* To perform **side-effects** (IO, and most other operations which are not
+shielded) you use the SideEffect method of the Shield class, which takes
+optional onCommit and onRollback lambdas.
+* **Conditional transactions**: Method Shield.Conditional allows you
+to define something similar to a database AFTER trigger. It receives a test, and
 an action to perform, both lambdas. It runs the test, makes a note of
 all shielded objects that the test had accessed, and later re-executes
 the test when any of those objects is committed into. If test passes, the
 action is called.
     * Implemented transactionally, so can be called from transactions, and
-    can be triggered by the transaction that created it. If the action
-    returns false, the subscription is removed in this transaction, which
-    can guarantee one-time execution if needed.
+    can be triggered by the transaction that created it.
+    * Returns an IDisposable for deactivating the subscription, also
+    transactionally. It may even deactivate itself, e.g. to guarantee one-time execution.
+* **Pre-commit checks**: Shield.PreCommit is very similar to Shield.Conditional,
+but executes the test within a transaction that changes one of the fields it is
+interested in, just before that transaction will commit.
+    * Can be used to ensure certain invariants are held, or to implement
+    thread prioritization by allowing only some threads which access a field
+    to commit into it.
 * **Commutables**: operations which can be performed without conflict, because
 they can be reordered in time and have the same net effect, i.e. they are
 commutable (name borrowed from Clojure). Incrementing an int is an
@@ -109,6 +117,3 @@ improves concurrency. Incrementing an int, conflict-free:
     * Shield has various commutable operations defined in it. Appending to a
     sequence is commutable - if you do not touch the seq, it never conflicts.
     Collection Count fields are comuted over, to avoid unnecessary conflicts.
-* **Transactional collections**: Included in the library are ShieldedDict<>
-(dictionary), ShieldedSeq<> (singly linked list) and ShieldedTree<> (a
-red-black tree implementation).
