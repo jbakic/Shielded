@@ -10,13 +10,6 @@ namespace Shielded
         public static readonly SubscriptionContext PreCommit = new SubscriptionContext();
         public static readonly SubscriptionContext PostCommit = new SubscriptionContext();
 
-//        private readonly bool UpdateItemsOnTest;
-//
-//        public SubscriptionContext(bool updateItems)
-//        {
-//            UpdateItemsOnTest = updateItems;
-//        }
-//
         /// <summary>
         /// Prepares subscriptions for execution based on the items that were committed.
         /// </summary>
