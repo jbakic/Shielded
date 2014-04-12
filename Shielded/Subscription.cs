@@ -8,24 +8,25 @@ namespace Shielded
 {
     /// <summary>
     /// Contains information about a commit subscription, used in implementing
-    /// <see cref="Shield.Conditional"/>. Internally keeps a dictionary to find out
-    /// which instances are triggered by a certain commit.
+    /// <see cref="Shield.Conditional"/> and <see cref="Shield.PreCommit"/>.
     /// </summary>
-    internal class CommitSubscription : IDisposable, IShielded
+    internal class Subscription : IDisposable, IShielded
     {
         private readonly Shielded<HashSet<IShielded>> _items = new Shielded<HashSet<IShielded>>();
         private readonly Func<bool> Test;
-        private readonly Func<bool> Trans;
+        private readonly Action Trans;
+        private readonly SubscriptionContext Context;
 
-        public CommitSubscription(Func<bool> test, Func<bool> trans)
+        public Subscription(SubscriptionContext context, Func<bool> test, Action trans)
         {
+            Context = context;
             Test = test;
             Trans = trans;
             Shield.InTransaction(() => {
                 var items = Shield.IsolatedRun(() => Test());
                 if (!items.Any())
                     throw new InvalidOperationException(
-                        "A conditional test function must access at least one shielded field.");
+                        "Test function must access at least one shielded field.");
                 _items.Assign(items);
                 UpdateEntries();
             });
@@ -39,33 +40,8 @@ namespace Shielded
             });
         }
 
-
-        private static ConcurrentDictionary<IShielded, IEnumerable<CommitSubscription>> _dict =
-            new ConcurrentDictionary<IShielded, IEnumerable<CommitSubscription>>();
-
-        /// <summary>
-        /// Prepares subscriptions for execution based on the items that were committed.
-        /// </summary>
-        public static IEnumerable<Action> Trigger(IList<IShielded> changes)
-        {
-            if (_dict.Count == 0)
-                return null;
-
-            HashSet<CommitSubscription> result = null;
-            foreach (var item in changes)
-            {
-                IEnumerable<CommitSubscription> list;
-                if (!_dict.TryGetValue(item, out list) || list == null) continue;
-                if (result == null) result = new HashSet<CommitSubscription>();
-                result.UnionWith(list);
-            }
-
-            return result != null ?
-                result.Select(cs => (Action)( () => cs.Run(changes) ) ) : null;
-        }
-
         // runs, updates and commits itself, all in one. called out of transaction.
-        private void Run(IList<IShielded> trigger)
+        public void Run(IEnumerable<IShielded> trigger)
         {
             Shield.InTransaction(() =>
             {
@@ -76,12 +52,10 @@ namespace Shielded
                 bool test = false;
                 var testItems = Shield.IsolatedRun(() => test = Test());
 
-                if (test && !Trans())
-                {
-                    _items.Assign(null);
-                    UpdateEntries();
-                }
-                else if (!testItems.SetEquals(oldItems))
+                if (test) Trans();
+
+                // _locals will have value if Trans() called Dispose on "itself".
+                if (!_locals.HasValue && !testItems.SetEquals(oldItems))
                 {
                     if (!testItems.Any())
                     {
@@ -111,7 +85,7 @@ namespace Shielded
         /// </summary>
         void UpdateEntries()
         {
-            Shield.Enlist(this);
+            Shield.Enlist(this, false);
             var l = new Locals();
 
             var oldItems = _items.GetOldValue();
@@ -128,11 +102,11 @@ namespace Shielded
                 if (l.PreAdd != null)
                     foreach (var newKey in l.PreAdd)
                     {
-                        lock (_dict)
-                            _dict.AddOrUpdate(newKey, k => Enumerable.Repeat(this, 1),
+                        lock (Context)
+                            Context.AddOrUpdate(newKey, k => Enumerable.Repeat(this, 1),
                                 (k, existing) => {
                                     var list = existing != null ?
-                                        new List<CommitSubscription>(existing) : new List<CommitSubscription>();
+                                        new List<Subscription>(existing) : new List<Subscription>();
                                     list.Add(this);
                                     return list;
                                 });
@@ -144,19 +118,19 @@ namespace Shielded
         {
             foreach (var remKey in toRemove)
             {
-                IEnumerable<CommitSubscription> oldList;
-                List<CommitSubscription> newList;
-                lock (_dict)
+                IEnumerable<Subscription> oldList;
+                List<Subscription> newList;
+                lock (Context)
                 {
-                    oldList = _dict[remKey];
+                    oldList = Context[remKey];
                     if (oldList.Count() > 1)
                     {
-                        newList = new List<CommitSubscription>(oldList);
+                        newList = new List<Subscription>(oldList);
                         newList.Remove(this);
-                        _dict[remKey] = newList;
+                        Context[remKey] = newList;
                     }
                     else
-                        _dict.TryRemove(remKey, out oldList);
+                        Context.TryRemove(remKey, out oldList);
                 }
             }
         }

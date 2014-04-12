@@ -54,12 +54,7 @@ namespace Shielded
 
         private void CheckLockAndEnlist(TKey key)
         {
-            // null? well, this class is not commutable, so it is impossible that, if the enlist block is up,
-            // this object is the one access is allowed on.
-            Shield.AssertAccessAllowed(null);
-            if (!_localDict.HasValue)
-                Shield.Enlist(this);
-            else if (_localDict.Value.Reads.Contains(key))
+            if (!Shield.Enlist(this, _localDict.HasValue) && _localDict.Value.Reads.Contains(key))
                 return;
 
 #if SERVER

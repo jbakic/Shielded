@@ -11,7 +11,7 @@ namespace Shielded
         /// throw, it will still run every one, and then afterwards throw an
         /// AggregateException.
         /// </summary>
-        public static void Run(this IEnumerable<Action> actions)
+        public static void SafeRun(this IEnumerable<Action> actions)
         {
             if (actions == null || !actions.Any()) return;
 
@@ -30,6 +30,17 @@ namespace Shielded
             }
             if (exceptions != null)
                 throw new AggregateException(exceptions);
+        }
+
+        /// <summary>
+        /// Executes an IEnumerable of actions, with no special handling. First exception
+        /// interrupts it.
+        /// </summary>
+        public static void Run(this IEnumerable<Action> actions)
+        {
+            if (actions == null || !actions.Any()) return;
+            foreach (var act in actions)
+                act();
         }
     }
 }

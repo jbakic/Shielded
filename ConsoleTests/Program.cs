@@ -315,7 +315,6 @@ namespace ConsoleTests
                 {
                     Console.Write("\n{0} at {1} item/s", count, speed);
                 });
-                return true;
             });
 
 
@@ -378,7 +377,6 @@ namespace ConsoleTests
                 {
                     Console.Write("\n{0} at {1} item/s", count, speed);
                 });
-                return true;
             });
 
 
@@ -394,9 +392,10 @@ namespace ConsoleTests
             }
 
             var complete = new Shielded<int>();
-            Shield.Conditional(() => complete == numTickets, () => {
+            IDisposable completeCond;
+            completeCond = Shield.Conditional(() => complete == numTickets, () => {
                 barrier.SignalAndWait();
-                return false;
+                completeCond.Dispose();
             });
             foreach (var i in Enumerable.Range(0, numTickets))
             {
@@ -440,7 +439,7 @@ namespace ConsoleTests
             // for some reason, if this is replaced with ShieldedDict, KeyAlreadyPresent
             // exception is thrown. under one key you can then find an entity which does
             // not have that key. complete mystery.
-            var tree = new ShieldedDict<Guid, TreeItem>();
+            var tree = new ShieldedTree<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);
             int reportEvery = 10000;
             Shielded<int> lastReport = new Shielded<int>(0);
@@ -457,7 +456,6 @@ namespace ConsoleTests
                 {
                     Console.Write("\n{0} at {1} item/s", count, speed);
                 });
-                return true;
             });
 
 
@@ -995,7 +993,7 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            //SimpleOps();
+            SimpleOps();
 
             //MultiFieldOps();
 
@@ -1005,7 +1003,7 @@ namespace ConsoleTests
 
             //SimpleCommuteTest();
 
-            new Queue().Run();
+            //new Queue().Run();
 
             //SequentialTests.Run();
         }

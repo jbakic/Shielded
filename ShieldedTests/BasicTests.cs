@@ -167,13 +167,12 @@ namespace ShieldedTests
 
             Shield.Conditional(() => {
                 Interlocked.Increment(ref testCounter);
-                return x > 0 && (x & 2) == 0;
+                return x > 0 && (x & 1) == 0;
             },
             () => {
                 Shield.SideEffect(() =>
                     Interlocked.Increment(ref triggerCommits));
-                Assert.IsTrue(x > 0 && (x & 2) == 0);
-                return true;
+                Assert.IsTrue(x > 0 && (x & 1) == 0);
             });
 
             const int count = 1000;
@@ -193,7 +192,7 @@ namespace ShieldedTests
             try
             {
                 int a = 5;
-                Shield.Conditional(() => a > 10, () => true);
+                Shield.Conditional(() => a > 10, () => { });
                 Assert.Fail();
             }
             catch (InvalidOperationException) { }
@@ -211,7 +210,7 @@ namespace ShieldedTests
                 else
                     // this is of course invalid, and when reaching here we have not touched any Shielded obj.
                     return true;
-            }, () => true);
+            }, () => { });
 
             try
             {

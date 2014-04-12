@@ -65,7 +65,6 @@ namespace ConsoleTests
             var maxQueueCount = new Shielded<int>();
             Shield.Conditional(() => _queue.Count > maxQueueCount, () => {
                 maxQueueCount.Assign(_queue.Count);
-                return true;
             });
 
             // create ItemCount items and push them in the queue.
@@ -109,7 +108,6 @@ namespace ConsoleTests
                         "{0} at {1} item/s, stats ( {2}, {3}, {4} )",
                         count, speed, sc, ptc, pbc);
                 });
-                return true;
             });
         }
 
@@ -124,7 +122,6 @@ namespace ConsoleTests
                 ProcessorSlot.Take();
                 var first = _queue.TakeHead();
                 Shield.SideEffect(() => Task.Factory.StartNew(() => Process(first)));
-                return true;
             });
         }
 

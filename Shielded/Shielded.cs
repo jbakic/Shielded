@@ -36,8 +36,7 @@ namespace Shielded
 
         private void CheckLockAndEnlist()
         {
-            Shield.AssertAccessAllowed(this);
-            if (_locals.HasValue || !Shield.Enlist(this))
+            if (!Shield.Enlist(this, _locals.HasValue))
                 return;
 
 #if SERVER

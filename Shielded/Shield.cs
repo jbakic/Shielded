@@ -81,74 +81,78 @@ namespace Shielded
         [ThreadStatic]
         private static ICommutableShielded _blockEnlist;
         [ThreadStatic]
+        private static bool _enforceTracking;
+        [ThreadStatic]
         private static int? _commuteTime;
 
         /// <summary>
-        /// IShielded implementors are free to keep track of enlisting themselves, reducing
-        /// the number of calls to <see cref="Shield.Enlist"/>. Since they keep local data,
-        /// sometimes this can work and be much faster. However, if they do this, they must
-        /// at least check if accessing them is allowed in the current context. This method
-        /// serves that purpose.
-        /// </summary>
-        internal static void AssertAccessAllowed(ICommutableShielded item)
-        {
-            if (_blockEnlist != null && _blockEnlist != item)
-                throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
-        }
-
-        /// <summary>
         /// Enlist the specified item in the transaction. Returns true if this is the
-        /// first time in this transaction that this item is enlisted.
+        /// first time in this transaction that this item is enlisted. hasLocals indicates
+        /// if this item already has local storage prepared. If true, it means it must have
+        /// enlisted already. However, in IsolatedRun you may have locals, even though you
+        /// have not yet enlisted in the isolated items! So, this param is ignored within
+        /// IsolatedRun calls. Outside of them, it allows for a much faster response.
         /// </summary>
-        internal static bool Enlist(IShielded item)
+        internal static bool Enlist(IShielded item, bool hasLocals)
         {
             AssertInTransaction();
-            if (!_localItems.Enlisted.Add(item))
+            if (_blockEnlist != null && _blockEnlist != item)
+                throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
+            if (!_enforceTracking && hasLocals)
                 return false;
-            // does a commute have to degenerate?
-            if (_localItems.Commutes != null && _localItems.Commutes.Count > 0)
+            if (_localItems.Enlisted.Add(item))
             {
-                // in case one commute triggers others, we mark where we are in _comuteTime,
-                // and no recursive call will execute commutes beyond that point.
-                // so, clean "dependency resolution" - we trigger only those before us. those 
-                // after us just get marked, and then we execute them (or, someone lower in the stack).
-                var oldTime = _commuteTime;
-                int execLimit = oldTime ?? _localItems.Commutes.Count;
-                try
+                CheckCommutes(item);
+                return true;
+            }
+            return false;
+        }
+
+        private static void CheckCommutes(IShielded item)
+        {
+            // does a commute have to degenerate?
+            if (_localItems.Commutes == null || _localItems.Commutes.Count == 0)
+                return;
+
+            // in case one commute triggers others, we mark where we are in _comuteTime,
+            // and no recursive call will execute commutes beyond that point.
+            // so, clean "dependency resolution" - we trigger only those before us. those 
+            // after us just get marked, and then we execute them (or, someone lower in the stack).
+            var oldTime = _commuteTime;
+            int execLimit = oldTime ?? _localItems.Commutes.Count;
+            try
+            {
+                if (!oldTime.HasValue)
+                    _blockCommute = true;
+                for (int i = 0; i < _localItems.Commutes.Count; i++)
                 {
-                    if (!oldTime.HasValue)
-                        _blockCommute = true;
-                    for (int i = 0; i < _localItems.Commutes.Count; i++)
+                    var comm = _localItems.Commutes[i];
+                    if (comm.State == CommuteState.Ok && comm.Affecting.Contains(item))
+                        comm.State = CommuteState.Broken;
+                    if (comm.State == CommuteState.Broken && i < execLimit)
                     {
-                        var comm = _localItems.Commutes[i];
-                        if (comm.State == CommuteState.Ok && comm.Affecting.Contains(item))
-                            comm.State = CommuteState.Broken;
-                        if (comm.State == CommuteState.Broken && i < execLimit)
-                        {
-                            _commuteTime = i;
-                            comm.State = CommuteState.Executed;
-                            comm.Perform();
-                        }
-                    }
-                }
-                catch
-                {
-                    // not sure if this matters, but i like it. please note that this and the Remove in finally
-                    // do not necessarily affect the same commutes.
-                    _localItems.Commutes.RemoveAll(c => c.Affecting.Contains(item));
-                    throw;
-                }
-                finally
-                {
-                    _commuteTime = oldTime;
-                    if (!oldTime.HasValue)
-                    {
-                        _blockCommute = false;
-                        _localItems.Commutes.RemoveAll(c => c.State != CommuteState.Ok);
+                        _commuteTime = i;
+                        comm.State = CommuteState.Executed;
+                        comm.Perform();
                     }
                 }
             }
-            return true;
+            catch
+            {
+                // not sure if this matters, but i like it. please note that this and the Remove in finally
+                // do not necessarily affect the same commutes.
+                _localItems.Commutes.RemoveAll(c => c.Affecting.Contains(item));
+                throw;
+            }
+            finally
+            {
+                _commuteTime = oldTime;
+                if (!oldTime.HasValue)
+                {
+                    _blockCommute = false;
+                    _localItems.Commutes.RemoveAll(c => c.State != CommuteState.Ok);
+                }
+            }
         }
 
         [ThreadStatic]
@@ -205,21 +209,42 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Conditional transaction. Does not execute immediately! Test is executed once just to
-        /// get a read pattern, result is ignored. It will later be re-executed when any of the
-        /// accessed IShieldeds commits.
-        /// When test passes, executes trans. While trans returns true, subscription is maintained.
-        /// Test is executed in a normal transaction. If it changes access patterns between
-        /// calls, the subscription changes as well!
+        /// Conditional transaction, which executes after some fields are committed into.
+        /// Does not execute immediately! Test is executed once just to get a read pattern,
+        /// result is ignored. It will later be re-executed when any of the accessed
+        /// IShieldeds commits.
+        /// When test passes, executes trans. Test is executed in a normal transaction. If it
+        /// changes access patterns between calls, the subscription changes as well!
         /// Test and trans are executed in single transaction, and if the commit fails, test
         /// is also retried!
         /// </summary>
         /// <returns>An IDisposable which can be used to cancel the conditional by calling
-        /// Dispose on it.</returns>
-        public static IDisposable Conditional(Func<bool> test, Func<bool> trans)
+        /// Dispose on it. Dispose can be called from trans.</returns>
+        public static IDisposable Conditional(Func<bool> test, Action trans)
         {
-            return new CommitSubscription(test, trans);
+            return new Subscription(SubscriptionContext.PostCommit, test, trans);
         }
+
+#if (!NO_PRE_COMMIT)
+        /// <summary>
+        /// Pre-commit check, which executes just before commit of a transaction involving
+        /// certain fields. Can be used to ensure certain invariants hold, for example.
+        /// Does not execute immediately! Test is executed once just to get a read pattern,
+        /// result is ignored. It will later be re-executed just before commit of any transaction
+        /// that changes one of the fields it accessed.
+        /// If test passes, executes trans as well. They will execute within the transaction
+        /// that triggers them. If they are triggered by a transaction's commute, they will
+        /// be called from within the commute sub-cycle (read stamp will be higher than in
+        /// main transaction). They may even get called twice in the same transaction due
+        /// to this, if the transaction changes one field normally, and commutes another.
+        /// </summary>
+        /// <returns>An IDisposable which can be used to cancel the conditional by calling
+        /// Dispose on it. Dispose can be called from trans.</returns>
+        public static IDisposable PreCommit(Func<bool> test, Action trans)
+        {
+            return new Subscription(SubscriptionContext.PreCommit, test, trans);
+        }
+#endif
 
         /// <summary>
         /// Enlists a side-effect - an operation to be performed only if the transaction
@@ -322,7 +347,7 @@ namespace Shielded
         /// <summary>
         /// Create a local transaction context by replacing <see cref="Shield._localItems"/> with <paramref name="isolatedItems"/>
         /// and setting <see cref="Shield._blockCommute"/> to <c>false</c>, then perform <paramref name="act"/> and return
-        /// with restored state.
+        /// with restored state. Forces all IShieldeds to enlist, regardless of previous enlist status.
         /// </summary>
         /// <param name="isolatedItems">The <see cref="TransItems"/> instance which temporarily replaces <see cref="Shield._localItems"/>.</param>
         /// <param name="merge">Whether to merge the isolated items into the original items when done. Defaults to <c>true</c>.
@@ -330,11 +355,14 @@ namespace Shielded
         private static void WithTransactionContext(
             TransItems isolatedItems, Action act, bool merge = true)
         {
+            if (_enforceTracking)
+                throw new InvalidOperationException("WithTransactionContext does not nest!");
             var originalItems = _localItems;
             try
             {
                 Shield._localItems = isolatedItems;
                 Shield._blockCommute = true;
+                Shield._enforceTracking = true;
 
                 act();
             }
@@ -343,6 +371,7 @@ namespace Shielded
                 if (merge) originalItems.UnionWith(isolatedItems);
                 Shield._localItems = originalItems;
                 Shield._blockCommute = false;
+                Shield._enforceTracking = false;
             }
         }
 
@@ -380,12 +409,21 @@ namespace Shielded
 
         private static object _stampLock = new object();
 
+        private static Func<IShielded, bool> HasChanges = i => i.HasChanges;
+
         static bool CommitCheck(out Tuple<int, long> writeStamp)
         {
             var items = _localItems;
             TransItems commutedItems = null;
             long oldStamp = _currentTransactionStartStamp.Value;
             bool commit;
+
+#if (!NO_PRE_COMMIT)
+            if (SubscriptionContext.PreCommit.Count > 0)
+                SubscriptionContext.PreCommit
+                    .Trigger(items.Enlisted.Where(HasChanges))
+                    .Run();
+#endif
             try
             {
                 bool brokeInCommutes = items.Commutes != null && items.Commutes.Any();
@@ -397,6 +435,12 @@ namespace Shielded
                         RunCommutes(out commutedItems);
                         if (commutedItems.Enlisted.Overlaps(items.Enlisted))
                             throw new InvalidOperationException("Invalid commute - conflict with transaction.");
+#if (!NO_PRE_COMMIT)
+                        if (SubscriptionContext.PreCommit.Count > 0)
+                            SubscriptionContext.PreCommit
+                                .Trigger(commutedItems.Enlisted.Where(HasChanges))
+                                .Run();
+#endif
                     }
 
                     lock (_stampLock)
@@ -464,7 +508,7 @@ namespace Shielded
         {
             var items = _localItems;
             bool hasChanges = (items.Commutes != null && items.Commutes.Count > 0) ||
-                items.Enlisted.Any(s => s.HasChanges);
+                items.Enlisted.Any(HasChanges);
 
             Tuple<int, long> writeStamp = null;
             bool commit = true;
@@ -476,7 +520,7 @@ namespace Shielded
                 CloseTransaction();
 
                 if (items.Fx != null)
-                    items.Fx.Select(f => (Action)f.Commit).Run();
+                    items.Fx.Select(f => (Action)f.Commit).SafeRun();
             }
             else if (CommitCheck(out writeStamp))
             {
@@ -495,8 +539,8 @@ namespace Shielded
                 }
 
                 (items.Fx != null ? items.Fx.Select(f => (Action)f.Commit) : null)
-                    .SafeConcat(CommitSubscription.Trigger(trigger))
-                    .Run();
+                    .SafeConcat(SubscriptionContext.PostCommit.Trigger(trigger))
+                    .SafeRun();
             }
             else
             {
@@ -504,7 +548,7 @@ namespace Shielded
                 CloseTransaction();
 
                 if (items.Fx != null)
-                    items.Fx.Select(f => (Action)f.Rollback).Run();
+                    items.Fx.Select(f => (Action)f.Rollback).SafeRun();
             }
 
             TrimCopies();
@@ -530,7 +574,7 @@ namespace Shielded
 
             if (items.Fx != null)
                 foreach (var fx in items.Fx)
-                    items.Fx.Select(f => (Action)f.Rollback).Run();
+                    items.Fx.Select(f => (Action)f.Rollback).SafeRun();
 
             TrimCopies();
         }

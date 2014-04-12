@@ -42,6 +42,7 @@
     <Compile Include="SeqTests.cs" />
     <Compile Include="TreeTests.cs" />
     <Compile Include="ProxyTests.cs" />
+    <Compile Include="PreCommitTests.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
