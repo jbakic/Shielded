@@ -60,19 +60,6 @@ namespace Shielded
             public HashSet<IShielded> Enlisted = new HashSet<IShielded>();
             public List<SideEffect> Fx;
             public List<Commute> Commutes;
-
-            /// <summary>
-            /// Unions the other items into this. Does not include commutes!
-            /// </summary>
-            public void UnionWith(TransItems other)
-            {
-                Enlisted.UnionWith(other.Enlisted);
-                if (other.Fx != null && other.Fx.Count > 0)
-                    if (Fx == null)
-                        Fx = new List<SideEffect>(other.Fx);
-                    else
-                        Fx.AddRange(other.Fx);
-            }
         }
 
         private static VersionList _transactions = new VersionList();
@@ -337,30 +324,31 @@ namespace Shielded
         /// </summary>
         internal static HashSet<IShielded> IsolatedRun(Action act)
         {
-            var isolated = new TransItems();
+            var isolated = new HashSet<IShielded>();
             WithTransactionContext(isolated, act);
-            return isolated.Enlisted;
+            return isolated;
         }
 
         #region Commit & rollback
 
         /// <summary>
-        /// Create a local transaction context by replacing <see cref="Shield._localItems"/> with <paramref name="isolatedItems"/>
-        /// and setting <see cref="Shield._blockCommute"/> to <c>false</c>, then perform <paramref name="act"/> and return
-        /// with restored state. Forces all IShieldeds to enlist, regardless of previous enlist status.
+        /// Create a local transaction context by replacing <see cref="Shield._localItems"/>.Enlisted with
+        /// <paramref name="isolatedItems"/> and setting <see cref="Shield._blockCommute"/> to <c>true</c>,
+        /// then perform <paramref name="act"/> and return with restored state. Forces all IShieldeds to
+        /// enlist, regardless of previous enlist status.
         /// </summary>
-        /// <param name="isolatedItems">The <see cref="TransItems"/> instance which temporarily replaces <see cref="Shield._localItems"/>.</param>
+        /// <param name="isolatedItems">The instance which temporarily replaces <see cref="Shield._localItems"/>.Enlisted.</param>
         /// <param name="merge">Whether to merge the isolated items into the original items when done. Defaults to <c>true</c>.
         /// If items are left unmerged, take care to handle TransExceptions and roll back the items yourself!</param>
         private static void WithTransactionContext(
-            TransItems isolatedItems, Action act, bool merge = true)
+            HashSet<IShielded> isolatedItems, Action act, bool merge = true)
         {
-            if (_enforceTracking)
-                throw new InvalidOperationException("WithTransactionContext does not nest!");
-            var originalItems = _localItems;
+            var originalItems = _localItems.Enlisted;
+            var oldEnforce = _enforceTracking;
+            var oldBlock = _blockCommute;
             try
             {
-                Shield._localItems = isolatedItems;
+                Shield._localItems.Enlisted = isolatedItems;
                 Shield._blockCommute = true;
                 Shield._enforceTracking = true;
 
@@ -369,9 +357,9 @@ namespace Shielded
             finally
             {
                 if (merge) originalItems.UnionWith(isolatedItems);
-                Shield._localItems = originalItems;
-                Shield._blockCommute = false;
-                Shield._enforceTracking = false;
+                Shield._localItems.Enlisted = originalItems;
+                Shield._blockCommute = oldBlock;
+                Shield._enforceTracking = oldEnforce;
             }
         }
 
@@ -379,25 +367,33 @@ namespace Shielded
         /// Increases the current start stamp, and leaves the commuted items unmerged with the
         /// main transaction items!
         /// </summary>
-        static void RunCommutes(out TransItems commutedItems)
+        static void RunCommutes(out HashSet<IShielded> commutedItems)
         {
             var commutes = _localItems.Commutes;
+            _localItems.Commutes = null;
             while (true)
             {
                 _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
-                commutedItems = new TransItems();
+                commutedItems = new HashSet<IShielded>();
                 try
                 {
                     WithTransactionContext(commutedItems, () =>
                     {
                         foreach (var comm in commutes)
                             comm.Perform();
+#if (!NO_PRE_COMMIT)
+                        if (SubscriptionContext.PreCommit.Count > 0)
+                            SubscriptionContext.PreCommit
+                                .Trigger(_localItems.Enlisted.Where(HasChanges))
+                                .Run();
+#endif
                     }, merge: false);
+                    _localItems.Commutes = commutes;
                     return;
                 }
                 catch (TransException ex)
                 {
-                    foreach (var item in commutedItems.Enlisted)
+                    foreach (var item in commutedItems)
                         item.Rollback();
                     commutedItems = null;
 
@@ -414,7 +410,7 @@ namespace Shielded
         static bool CommitCheck(out Tuple<int, long> writeStamp)
         {
             var items = _localItems;
-            TransItems commutedItems = null;
+            HashSet<IShielded> commutedItems = null;
             long oldStamp = _currentTransactionStartStamp.Value;
             bool commit;
 
@@ -433,14 +429,7 @@ namespace Shielded
                     if (brokeInCommutes)
                     {
                         RunCommutes(out commutedItems);
-                        if (commutedItems.Enlisted.Overlaps(items.Enlisted))
-                            throw new InvalidOperationException("Invalid commute - conflict with transaction.");
-#if (!NO_PRE_COMMIT)
-                        if (SubscriptionContext.PreCommit.Count > 0)
-                            SubscriptionContext.PreCommit
-                                .Trigger(commutedItems.Enlisted.Where(HasChanges))
-                                .Run();
-#endif
+                        commutedItems.ExceptWith(items.Enlisted);
                     }
 
                     lock (_stampLock)
@@ -451,7 +440,7 @@ namespace Shielded
                         {
                             if (brokeInCommutes)
                             {
-                                foreach (var item in commutedItems.Enlisted)
+                                foreach (var item in commutedItems)
                                     if (!item.CanCommit(writeStamp))
                                     {
                                         commit = false;
@@ -482,7 +471,7 @@ namespace Shielded
                             if (!commit)
                             {
                                 if (commutedItems != null)
-                                    foreach (var item in commutedItems.Enlisted)
+                                    foreach (var item in commutedItems)
                                         item.Rollback();
                                 if (!brokeInCommutes)
                                     foreach (var item in items.Enlisted)
@@ -500,7 +489,7 @@ namespace Shielded
                 // note that this changes the _localItems.Enlisted hashset to contain the
                 // commute-enlists as well, regardless of the check outcome.
                 if (commutedItems != null)
-                    _localItems.UnionWith(commutedItems);
+                    _localItems.Enlisted.UnionWith(commutedItems);
             }
         }
 

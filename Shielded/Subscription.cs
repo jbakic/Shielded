@@ -40,7 +40,7 @@ namespace Shielded
             });
         }
 
-        // runs, updates and commits itself, all in one. called out of transaction.
+        // runs, updates and commits itself, all in one.
         public void Run(IEnumerable<IShielded> trigger)
         {
             Shield.InTransaction(() =>
