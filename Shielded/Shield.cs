@@ -419,7 +419,10 @@ namespace Shielded
 
         private static object _stampLock = new object();
 
-        private static readonly Func<IShielded, bool> HasChanges = i => i.HasChanges;
+        private static bool HasChanges(IShielded item)
+        {
+            return item.HasChanges;
+        }
 
         static bool CommitCheck(out Tuple<int, long> writeStamp)
         {
