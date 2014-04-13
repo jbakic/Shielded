@@ -106,6 +106,7 @@ namespace Shielded
             // so, clean "dependency resolution" - we trigger only those before us. those 
             // after us just get marked, and then we execute them (or, someone lower in the stack).
             var oldTime = _commuteTime;
+            var oldBlock = _blockCommute;
             int execLimit = oldTime ?? _localItems.Commutes.Count;
             try
             {
@@ -136,7 +137,7 @@ namespace Shielded
                 _commuteTime = oldTime;
                 if (!oldTime.HasValue)
                 {
-                    _blockCommute = false;
+                    _blockCommute = oldBlock;
                     _localItems.Commutes.RemoveAll(c => c.State != CommuteState.Ok);
                 }
             }
