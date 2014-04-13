@@ -396,10 +396,6 @@ namespace Shielded
                     {
                         foreach (var comm in commutes)
                             comm.Perform();
-                        if (SubscriptionContext.PreCommit.Count > 0)
-                            SubscriptionContext.PreCommit
-                                .Trigger(_localItems.Enlisted.Where(HasChanges))
-                                .Run();
                     }, merge: false);
                     return;
                 }
@@ -425,21 +421,32 @@ namespace Shielded
             TransItems commutedItems = null;
             long oldStamp = _currentTransactionStartStamp.Value;
             bool commit;
+            bool brokeInCommutes = items.Commutes != null && items.Commutes.Any();
 
             if (SubscriptionContext.PreCommit.Count > 0)
+            {
+                // if any commute would trigger a pre-commit check, this check could, if executed
+                // in the commute sub-transaction, see newer values in fields which
+                // were read (but not written to) by the main transaction. commutes are normally
+                // very isolated to prevent this, but pre-commits we cannot isolate.
+                // so, commutes trigger them now, and they cause the commutes to degenerate.
                 SubscriptionContext.PreCommit
-                    .Trigger(items.Enlisted.Where(HasChanges))
+                    .Trigger(brokeInCommutes ?
+                        items.Enlisted.Where(HasChanges).Concat(
+                            items.Commutes.SelectMany(c => c.Affecting)) :
+                        items.Enlisted.Where(HasChanges))
                     .Run();
+            }
             try
             {
-                bool brokeInCommutes = items.Commutes != null && items.Commutes.Any();
                 do
                 {
                     commit = true;
                     if (brokeInCommutes)
                     {
                         RunCommutes(out commutedItems);
-                        commutedItems.Enlisted.ExceptWith(items.Enlisted);
+                        if (items.Enlisted.Overlaps(commutedItems.Enlisted))
+                            throw new InvalidOperationException("Invalid commute - conflict with transaction.");
                     }
 
                     lock (_stampLock)

@@ -159,20 +159,10 @@ namespace ShieldedTests
         [Test]
         public void CommuteInvariantProblem()
         {
-            // an invariant checker is defined, which, due to the fact that it
-            // runs inside a commute sub-transaction, sees an invalid state.
-            // it sees a newer value of a field read by the main transaction.
-            // the main trans used the old value to conclude it may run the
-            // commute. this transaction is destined to be normally retried (the main
-            // trans has advantage - the field they both touched will have to
-            // pass main trans test, i.e. be the same as it was when main trans opened),
-            // but any invariant checker could cause it to fail completely!
-            // NB that the commute sub-transaction sees a consistent state by itself,
-            // the state will not change during the commutes, but it is still newer than what
-            // the main transaction saw.
-            // the checker here just counts the number of times it sees an invalid state,
-            // and the number of times this invalid state succeeds in being committed.
-            // the latter should be zero.
+            // since pre-commits have no limitations on access, they cannot safely
+            // execute within the commute sub-transaction. if they would, then this
+            // test would fail on the last assertion. instead, pre-commits cause commutes
+            // to degenerate.
 
             var testField = new Shielded<int>();
             var effectField = new Shielded<int>();
