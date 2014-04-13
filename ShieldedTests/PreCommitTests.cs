@@ -97,7 +97,7 @@ namespace ShieldedTests
             });
             slowThread1.Start();
 
-            foreach (int i in Enumerable.Range(1, 100))
+            foreach (int i in Enumerable.Range(1, 200))
             {
                 Shield.InTransaction(() => {
                     x.Modify((ref int a) => a++);
@@ -106,7 +106,7 @@ namespace ShieldedTests
             slowThread1.Join();
 
             Assert.Greater(slowThread1Repeats, 1);
-            Assert.AreEqual(99, x);
+            Assert.AreEqual(199, x);
 
             // now, we introduce prioritization.
             // this condition gets triggered before any attempt to write into x
@@ -144,7 +144,7 @@ namespace ShieldedTests
             });
             slowThread2.Start();
 
-            foreach (int i in Enumerable.Range(1, 100))
+            foreach (int i in Enumerable.Range(1, 200))
             {
                 Shield.InTransaction(() => {
                     x.Modify((ref int a) => a++);
@@ -153,7 +153,63 @@ namespace ShieldedTests
             slowThread2.Join();
 
             Assert.AreEqual(1, slowThread2Repeats);
-            Assert.AreEqual(99, x);
+            Assert.AreEqual(199, x);
+        }
+
+        [Test]
+        public void CommuteInvariantProblem()
+        {
+            // an invariant checker is defined, which, due to the fact that it
+            // runs inside a commute sub-transaction, sees an invalid state.
+            // it sees a newer value of a field read by the main transaction.
+            // the main trans used the old value to conclude it may run the
+            // commute. this transaction is destined to be normally retried (the main
+            // trans has advantage - the field they both touched will have to
+            // pass main trans test, i.e. be the same as it was when main trans opened),
+            // but any invariant checker could cause it to fail completely!
+            // NB that the commute sub-transaction sees a consistent state by itself,
+            // the state will not change during the commutes, but it is still newer than what
+            // the main transaction saw.
+            // the checker here just counts the number of times it sees an invalid state,
+            // and the number of times this invalid state succeeds in being committed.
+            // the latter should be zero.
+
+            var testField = new Shielded<int>();
+            var effectField = new Shielded<int>();
+            var failCommitCount = new Shielded<int>();
+            var failVisibleCount = 0;
+
+            // check if the effect field was written to, that the testField is even.
+            Shield.PreCommit(() => effectField > 0, () => {
+                if ((testField & 1) == 1)
+                {
+                    Interlocked.Increment(ref failVisibleCount);
+                    // this will always fail to commit, confirming that the transaction
+                    // is already bound to fail. but, the failVisibleCount will be >0.
+                    failCommitCount.Modify((ref int n) => n++);
+                }
+            });
+
+            var thread = new Thread(() => {
+                // if the testField is even, increment the effectField commutatively.
+                foreach (int i in Enumerable.Range(1, 1000))
+                    Shield.InTransaction(() => {
+                        if ((testField & 1) == 0)
+                        {
+                            effectField.Commute((ref int n) => n++);
+                        }
+                    });
+            });
+            thread.Start();
+
+            foreach (int i in Enumerable.Range(1, 1000))
+                Shield.InTransaction(() => {
+                    testField.Modify((ref int n) => n++);
+                });
+            thread.Join();
+
+            Assert.AreEqual(0, failCommitCount);
+            Assert.AreEqual(0, failVisibleCount);
         }
     }
 }
