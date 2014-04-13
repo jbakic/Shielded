@@ -258,9 +258,12 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Executes the function in a transaction, and returns it's final result. If the
-        /// transaction fails (by calling Rollback(false)), returns the default value of type T.
-        /// Nesting allowed.
+        /// Executes the function in a transaction, and returns it's final result. Nesting allowed.
+        /// If the transaction fails (by calling Rollback(false)), the result is undefined. In most
+        /// cases you can expect to get default(T) back, but it is possible for a PreCommit to cause
+        /// our transaction here to roll back without retrying, but after we have already gotten
+        /// some result from the function, and prepared it for returning. In that case you would get
+        /// that result even though the transaction could not commit.
         /// </summary>
         public static T InTransaction<T>(Func<T> act)
         {
