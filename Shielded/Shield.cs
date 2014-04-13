@@ -226,7 +226,6 @@ namespace Shielded
             return new Subscription(SubscriptionContext.PostCommit, test, trans);
         }
 
-#if (!NO_PRE_COMMIT)
         /// <summary>
         /// Pre-commit check, which executes just before commit of a transaction involving
         /// certain fields. Can be used to ensure certain invariants hold, for example.
@@ -245,7 +244,6 @@ namespace Shielded
         {
             return new Subscription(SubscriptionContext.PreCommit, test, trans);
         }
-#endif
 
         /// <summary>
         /// Enlists a side-effect - an operation to be performed only if the transaction
@@ -396,12 +394,10 @@ namespace Shielded
                     {
                         foreach (var comm in commutes)
                             comm.Perform();
-#if (!NO_PRE_COMMIT)
                         if (SubscriptionContext.PreCommit.Count > 0)
                             SubscriptionContext.PreCommit
                                 .Trigger(_localItems.Enlisted.Where(HasChanges))
                                 .Run();
-#endif
                     }, merge: false);
                     return;
                 }
@@ -431,12 +427,10 @@ namespace Shielded
             long oldStamp = _currentTransactionStartStamp.Value;
             bool commit;
 
-#if (!NO_PRE_COMMIT)
             if (SubscriptionContext.PreCommit.Count > 0)
                 SubscriptionContext.PreCommit
                     .Trigger(items.Enlisted.Where(HasChanges))
                     .Run();
-#endif
             try
             {
                 bool brokeInCommutes = items.Commutes != null && items.Commutes.Any();
