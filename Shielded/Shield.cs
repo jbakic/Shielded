@@ -334,11 +334,13 @@ namespace Shielded
         /// <summary>
         /// Runs the action, and returns a set of IShieldeds that the action enlisted.
         /// It will make sure to restore original enlisted items, merged with the ones
-        /// that the action enlisted, before returning.
+        /// that the action enlisted, before returning. The isolated action may still
+        /// cause outer transaction's commutes to degenerate.
         /// </summary>
         internal static HashSet<IShielded> IsolatedRun(Action act)
         {
             var isolated = new TransItems();
+            isolated.Commutes = _localItems.Commutes;
             WithTransactionContext(isolated, act);
             return isolated.Enlisted;
         }
