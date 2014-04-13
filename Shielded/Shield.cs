@@ -82,11 +82,11 @@ namespace Shielded
         /// </summary>
         internal static bool Enlist(IShielded item, bool hasLocals)
         {
-            AssertInTransaction();
             if (_blockEnlist != null && _blockEnlist != item)
                 throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
             if (!_enforceTracking && hasLocals)
                 return false;
+            AssertInTransaction();
             if (_localItems.Enlisted.Add(item))
             {
                 CheckCommutes(item);
