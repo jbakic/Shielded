@@ -259,11 +259,6 @@ namespace Shielded
 
         /// <summary>
         /// Executes the function in a transaction, and returns it's final result. Nesting allowed.
-        /// If the transaction fails (by calling Rollback(false)), the result is undefined. In most
-        /// cases you can expect to get default(T) back, but it is possible for a PreCommit to cause
-        /// our transaction here to roll back without retrying, but after we have already gotten
-        /// some result from the function, and prepared it for returning. In that case you would get
-        /// that result even though the transaction could not commit.
         /// </summary>
         public static T InTransaction<T>(Func<T> act)
         {
@@ -283,10 +278,8 @@ namespace Shielded
                 return;
             }
 
-            bool repeat;
             do
             {
-                repeat = false;
                 try
                 {
                     _localItems = new TransItems();
@@ -300,36 +293,31 @@ namespace Shielded
                     }
 
                     act();
-                    if (!DoCommit())
-                        repeat = true;
+                    if (DoCommit())
+                        return;
                 }
-                catch (TransException ex)
-                {
-                    if (_currentTransactionStartStamp.HasValue)
-                        repeat = !(ex is NoRepeatTransException);
-                }
+                catch (TransException ex) { }
                 finally
                 {
                     if (_currentTransactionStartStamp.HasValue)
                         DoRollback();
                 }
-            } while (repeat);
-        }
-
-        private class NoRepeatTransException : TransException
-        {
-            public NoRepeatTransException(string message) : base(message) {}
+            } while (true);
         }
 
         /// <summary>
-        /// Rolls the transaction back. If given false as argument, there will be no repetitions.
+        /// Rolls the transaction back and retries it from the beginning. If you don't
+        /// want the transaction to repeat, you will have to throw and catch an exception
+        /// yourself. There was a Rollback version which supported silently failing a
+        /// transaction, but this destroys composability - what if you fail a transaction
+        /// that does not expect this? How would it even know that the values it extracted
+        /// from a transaction run are actually invalid? If you throw your own exception,
+        /// then the outer transaction and it's caller will certainly know something is up.
         /// </summary>
-        public static void Rollback(bool retry)
+        public static void Rollback()
         {
             AssertInTransaction();
-            throw (retry ?
-                   new TransException("Requested rollback and retry.") :
-                   new NoRepeatTransException("Requested rollback without retry."));
+            throw new TransException("Requested rollback and retry.");
         }
 
         /// <summary>
@@ -409,9 +397,6 @@ namespace Shielded
                     foreach (var item in commutedItems.Enlisted)
                         item.Rollback();
                     commutedItems = null;
-
-                    if (ex is NoRepeatTransException)
-                        throw;
                 }
             }
         }

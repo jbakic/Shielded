@@ -19,20 +19,24 @@ namespace ShieldedTests
             // we will not allow any odd number to be committed into x.
             Shield.PreCommit(() => (x.Read & 1) == 1, () => {
                 Interlocked.Increment(ref preCommitFails);
-                Shield.Rollback(false);
+                throw new InvalidOperationException();
             });
 
             int transactionCount = 0;
             Task.WaitAll(
                 Enumerable.Range(1, 100).Select(i => Task.Factory.StartNew(() =>
                 {
-                    Shield.InTransaction(() =>
+                    try
                     {
-                        Interlocked.Increment(ref transactionCount);
-                        int a = x;
-                        Thread.Sleep(5);
-                        x.Assign(a + i);
-                    });
+                        Shield.InTransaction(() =>
+                        {
+                            Interlocked.Increment(ref transactionCount);
+                            int a = x;
+                            Thread.Sleep(5);
+                            x.Assign(a + i);
+                        });
+                    }
+                    catch (InvalidOperationException) { }
                 }, TaskCreationOptions.LongRunning)).ToArray());
             Assert.AreEqual(50, preCommitFails);
             Assert.AreEqual(2550, x);
@@ -115,7 +119,7 @@ namespace ShieldedTests
                     // a certain signal before continuing the next iteration..
                     // (NB that Shield.SideEffect would, of course, have to be called
                     // before calling Rollback.)
-                    Shield.Rollback(true);
+                    Shield.Rollback();
             });
 
             // this will pass due to ownerThreadId == -1
