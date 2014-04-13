@@ -156,6 +156,11 @@ namespace ShieldedTests
                 });
             });
             Assert.IsTrue(commitFx);
+
+            bool outOfTransFx = false, outOfTransOnRollback = false;
+            Shield.SideEffect(() => outOfTransFx = true, () => outOfTransOnRollback = true);
+            Assert.IsTrue(outOfTransFx);
+            Assert.IsFalse(outOfTransOnRollback);
         }
 
         [Test]

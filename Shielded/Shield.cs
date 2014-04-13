@@ -249,9 +249,20 @@ namespace Shielded
         /// Enlists a side-effect - an operation to be performed only if the transaction
         /// commits. Optionally receives an action to perform in case of a rollback.
         /// If the transaction is rolled back, all enlisted side-effects are (also) cleared.
+        /// 
+        /// If this is called out of transaction, the fx action (if one was provided)
+        /// will be directly executed. This preserves correct behavior if the call finds
+        /// itself sometimes in, sometimes out of transaction, because of some crazy
+        /// nesting differences.
         /// </summary>
         public static void SideEffect(Action fx, Action rollbackFx = null)
         {
+            if (!_currentTransactionStartStamp.HasValue)
+            {
+                if (fx != null) fx();
+                return;
+            }
+
             if (_localItems.Fx == null)
                 _localItems.Fx = new List<SideEffect>();
             _localItems.Fx.Add(new SideEffect(fx, rollbackFx));
