@@ -76,6 +76,81 @@ namespace ShieldedTests
             Assert.AreEqual(1, list1.Count);
             Assert.AreEqual(99, list2.Count);
         }
+
+        [Test]
+        public void Prioritization()
+        {
+            var x = new Shielded<int>();
+
+            int slowThread1Repeats = 0;
+            var slowThread1 = new Thread(() => {
+                Shield.InTransaction(() => {
+                    Interlocked.Increment(ref slowThread1Repeats);
+                    int a = x;
+                    Thread.Sleep(500);
+                    x.Assign(a - 1);
+                });
+            });
+            slowThread1.Start();
+
+            foreach (int i in Enumerable.Range(1, 100))
+            {
+                Shield.InTransaction(() => {
+                    x.Modify((ref int a) => a++);
+                });
+            }
+            slowThread1.Join();
+
+            Assert.Greater(slowThread1Repeats, 1);
+            Assert.AreEqual(99, x);
+
+            // now, we introduce prioritization.
+            // this condition gets triggered before any attempt to write into x
+            int ownerThreadId = -1;
+            Shield.PreCommit(() => { int a = x; return true; }, () => {
+                var threadId = ownerThreadId;
+                if (threadId > -1 && threadId != Thread.CurrentThread.ManagedThreadId)
+                    // we'll cause lower prio threads to busy wait. we could also
+                    // add, e.g., an onRollback SideEffect which would wait for
+                    // a certain signal before continuing the next iteration..
+                    // (NB that Shield.SideEffect would, of course, have to be called
+                    // before calling Rollback.)
+                    Shield.Rollback(true);
+            });
+
+            // this will pass due to ownerThreadId == -1
+            Shield.InTransaction(() => x.Assign(0));
+
+            int slowThread2Repeats = 0;
+            var slowThread2 = new Thread(() => {
+                try
+                {
+                    Interlocked.Exchange(ref ownerThreadId, Thread.CurrentThread.ManagedThreadId);
+                    Shield.InTransaction(() => {
+                        Interlocked.Increment(ref slowThread2Repeats);
+                        int a = x;
+                        Thread.Sleep(500);
+                        x.Assign(a - 1);
+                    });
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref ownerThreadId, -1);
+                }
+            });
+            slowThread2.Start();
+
+            foreach (int i in Enumerable.Range(1, 100))
+            {
+                Shield.InTransaction(() => {
+                    x.Modify((ref int a) => a++);
+                });
+            }
+            slowThread2.Join();
+
+            Assert.AreEqual(1, slowThread2Repeats);
+            Assert.AreEqual(99, x);
+        }
     }
 }
 
