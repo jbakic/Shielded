@@ -233,12 +233,9 @@ namespace Shielded
         /// result is ignored. It will later be re-executed just before commit of any transaction
         /// that changes one of the fields it accessed.
         /// If test passes, executes trans as well. They will execute within the transaction
-        /// that triggers them. If they are triggered by a transaction's commute, they will
-        /// be called from within the commute sub-cycle (read stamp will be higher than in
-        /// main transaction). They may even get called twice in the same transaction due
-        /// to this, if the transaction changes one field normally, and commutes another.
+        /// that triggers them. If they access a commuted field, the commute will degenerate.
         /// </summary>
-        /// <returns>An IDisposable which can be used to cancel the conditional by calling
+        /// <returns>An IDisposable which can be used to cancel the pre-commit by calling
         /// Dispose on it. Dispose can be called from trans.</returns>
         public static IDisposable PreCommit(Func<bool> test, Action trans)
         {
