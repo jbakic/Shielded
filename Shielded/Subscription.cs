@@ -12,7 +12,7 @@ namespace Shielded
     /// </summary>
     internal class Subscription : IDisposable, IShielded
     {
-        private readonly Shielded<HashSet<IShielded>> _items = new Shielded<HashSet<IShielded>>();
+        private readonly Shielded<ISet<IShielded>> _items = new Shielded<ISet<IShielded>>();
         private readonly Func<bool> Test;
         private readonly Action Trans;
         private readonly SubscriptionContext Context;
@@ -159,6 +159,15 @@ namespace Shielded
 
         void IShielded.TrimCopies(long smallestOpenTransactionId) { }
 
+        int IShielded.PseudoHash
+        {
+            get
+            {
+                return _pseudoHash;
+            }
+        }
+        int _pseudoHash = SimpleHash.Get();
+        
         bool IShielded.HasChanges
         {
             get

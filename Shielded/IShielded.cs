@@ -4,6 +4,8 @@ namespace Shielded
 {
     internal interface IShielded
     {
+        int PseudoHash { get; }
+
         bool HasChanges { get; }
         // this locks the implementor. All reads with >stamp are
         // spinwaited, all other threads' CanCommits() return false,

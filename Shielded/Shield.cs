@@ -57,7 +57,12 @@ namespace Shielded
 
         private class TransItems
         {
-            public HashSet<IShielded> Enlisted = new HashSet<IShielded>();
+            public ISet<IShielded> Enlisted =
+#if USE_STD_HASHSET
+                new HashSet<IShielded>();
+#else
+                new SimpleHashSet();
+#endif
             public List<SideEffect> Fx;
             public List<Commute> Commutes;
 
@@ -334,7 +339,7 @@ namespace Shielded
         /// that the action enlisted, before returning. The isolated action may still
         /// cause outer transaction's commutes to degenerate.
         /// </summary>
-        internal static HashSet<IShielded> IsolatedRun(Action act)
+        internal static ISet<IShielded> IsolatedRun(Action act)
         {
             var isolated = new TransItems();
             isolated.Commutes = _localItems.Commutes;
