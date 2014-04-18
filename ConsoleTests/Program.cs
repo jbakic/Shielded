@@ -392,7 +392,7 @@ namespace ConsoleTests
             }
 
             var complete = new Shielded<int>();
-            IDisposable completeCond;
+            IDisposable completeCond = null;
             completeCond = Shield.Conditional(() => complete == numTickets, () => {
                 barrier.SignalAndWait();
                 completeCond.Dispose();
@@ -985,7 +985,7 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
             //BetShopPoolTest();
 
@@ -993,7 +993,7 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            SimpleOps();
+            //SimpleOps();
 
             //MultiFieldOps();
 
