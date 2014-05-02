@@ -633,15 +633,12 @@ namespace Shielded
                 var minTransactionNo = _transactions.Min() ?? lastStamp;
 
                 Tuple<long, IEnumerable<IShielded>> curr;
-                HashSet<IShielded> toTrim = new HashSet<IShielded>();
                 while (_copiesByVersion.TryPeek(out curr) && curr.Item1 <= minTransactionNo)
                 {
-                    toTrim.UnionWith(curr.Item2);
+                    foreach (var item in curr.Item2)
+                        item.TrimCopies(minTransactionNo);
                     _copiesByVersion.TryDequeue(out curr);
                 }
-
-                foreach (var sh in toTrim)
-                    sh.TrimCopies(minTransactionNo);
             }
             finally
             {
