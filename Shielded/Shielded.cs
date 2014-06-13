@@ -60,10 +60,8 @@ namespace Shielded
         private ValueKeeper CurrentTransactionOldValue()
         {
             var point = _current;
-            while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
+            while (point.Version > Shield.CurrentTransactionStartStamp)
                 point = point.Older;
-            if (point == null)
-                throw new ApplicationException("Critical error in Shielded<T> - lost data.");
             return point;
         }
 
@@ -188,15 +186,11 @@ namespace Shielded
         
         bool IShielded.CanCommit(Tuple<int, long> writeStamp)
         {
-            if (_writerStamp != null)
-                return false;
-            else if (_current.Version <= Shield.CurrentTransactionStartStamp)
-            {
-                if (_locals.HasValue)
-                    _writerStamp = writeStamp;
-                return true;
-            }
-            return false;
+            var res = _writerStamp == null &&
+                _current.Version <= Shield.CurrentTransactionStartStamp;
+            if (res && _locals.HasValue)
+                _writerStamp = writeStamp;
+            return res;
         }
         
         void IShielded.Commit()
@@ -244,12 +238,10 @@ namespace Shielded
             // NB the "smallest transaction" and others can freely read while
             // we're doing this.
             var point = _current;
-            while (point != null && point.Version > smallestOpenTransactionId)
+            while (point.Version > smallestOpenTransactionId)
                 point = point.Older;
             // point is the last accessible - his Older is not needed.
-            if (point != null)
-                point.Older = null;
-            // if point were null above, data was lost, CurrentTransactionValue() might throw for some!
+            point.Older = null;
         }
     }
 }

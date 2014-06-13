@@ -422,7 +422,7 @@ namespace Shielded
             var items = _localItems;
             TransItems commutedItems = null;
             long oldStamp = _currentTransactionStartStamp.Value;
-            bool commit;
+            bool commit = false;
             bool brokeInCommutes = items.Commutes != null && items.Commutes.Any();
 
             if (SubscriptionContext.PreCommit.Count > 0)
@@ -439,67 +439,52 @@ namespace Shielded
                         items.Enlisted.Where(HasChanges))
                     .Run();
             }
+
             try
             {
-                do
+repeatCommutes: if (brokeInCommutes)
                 {
-                    commit = true;
-                    if (brokeInCommutes)
-                    {
-                        RunCommutes(out commutedItems);
-                        if (items.Enlisted.Overlaps(commutedItems.Enlisted))
-                            throw new InvalidOperationException("Invalid commute - conflict with transaction.");
-                    }
+                    RunCommutes(out commutedItems);
+                    if (items.Enlisted.Overlaps(commutedItems.Enlisted))
+                        throw new InvalidOperationException("Invalid commute - conflict with transaction.");
+                }
 
-                    lock (_stampLock)
+                lock (_stampLock)
+                {
+                    writeStamp = Tuple.Create(Thread.CurrentThread.ManagedThreadId,
+                                              Interlocked.Read(ref _lastStamp) + 1);
+                    try
                     {
-                        writeStamp = Tuple.Create(Thread.CurrentThread.ManagedThreadId,
-                                                  Interlocked.Read(ref _lastStamp) + 1);
-                        try
+                        if (brokeInCommutes)
                         {
-                            if (brokeInCommutes)
-                            {
-                                foreach (var item in commutedItems.Enlisted)
-                                    if (!item.CanCommit(writeStamp))
-                                    {
-                                        commit = false;
-                                        break;
-                                    }
-                                if (!commit) continue;
-                            }
-
-                            _currentTransactionStartStamp = oldStamp;
-                            brokeInCommutes = false;
-                            foreach (var item in items.Enlisted)
+                            foreach (var item in commutedItems.Enlisted)
                                 if (!item.CanCommit(writeStamp))
-                                {
-                                    commit = false;
-                                    break;
-                                }
-                            if (!commit) break;
+                                    goto repeatCommutes;
+                        }
 
-                            Interlocked.Increment(ref _lastStamp);
-                        }
-                        catch
+                        _currentTransactionStartStamp = oldStamp;
+                        brokeInCommutes = false;
+                        foreach (var item in items.Enlisted)
+                            if (!item.CanCommit(writeStamp))
+                                return false;
+
+                        Interlocked.Increment(ref _lastStamp);
+                        commit = true;
+                    }
+                    finally
+                    {
+                        if (!commit)
                         {
-                            commit = false;
-                            throw;
-                        }
-                        finally
-                        {
-                            if (!commit)
-                            {
-                                if (commutedItems != null)
-                                    foreach (var item in commutedItems.Enlisted)
-                                        item.Rollback();
-                                if (!brokeInCommutes)
-                                    foreach (var item in items.Enlisted)
-                                        item.Rollback();
-                            }
+                            if (commutedItems != null)
+                                foreach (var item in commutedItems.Enlisted)
+                                    item.Rollback();
+                            if (!brokeInCommutes)
+                                foreach (var item in items.Enlisted)
+                                    item.Rollback();
                         }
                     }
-                } while (brokeInCommutes);
-                return commit;
+                }
+                return true;
             }
             finally
             {

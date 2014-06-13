@@ -80,8 +80,8 @@ namespace Shielded
             PrepareLocal(key);
 
             ItemKeeper point;
-            _dict.TryGetValue(key, out point);
-            while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
+            if (!_dict.TryGetValue(key, out point)) return null;
+            while (point.Version > Shield.CurrentTransactionStartStamp)
                 point = point.Older;
             return point;
         }
@@ -261,29 +261,27 @@ namespace Shielded
                     if (!_dict.TryGetValue(key, out point))
                         continue;
                     ItemKeeper pointNewer = null;
-                    while (point != null && point.Version > smallestOpenTransactionId)
+                    while (point.Version > smallestOpenTransactionId)
                     {
                         pointNewer = point;
                         point = point.Older;
                     }
-                    if (point != null)
+
+                    // point is the last accessible - his Older is not needed.
+                    point.Older = null;
+                    if (point.Empty)
                     {
-                        // point is the last accessible - his Older is not needed.
-                        point.Older = null;
-                        if (point.Empty)
+                        if (pointNewer != null)
+                            pointNewer.Older = null;
+                        else
                         {
-                            if (pointNewer != null)
-                                pointNewer.Older = null;
-                            else
+                            //((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
+                            //    .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));
+                            lock (_dict)
                             {
-                                //((ICollection<KeyValuePair<TKey, ItemKeeper>>)_dict)
-                                //    .Remove(new KeyValuePair<TKey, ItemKeeper>(key, point));
-                                lock (_dict)
-                                {
-                                    ItemKeeper k;
-                                    if (_dict.TryGetValue(key, out k) && k == point)
-                                        _dict.TryRemove(key, out k);
-                                }
+                                ItemKeeper k;
+                                if (_dict.TryGetValue(key, out k) && k == point)
+                                    _dict.TryRemove(key, out k);
                             }
                         }
                     }
