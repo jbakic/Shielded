@@ -34,8 +34,8 @@ namespace Shielded
         // This is the only protection for iterators - each iterating op will read the count, just
         // to provoke a conflict with any transaction that modifies the Count! Simple as hell.
         private readonly Shielded<int> _count;
-        private readonly ConcurrentDictionary<TKey, Tuple<int, long>> _writeStamps
-            = new ConcurrentDictionary<TKey, Tuple<int, long>>();
+        private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps
+            = new ConcurrentDictionary<TKey, WriteStamp>();
         private readonly LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
 
         public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items)
@@ -59,18 +59,18 @@ namespace Shielded
 
 #if SERVER
             var stamp = Shield.CurrentTransactionStartStamp;
-            Tuple<int, long> w;
-            if (_writeStamps.TryGetValue(key, out w) && w.Item2 <= stamp)
+            WriteStamp w;
+            if (_writeStamps.TryGetValue(key, out w) && w.Version <= stamp)
                 lock (_localDict)
                 {
-                    while (_writeStamps.TryGetValue(key, out w) && w.Item2 <= stamp)
+                    while (_writeStamps.TryGetValue(key, out w) && w.Version <= stamp)
                         Monitor.Wait(_localDict);
                 }
 #else
             SpinWait.SpinUntil(() =>
             {
-                Tuple<int, long> w;
-                return !_writeStamps.TryGetValue(key, out w) || w.Item2 > Shield.CurrentTransactionStartStamp;
+                WriteStamp w;
+                return !_writeStamps.TryGetValue(key, out w) || w.Version > Shield.ReadStamp;
             });
 #endif
         }
@@ -81,7 +81,7 @@ namespace Shielded
 
             ItemKeeper point;
             _dict.TryGetValue(key, out point);
-            while (point != null && point.Version > Shield.CurrentTransactionStartStamp)
+            while (point != null && point.Version > Shield.ReadStamp)
                 point = point.Older;
             return point;
         }
@@ -115,7 +115,7 @@ namespace Shielded
                         throw new KeyNotFoundException();
                     return v.Value;
                 }
-                else if (_dict.TryGetValue(key, out v) && v.Version > Shield.CurrentTransactionStartStamp)
+                else if (_dict.TryGetValue(key, out v) && v.Version > Shield.ReadStamp)
                     throw new TransException("Writable read collision.");
 
                 if (_localDict.Value.Items[key].Empty)
@@ -127,7 +127,7 @@ namespace Shielded
                 PrepareLocal(key);
                 ItemKeeper curr;
                 bool hasValue;
-                if ((hasValue = _dict.TryGetValue(key, out curr)) && curr.Version > Shield.CurrentTransactionStartStamp)
+                if ((hasValue = _dict.TryGetValue(key, out curr)) && curr.Version > Shield.ReadStamp)
                     throw new TransException("Write collision.");
 
                 ItemKeeper localItem;
@@ -166,14 +166,14 @@ namespace Shielded
             }
         }
 
-        bool IShielded.CanCommit(Tuple<int, long> writeStamp)
+        bool IShielded.CanCommit(WriteStamp writeStamp)
         {
             // locals were prepared when we enlisted.
             if (_localDict.Value.Reads.Any(key =>
                     {
                         ItemKeeper v;
                         return _writeStamps.ContainsKey(key) ||
-                            (_dict.TryGetValue(key, out v) && v.Version > Shield.CurrentTransactionStartStamp);
+                            (_dict.TryGetValue(key, out v) && v.Version > Shield.ReadStamp);
                     }))
                 return false;
             else
@@ -193,7 +193,7 @@ namespace Shielded
         {
             if (_localDict.Value.Items != null)
             {
-                long version = _writeStamps[_localDict.Value.Items.First().Key].Item2;
+                long version = _writeStamps[_localDict.Value.Items.First().Key].Version;
                 var copyList = new List<TKey>(_localDict.Value.Items.Count);
                 foreach (var kvp in _localDict.Value.Items)
                 {
@@ -207,7 +207,7 @@ namespace Shielded
                     lock (_dict)
                         _dict[kvp.Key] = newCurrent;
 
-                    Tuple<int, long> ws;
+                    WriteStamp ws;
 #if SERVER
                     lock (_localDict)
                     {
@@ -229,7 +229,7 @@ namespace Shielded
                 return;
             if (_localDict.Value.Items != null)
             {
-                Tuple<int, long> ws;
+                WriteStamp ws;
 #if SERVER
                 lock (_localDict)
                 {
@@ -240,7 +240,7 @@ namespace Shielded
                 }
 #else
                 foreach (var key in _localDict.Value.Items.Keys)
-                    if (_writeStamps.TryGetValue(key, out ws) && ws.Item1 == Thread.CurrentThread.ManagedThreadId)
+                    if (_writeStamps.TryGetValue(key, out ws) && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
                         _writeStamps.TryRemove(key, out ws);
 #endif
             }

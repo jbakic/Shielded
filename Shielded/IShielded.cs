@@ -2,19 +2,29 @@ using System;
 
 namespace Shielded
 {
+    /// <summary>
+    /// The <see cref="Shield"/> class tracks implementors of this interface.
+    /// </summary>
     internal interface IShielded
     {
+        /// <summary>
+        /// Gets a very simple "hash", used only by the <see cref="Shielded.SimpleHashSet"/>.
+        /// </summary>
         int PseudoHash { get; }
 
         bool HasChanges { get; }
-        // this locks the implementor. All reads with >stamp are
-        // spinwaited, all other threads' CanCommits() return false,
-        // and only a Commit() or Rollback() release it.
-        // it should lock only if it HasChanges!
-        // Item1 is ManagedThreadId, the tuple is shared among items.
-        bool CanCommit(Tuple<int, long> writeStamp);
+
+        /// <summary>
+        /// Returns true if there have been no changes by other threads since this
+        /// transaction opened. If so, and if the field has changes in this transaction,
+        /// the method will also lock the field until a call to Commit or Rollback is made.
+        /// It is called under the pre-commit lock, so it is safe, but must be quick.
+        /// </summary>
+        bool CanCommit(WriteStamp writeStamp);
+
         void Commit();
         void Rollback();
+
         void TrimCopies(long smallestOpenTransactionId);
     }
 

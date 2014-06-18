@@ -11,16 +11,16 @@ namespace Shielded
         private static long _lastStamp;
 
         [ThreadStatic]
-        private static long? _currentTransactionStartStamp;
+        private static long? _readStamp;
         /// <summary>
-        /// Current transaction's start stamp. Thread-static. Throws if called out of
-        /// transaction.
+        /// Current transaction's read stamp, i.e. the latest version it can read.
+        /// Thread-static. Throws if called out of transaction.
         /// </summary>
-        public static long CurrentTransactionStartStamp
+        public static long ReadStamp
         {
             get
             {
-                return _currentTransactionStartStamp.Value;
+                return _readStamp.Value;
             }
         }
 
@@ -31,13 +31,13 @@ namespace Shielded
         {
             get
             {
-                return _currentTransactionStartStamp.HasValue;
+                return _readStamp.HasValue;
             }
         }
 
         public static void AssertInTransaction()
         {
-            if (_currentTransactionStartStamp == null)
+            if (_readStamp == null)
                 throw new InvalidOperationException("Operation needs to be in a transaction.");
         }
 
@@ -259,7 +259,7 @@ namespace Shielded
         /// </summary>
         public static void SideEffect(Action fx, Action rollbackFx = null)
         {
-            if (!_currentTransactionStartStamp.HasValue)
+            if (!_readStamp.HasValue)
             {
                 if (fx != null) fx();
                 return;
@@ -285,7 +285,7 @@ namespace Shielded
         /// </summary>
         public static void InTransaction(Action act)
         {
-            if (_currentTransactionStartStamp.HasValue)
+            if (_readStamp.HasValue)
             {
                 act();
                 return;
@@ -301,7 +301,7 @@ namespace Shielded
                     try { }
                     finally
                     {
-                        _currentTransactionStartStamp = _transactions.SafeAdd(
+                        _readStamp = _transactions.SafeAdd(
                             () => Interlocked.Read(ref _lastStamp));
                     }
 
@@ -312,7 +312,7 @@ namespace Shielded
                 catch (TransException ex) { }
                 finally
                 {
-                    if (_currentTransactionStartStamp.HasValue)
+                    if (_readStamp.HasValue)
                         DoRollback();
                 }
             } while (true);
@@ -390,7 +390,7 @@ namespace Shielded
             var commutes = _localItems.Commutes;
             while (true)
             {
-                _currentTransactionStartStamp = Interlocked.Read(ref _lastStamp);
+                _readStamp = Interlocked.Read(ref _lastStamp);
                 commutedItems = new TransItems();
                 try
                 {
@@ -417,11 +417,11 @@ namespace Shielded
             return item.HasChanges;
         }
 
-        static bool CommitCheck(out Tuple<int, long> writeStamp)
+        static bool CommitCheck(out WriteStamp writeStamp)
         {
             var items = _localItems;
             TransItems commutedItems = null;
-            long oldStamp = _currentTransactionStartStamp.Value;
+            long oldReadStamp = _readStamp.Value;
             bool commit = false;
             bool brokeInCommutes = items.Commutes != null && items.Commutes.Any();
 
@@ -451,8 +451,10 @@ repeatCommutes: if (brokeInCommutes)
 
                 lock (_stampLock)
                 {
-                    writeStamp = Tuple.Create(Thread.CurrentThread.ManagedThreadId,
-                                              Interlocked.Read(ref _lastStamp) + 1);
+                    writeStamp = new WriteStamp(
+                        Thread.CurrentThread.ManagedThreadId,
+                        Interlocked.Read(ref _lastStamp) + 1);
+
                     try
                     {
                         if (brokeInCommutes)
@@ -462,7 +464,7 @@ repeatCommutes: if (brokeInCommutes)
                                     goto repeatCommutes;
                         }
 
-                        _currentTransactionStartStamp = oldStamp;
+                        _readStamp = oldReadStamp;
                         brokeInCommutes = false;
                         foreach (var item in items.Enlisted)
                             if (!item.CanCommit(writeStamp))
@@ -488,8 +490,8 @@ repeatCommutes: if (brokeInCommutes)
             }
             finally
             {
-                if (_currentTransactionStartStamp != oldStamp)
-                    _currentTransactionStartStamp = oldStamp;
+                if (_readStamp != oldReadStamp)
+                    _readStamp = oldReadStamp;
                 // note that this changes the _localItems.Enlisted hashset to contain the
                 // commute-enlists as well, regardless of the check outcome.
                 if (commutedItems != null)
@@ -503,7 +505,7 @@ repeatCommutes: if (brokeInCommutes)
             bool hasChanges = (items.Commutes != null && items.Commutes.Count > 0) ||
                 items.Enlisted.Any(HasChanges);
 
-            Tuple<int, long> writeStamp = null;
+            WriteStamp writeStamp = null;
             bool commit = true;
             if (!hasChanges)
             {
@@ -527,7 +529,7 @@ repeatCommutes: if (brokeInCommutes)
                         if (item.HasChanges) trigger.Add(item);
                         item.Commit();
                     }
-                    RegisterCopies(writeStamp.Item2, trigger);
+                    RegisterCopies(writeStamp.Version, trigger);
                     CloseTransaction();
                 }
 
@@ -577,8 +579,8 @@ repeatCommutes: if (brokeInCommutes)
             try { }
             finally
             {
-                _transactions.Remove(_currentTransactionStartStamp.Value);
-                _currentTransactionStartStamp = null;
+                _transactions.Remove(_readStamp.Value);
+                _readStamp = null;
                 _localItems = null;
             }
         }

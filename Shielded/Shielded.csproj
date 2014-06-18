@@ -66,6 +66,7 @@
     <Compile Include="SubscriptionContext.cs" />
     <Compile Include="Subscription.cs" />
     <Compile Include="SimpleHashSet.cs" />
+    <Compile Include="WriteStamp.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

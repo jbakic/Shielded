@@ -20,7 +20,7 @@ namespace Shielded
         
         private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
-        private volatile Tuple<int, long> _writerStamp;
+        private volatile WriteStamp _writerStamp;
         private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
 
         public Shielded()
@@ -42,17 +42,17 @@ namespace Shielded
 #if SERVER
             var stamp = Shield.CurrentTransactionStartStamp;
             var w = _writerStamp;
-            if (w != null && w.Item2 <= stamp)
+            if (w != null && w.Version <= stamp)
                 lock (_locals)
                 {
-                    if ((w = _writerStamp) != null && w.Item2 <= stamp)
+                    if ((w = _writerStamp) != null && w.Version <= stamp)
                         Monitor.Wait(_locals);
                 }
 #else
             SpinWait.SpinUntil(() =>
             {
                 var w = _writerStamp;
-                return w == null || w.Item2 > Shield.CurrentTransactionStartStamp;
+                return w == null || w.Version > Shield.ReadStamp;
             });
 #endif
         }
@@ -60,7 +60,7 @@ namespace Shielded
         private ValueKeeper CurrentTransactionOldValue()
         {
             var point = _current;
-            while (point.Version > Shield.CurrentTransactionStartStamp)
+            while (point.Version > Shield.ReadStamp)
                 point = point.Older;
             return point;
         }
@@ -78,7 +78,7 @@ namespace Shielded
         private void PrepareForWriting(bool prepareOld)
         {
             CheckLockAndEnlist();
-            if (_current.Version > Shield.CurrentTransactionStartStamp)
+            if (_current.Version > Shield.ReadStamp)
                 throw new TransException("Write collision.");
             if (!_locals.HasValue)
             {
@@ -103,7 +103,7 @@ namespace Shielded
                 CheckLockAndEnlist();
                 if (!_locals.HasValue)
                     return CurrentTransactionOldValue().Value;
-                else if (_current.Version > Shield.CurrentTransactionStartStamp)
+                else if (_current.Version > Shield.ReadStamp)
                     throw new TransException("Writable read collision.");
                 return _locals.Value.Value;
             }
@@ -184,10 +184,10 @@ namespace Shielded
             }
         }
         
-        bool IShielded.CanCommit(Tuple<int, long> writeStamp)
+        bool IShielded.CanCommit(WriteStamp writeStamp)
         {
             var res = _writerStamp == null &&
-                _current.Version <= Shield.CurrentTransactionStartStamp;
+                _current.Version <= Shield.ReadStamp;
             if (res && _locals.HasValue)
                 _writerStamp = writeStamp;
             return res;
@@ -199,7 +199,7 @@ namespace Shielded
                 return;
             var newCurrent = _locals.Value;
             newCurrent.Older = _current;
-            newCurrent.Version = _writerStamp.Item2;
+            newCurrent.Version = _writerStamp.Version;
             _current = newCurrent;
             _locals.Value = null;
 #if SERVER
@@ -219,7 +219,7 @@ namespace Shielded
                 return;
             _locals.Value = null;
             var ws = _writerStamp;
-            if (ws != null && ws.Item1 == Thread.CurrentThread.ManagedThreadId)
+            if (ws != null && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
             {
 #if SERVER
                 lock (_locals)

@@ -136,7 +136,7 @@ namespace Shielded
         }
 
         #region IShielded implementation
-        bool IShielded.CanCommit(Tuple<int, long> writeStamp)
+        bool IShielded.CanCommit(WriteStamp writeStamp)
         {
             return true;
         }
