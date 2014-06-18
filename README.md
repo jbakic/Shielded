@@ -11,10 +11,12 @@ check.
 
 Here is a small example:
 
-    Shielded<int> n = new Shielded<int>();
-    int a = n;
-    Shield.InTransaction(
-        () => n.Modify((ref int a) => a += 5));
+```csharp
+Shielded<int> n = new Shielded<int>();
+int a = n;
+Shield.InTransaction(
+    () => n.Modify((ref int a) => a += 5));
+```
 
 You can read out of transaction, but changes must be inside. While inside,
 the library guarantees a consistent view of all shielded fields.
@@ -22,23 +24,29 @@ the library guarantees a consistent view of all shielded fields.
 Another example, the STM version of "Hello world!" - parallel addition in an
 array. Here, in a dictionary:
 
-    var dict = new ShieldedDict<int, int>();
-    ParallelEnumerable.Range(0, 100000)
-        .ForAll(i => Shield.InTransaction(
-            () => dict[i % 100] = dict.ContainsKey(i % 100) ? dict[i % 100] + 1 : 1));
+```csharp
+var dict = new ShieldedDict<int, int>();
+ParallelEnumerable.Range(0, 100000)
+    .ForAll(i => Shield.InTransaction(
+        () => dict[i % 100] = dict.ContainsKey(i % 100) ? dict[i % 100] + 1 : 1));
+```
 
 If you have a class you want to make transactional:
 
-    public class TestClass {
-        public virtual Guid Id { get; set; }
-        public virtual string Name { get; set; }
-    }
+```csharp
+public class TestClass {
+    public virtual Guid Id { get; set; }
+    public virtual string Name { get; set; }
+}
+```
 
 Then you create instances like this:
 
-    using Shielded.ProxyGen;
-    ...
-    var t = Factory.NewShielded<TestClass>();
+```csharp
+using Shielded.ProxyGen;
+...
+var t = Factory.NewShielded<TestClass>();
+```
 
 The Factory creates a proxy sub-class, using CodeDom, which will have transactional
 overrides for all public virtual properties of the base class. It is important to
@@ -46,8 +54,10 @@ know that, due to CodeDom limitations, both the getter and setter must be public
 Such objects are thread-safe (or, at least their virtual properties are), but can
 only be changed inside transactions. Usage is simple:
 
-    var id = t.Id;
-    Shield.InTransaction(() => t.Name = "Test object");
+```csharp
+var id = t.Id;
+Shield.InTransaction(() => t.Name = "Test object");
+```
 
 It is safe to execute any number of concurrent transactions that are reading from
 or writing into the same shielded fields - each transaction will complete correctly.
@@ -107,7 +117,9 @@ without conflict by simply incrementing whatever value you encounter there
 at commit time. Using commutes, when appropriate, reduces conflicts and
 improves concurrency. Incrementing an int, conflict-free:
 
-        n.Commute((ref int a) => a++);
+    ```csharp
+    n.Commute((ref int a) => a++);
+    ```
 
     * Commutes are not performed under any lock, but rather in a special
     commute subtransaction, which reads the latest data, and tries to
