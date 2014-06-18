@@ -51,24 +51,44 @@ namespace ShieldedTests
         }
 
         [Test]
+        public void SimpleRace()
+        {
+            var dict = new ShieldedDict<int, int>();
+            ParallelEnumerable.Range(0, 100000)
+                .ForAll(i => Shield.InTransaction(
+                    () => dict[i % 100] = dict.ContainsKey(i % 100) ? dict[i % 100] + 1 : 1));
+
+            Shield.InTransaction(() => {
+                for (int i = 0; i < 100; i++)
+                    Assert.AreEqual(1000, dict[i]);
+            });
+        }
+
+        [Test]
         public void DictionaryRace()
         {
-            // a race over just one element
-            var dict = new ShieldedDict<int, int>();
-            Shield.InTransaction(() => dict[1] = 0);
+            var dict = new ShieldedDict<int, int>(
+                Enumerable.Range(0, 100)
+                .Select(i => new KeyValuePair<int, int>(i, 0)));
             int transactionCount = 0;
+
             Task.WaitAll(
-                Enumerable.Repeat(1, 100).Select(i => Task.Factory.StartNew(() =>
+                Enumerable.Range(0, 1000).Select(i => Task.Factory.StartNew(() =>
                 {
                     Shield.InTransaction(() =>
                     {
                         Interlocked.Increment(ref transactionCount);
-                        var a = dict[1];
+                        var a = dict[i % 100];
                         Thread.Sleep(5);
-                        dict[1] = a + 1;
+                        dict[i % 100] = a + 1;
                     });
                 }, TaskCreationOptions.LongRunning)).ToArray());
-            Assert.AreEqual(100, dict[1]);
+
+            Shield.InTransaction(() => {
+                var values = dict.Values;
+                foreach (var value in values)
+                    Assert.AreEqual(10, value);
+            });
             Assert.Greater(transactionCount, 100);
         }
 
