@@ -4,24 +4,28 @@ Shielded
 Shielded is a full-featured implementation of Software Transactional Memory
 in .NET. It provides a system (the Shield static class) for running in-memory
 transactions, and data structures which are aware of transactions. It can also
-generate transaction-aware proxy subclasses based on a POCO class type.
-
-The implementation is strict, with strong guarantees on safety. It is mostly
-obstruction-free, using only one major lock which is held during
-the pre-commit check. It is slower than non-transactional code, of
-course - a trivial transaction is roughly around 2-5 times slower than
-optimally written code. But, for anything non-trivial, the impact of STM
-on performance becomes smaller, while the code is much simpler,
-less error-prone, and achieves a high degree of concurrency.
+generate transaction-aware proxy subclasses based on a POCO class type. The
+implementation is strict, with strong guarantees on safety. It is mostly
+obstruction-free, using only one major lock which is held during the pre-commit
+check.
 
 Here is a small example:
 
     Shielded<int> n = new Shielded<int>();
-    Shield.InTransaction(() => n.Modify((ref int a) => a += 5));
+    int a = n;
+    Shield.InTransaction(
+        () => n.Modify((ref int a) => a += 5));
 
-The first line creates a shielded container for an Int32, 0 will be the
-initial value as it is the int’s default. The second line starts a
-transaction inside which it modifies the int to be larger by 5.
+You can read out of transaction, but changes must be inside. While inside,
+the library guarantees a consistent view of all shielded fields.
+
+Another example, the STM version of "Hello world!" - parallel addition in an
+array. Here, in a dictionary:
+
+    var dict = new ShieldedDict<int, int>();
+    ParallelEnumerable.Range(0, 100000)
+        .ForAll(i => Shield.InTransaction(
+            () => dict[i % 100] = dict.ContainsKey(i % 100) ? dict[i % 100] + 1 : 1));
 
 If you have a class you want to make transactional:
 
@@ -45,9 +49,9 @@ only be changed inside transactions. Usage is simple:
     var id = t.Id;
     Shield.InTransaction(() => t.Name = "Test object");
 
-It is perfectly safe to execute transactions along with any number of parallel
-threads that are reading from or writing into the same Shielded object - this
-transaction will complete correctly. It accomplishes this by:
+It is safe to execute any number of concurrent transactions that are reading from
+or writing into the same shielded fields - each transaction will complete correctly.
+It accomplishes this by:
 * Ensuring that during one transaction you always read a consistent state of
 all shielded fields.
 * Buffering writes into storage which is local for each thread.
