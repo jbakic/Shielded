@@ -61,10 +61,10 @@ Shield.InTransaction(() => t.Name = "Test object");
 
 It is safe to execute any number of concurrent transactions that are reading from
 or writing into the same shielded fields - each transaction will complete correctly.
-It accomplishes this by:
-* Ensuring that during one transaction you always read a consistent state of
-all shielded fields.
-* Buffering writes into storage which is local for each thread.
+This is accomplished by:
+* ensuring that in one transaction you read a consistent state of
+all shielded fields
+* buffering writes into storage which is local for each thread
 
 Your changes are commited and made visible to other threads only if all
 the shielded fields you read or wrote into have not changed since you
