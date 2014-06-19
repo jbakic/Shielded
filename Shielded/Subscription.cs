@@ -27,7 +27,7 @@ namespace Shielded
                 if (!items.Any())
                     throw new InvalidOperationException(
                         "Test function must access at least one shielded field.");
-                _items.Assign(items);
+                _items.Value = items;
                 UpdateEntries();
             });
         }
@@ -35,7 +35,7 @@ namespace Shielded
         public void Dispose()
         {
             Shield.InTransaction(() => {
-                _items.Assign(null);
+                _items.Value = null;
                 UpdateEntries();
             });
         }
@@ -45,7 +45,7 @@ namespace Shielded
         {
             Shield.InTransaction(() =>
             {
-                var oldItems = _items.Read;
+                var oldItems = _items.Value;
                 if (oldItems == null || !oldItems.Overlaps(trigger))
                     return; // not subscribed anymore..
 
@@ -64,7 +64,7 @@ namespace Shielded
                         throw new InvalidOperationException(
                             "A conditional test function must access at least one shielded field.");
                     }
-                    _items.Assign(testItems);
+                    _items.Value = testItems;
                     UpdateEntries();
                 }
             });
@@ -89,7 +89,7 @@ namespace Shielded
             var l = new Locals();
 
             var oldItems = _items.GetOldValue();
-            var newItems = _items.Read;
+            var newItems = _items.Value;
             l.PreAdd = newItems == null ? null :
                 (oldItems != null ? newItems.Except(oldItems).ToList() : newItems.ToList());
             l.CommitRemove = oldItems == null ? null :

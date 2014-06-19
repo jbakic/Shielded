@@ -14,8 +14,8 @@ Here is a small example:
 ```csharp
 Shielded<int> n = new Shielded<int>();
 int a = n;
-Shield.InTransaction(
-    () => n.Modify((ref int a) => a += 5));
+Shield.InTransaction(() =>
+    n.Value = n + 5);
 ```
 
 You can read out of transaction, but changes must be inside. While inside,
@@ -56,7 +56,8 @@ only be changed inside transactions. Usage is simple:
 
 ```csharp
 var id = t.Id;
-Shield.InTransaction(() => t.Name = "Test object");
+Shield.InTransaction(() =>
+    t.Name = "Test object");
 ```
 
 It is safe to execute any number of concurrent transactions that are reading from

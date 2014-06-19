@@ -100,13 +100,13 @@ namespace ConsoleTests
                             Interlocked.Increment(ref transactionCounter);
                             int v = shx[rnd];
                             if (sleepTime > 0) Thread.Sleep(sleepTime);
-                            shx[rnd].Assign(v + 1);
+                            shx[rnd].Value = v + 1;
                         });
                     },
                     sleepTime > 0 ? TaskCreationOptions.LongRunning : TaskCreationOptions.None
                     );
                 });
-                var correct = shx.Sum(s => s.Read) == taskCount;
+                var correct = shx.Sum(s => s.Value) == taskCount;
                 Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
                     time, transactionCounter, correct ? "correct" : "incorrect");
             }
@@ -118,9 +118,9 @@ namespace ConsoleTests
             Shield.InTransaction(() =>
             {
                 int x = sh;
-                Console.WriteLine("Read: {0}", x);
+                Console.WriteLine("Value: {0}", x);
                 sh.Modify((ref int a) => a = x + 1);
-                Console.WriteLine("Read after increment: {0}", sh.Read);
+                Console.WriteLine("Value after increment: {0}", sh.Value);
             });
         }
 
@@ -170,7 +170,7 @@ namespace ConsoleTests
                                 a.Balance = a.Balance - 100M;
                                 var list = a.Transfers;
                                 Shield.SideEffect(() => list.Add(
-                                    new Transfer() { OtherId = acc2.Read.Id, AmountReceived = -100M }));
+                                    new Transfer() { OtherId = acc2.Value.Id, AmountReceived = -100M }));
                             });
                             Thread.Sleep(100);
                             acc2.Modify((ref Account a) =>
@@ -178,7 +178,7 @@ namespace ConsoleTests
                                 a.Balance = a.Balance + 100M;
                                 var list = a.Transfers;
                                 Shield.SideEffect(() => list.Add(
-                                    new Transfer() { OtherId = acc1.Read.Id, AmountReceived = 100M }));
+                                    new Transfer() { OtherId = acc1.Value.Id, AmountReceived = 100M }));
                             });
                         });
                     }, TaskCreationOptions.LongRunning);
@@ -195,7 +195,7 @@ namespace ConsoleTests
                                 a.Balance = a.Balance - 200M;
                                 var list = a.Transfers;
                                 Shield.SideEffect(() => list.Add(
-                                    new Transfer() { OtherId = acc1.Read.Id, AmountReceived = -200M }));
+                                    new Transfer() { OtherId = acc1.Value.Id, AmountReceived = -200M }));
                             });
                             Thread.Sleep(250);
                             acc1.Modify((ref Account a) =>
@@ -203,19 +203,19 @@ namespace ConsoleTests
                                 a.Balance = a.Balance + 200M;
                                 var list = a.Transfers;
                                 Shield.SideEffect(() => list.Add(
-                                    new Transfer() { OtherId = acc2.Read.Id, AmountReceived = 200M }));
+                                    new Transfer() { OtherId = acc2.Value.Id, AmountReceived = 200M }));
                             });
                         });
                     }, TaskCreationOptions.LongRunning);
             });
             Console.WriteLine("\nCompleted 20 transactions in {0} total attempts.", transactionCount);
-            Console.WriteLine("Account 1 balance: {0}", acc1.Read.Balance);
-            foreach (var t in acc1.Read.Transfers)
+            Console.WriteLine("Account 1 balance: {0}", acc1.Value.Balance);
+            foreach (var t in acc1.Value.Transfers)
             {
                 Console.WriteLine("  {0:####,00}", t.AmountReceived);
             }
-            Console.WriteLine("\nAccount 2 balance: {0}", acc2.Read.Balance);
-            foreach (var t in acc2.Read.Transfers)
+            Console.WriteLine("\nAccount 2 balance: {0}", acc2.Value.Balance);
+            foreach (var t in acc2.Value.Transfers)
             {
                 Console.WriteLine("  {0:####,00}", t.AmountReceived);
             }
@@ -239,11 +239,11 @@ namespace ConsoleTests
                             {
                                 Interlocked.Increment(ref transactionCounter);
                                 var v = dict.ContainsKey(rnd) ? dict[rnd] : null;
-                                int? num = v != null ? (int?)v.Read : null;
+                                int? num = v != null ? (int?)v.Value : null;
                                 Thread.Sleep(1);
                                 if (v == null)
                                     dict[rnd] = new Shielded<int>(1);
-                                else if (v.Read == -1)
+                                else if (v.Value == -1)
                                     dict.Remove(rnd);
                                 else
                                     v.Modify((ref int a) => a = num.Value + 1);
@@ -260,11 +260,11 @@ namespace ConsoleTests
                             {
                                 Interlocked.Increment(ref transactionCounter);
                                 var v = dict.ContainsKey(rnd) ? dict[rnd] : null;
-                                int? num = v != null ? (int?)v.Read : null;
+                                int? num = v != null ? (int?)v.Value : null;
                                 Thread.Sleep(1);
                                 if (v == null)
                                     dict[rnd] = new Shielded<int>(-1);
-                                else if (v.Read == 1)
+                                else if (v.Value == 1)
                                     dict.Remove(rnd);
                                 else
                                     v.Modify((ref int a) => a = num.Value - 1);
@@ -309,7 +309,7 @@ namespace ConsoleTests
                 DateTime newNow = DateTime.UtcNow;
                 int count = betShop.Tickets.Count;
                 int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Assign(newNow);
+                lastTime.Value = newNow;
                 lastReport.Modify((ref int n) => n += reportEvery);
                 Shield.SideEffect(() =>
                 {
@@ -329,9 +329,9 @@ namespace ConsoleTests
                 int offer3Ind = randomizr.Next(3);
                 return Task.Factory.StartNew(() => Shield.InTransaction(() =>
                 {
-                    var offer1 = betShop.Events[event1Id].Read.BetOffers[offer1Ind];
-                    var offer2 = betShop.Events[event2Id].Read.BetOffers[offer2Ind];
-                    var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
+                    var offer1 = betShop.Events[event1Id].Value.BetOffers[offer1Ind];
+                    var offer2 = betShop.Events[event2Id].Value.BetOffers[offer2Ind];
+                    var offer3 = betShop.Events[event3Id].Value.BetOffers[offer3Ind];
                     betShop.BuyTicket(payIn, offer1, offer2, offer3);
                 }));
             });
@@ -371,7 +371,7 @@ namespace ConsoleTests
                 DateTime newNow = DateTime.UtcNow;
                 int count = betShop.Tickets.Count;
                 int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Assign(newNow);
+                lastTime.Value = newNow;
                 lastReport.Modify((ref int n) => n += reportEvery);
                 Shield.SideEffect(() =>
                 {
@@ -408,9 +408,9 @@ namespace ConsoleTests
                 int offer3Ind = randomizr.Next(3);
                 bags[i % numThreads].Add(() => Shield.InTransaction(() =>
                 {
-                    var offer1 = betShop.Events[event1Id].Read.BetOffers[offer1Ind];
-                    var offer2 = betShop.Events[event2Id].Read.BetOffers[offer2Ind];
-                    var offer3 = betShop.Events[event3Id].Read.BetOffers[offer3Ind];
+                    var offer1 = betShop.Events[event1Id].Value.BetOffers[offer1Ind];
+                    var offer2 = betShop.Events[event2Id].Value.BetOffers[offer2Ind];
+                    var offer3 = betShop.Events[event3Id].Value.BetOffers[offer3Ind];
                     betShop.BuyTicket(payIn, offer1, offer2, offer3);
                     complete.Commute((ref int n) => n++);
                 }));
@@ -439,7 +439,7 @@ namespace ConsoleTests
             // for some reason, if this is replaced with ShieldedDict, KeyAlreadyPresent
             // exception is thrown. under one key you can then find an entity which does
             // not have that key. complete mystery.
-            var tree = new ShieldedTree<Guid, TreeItem>();
+            var tree = new ShieldedDict<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);
             int reportEvery = 10000;
             Shielded<int> lastReport = new Shielded<int>(0);
@@ -450,7 +450,7 @@ namespace ConsoleTests
                 DateTime newNow = DateTime.UtcNow;
                 int count = tree.Count;
                 int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Assign(newNow);
+                lastTime.Value = newNow;
                 lastReport.Modify((ref int n) => n += reportEvery);
                 Shield.SideEffect(() =>
                 {
@@ -561,10 +561,10 @@ namespace ConsoleTests
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
-                    accessTest.Assign(3);
-                    var a = accessTest.Read;
+                    accessTest.Value = 3;
+                    var a = accessTest.Value;
                     accessTest.Modify((ref int n) => n = 5);
-                    a = accessTest.Read;
+                    a = accessTest.Value;
                 });
             time = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("WARM UP in {0} ms.", time);
@@ -592,7 +592,7 @@ namespace ConsoleTests
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => { var a = accessTest.Read; });
+                Shield.InTransaction(() => { var a = accessTest.Value; });
             var oneReadTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("1-read transactions in {0} ms.", oneReadTime);
 
@@ -601,7 +601,7 @@ namespace ConsoleTests
                 Shield.InTransaction(() => {
                     int a;
                     for (int i = 0; i < repeatsPerTrans; i++)
-                        a = accessTest.Read;
+                        a = accessTest.Value;
                 });
             var nReadTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("N-reads transactions in {0} ms.", nReadTime);
@@ -609,7 +609,7 @@ namespace ConsoleTests
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
-                    var a = accessTest.Read;
+                    var a = accessTest.Value;
                     accessTest.Modify((ref int n) => n = 1);
                 });
             var oneReadModifyTime = _timer.ElapsedMilliseconds - time;
@@ -621,8 +621,8 @@ namespace ConsoleTests
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
-                    var a = accessTest.Read;
-                    accessTest.Assign(1);
+                    var a = accessTest.Value;
+                    accessTest.Value = 1;
                 });
             var oneReadAssignTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("1-read-1-assign transactions in {0} ms.", oneReadAssignTime);
@@ -651,7 +651,7 @@ namespace ConsoleTests
                     accessTest.Modify((ref int n) => n = 1);
                     int a;
                     for (int i = 0; i < repeatsPerTrans; i++)
-                        a = accessTest.Read;
+                        a = accessTest.Value;
                 });
             var oneModifyNReadTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("1-modify-N-reads transactions in {0} ms.", oneModifyNReadTime);
@@ -659,7 +659,7 @@ namespace ConsoleTests
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => accessTest.Assign(1));
+                Shield.InTransaction(() => accessTest.Value = 1);
             var oneAssignTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("1-assign transactions in {0} ms.", oneAssignTime);
 
@@ -667,7 +667,7 @@ namespace ConsoleTests
             foreach (var k in Enumerable.Repeat(1, numItems))
                 Shield.InTransaction(() => {
                     for (int i = 0; i < repeatsPerTrans; i++)
-                        accessTest.Assign(1);
+                        accessTest.Value = 1;
                 });
             var nAssignTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("N-assigns transactions in {0} ms.", nAssignTime);
@@ -704,7 +704,7 @@ namespace ConsoleTests
                               (oneModifyTime - emptyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of an additional Modify = {0:0.000} us",
                               (nModifyTime - oneModifyTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
-            Console.WriteLine("cost of a Read after Modify = {0:0.000} us",
+            Console.WriteLine("cost of a Value after Modify = {0:0.000} us",
                               (oneModifyNReadTime - oneModifyTime) / (repeatsPerTrans * numItems / 1000.0));
             Console.WriteLine("cost of the first Assign = {0:0.000} us",
                               (oneAssignTime - emptyTime) / (numItems / 1000.0));
@@ -735,10 +735,10 @@ namespace ConsoleTests
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numTrans))
                 Shield.InTransaction(() => {
-                    dummy.Assign(3);
-                    var a = dummy.Read;
+                    dummy.Value = 3;
+                    var a = dummy.Value;
                     dummy.Modify((ref int n) => n = 5);
-                    a = dummy.Read;
+                    a = dummy.Value;
                 });
             time = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("WARM UP in {0} ms.", time);
@@ -831,8 +831,8 @@ namespace ConsoleTests
                 transactionCount = 0;
                 Shield.InTransaction(() =>
                 {
-                    countComplete.Assign(0);
-                    lastReport.Assign(0);
+                    countComplete.Value = 0;
+                    lastReport.Value = 0;
                 }
                 );
 
@@ -985,13 +985,13 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
             //BetShopPoolTest();
 
             //TreeTest();
 
-            //TreePoolTest();
+            TreePoolTest();
 
             //SimpleOps();
 

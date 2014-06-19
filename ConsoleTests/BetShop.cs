@@ -52,7 +52,7 @@ namespace ConsoleTests
 
         static string GetOfferHash(Shielded<Ticket> newTicket)
         {
-            return newTicket.Read.Bets.Select(b => b.Offer.Read.Id)
+            return newTicket.Value.Bets.Select(b => b.Offer.Value.Id)
                 .OrderBy(id => id)
                 .Aggregate(new StringBuilder(), (sb, next) => 
                 {
@@ -78,7 +78,7 @@ namespace ConsoleTests
                     t.Bets = bets.Select(shBo => new Bet()
                         {
                             Offer = shBo,
-                            Odds = shBo.Read.Odds
+                            Odds = shBo.Value.Odds
                         }).ToArray();
                     t.WinAmount = t.PayInAmount *
                         t.Bets.Aggregate(1m, (curr, nextBet) => curr * nextBet.Odds);
@@ -86,7 +86,7 @@ namespace ConsoleTests
 
                 var hash = GetOfferHash(newTicket);
                 var totalWin = _sameTicketWins.ContainsKey(hash) ?
-                    _sameTicketWins[hash] + newTicket.Read.WinAmount : newTicket.Read.WinAmount;
+                    _sameTicketWins[hash] + newTicket.Value.WinAmount : newTicket.Value.WinAmount;
                 if (totalWin > SameTicketWinLimit)
                     return false;
 
@@ -147,7 +147,7 @@ namespace ConsoleTests
             });
 
             Events = new ShieldedDict<int, Shielded<Event>>(
-                initialEvents.Select(e => new KeyValuePair<int, Shielded<Event>>(e.Read.Id, e)));
+                initialEvents.Select(e => new KeyValuePair<int, Shielded<Event>>(e.Value.Id, e)));
         }
 
         /// <summary>
@@ -163,9 +163,9 @@ namespace ConsoleTests
                 {
                     var hash = GetOfferHash(t);
                     if (!checkTable.ContainsKey(hash))
-                        checkTable[hash] = t.Read.WinAmount;
+                        checkTable[hash] = t.Value.WinAmount;
                     else
-                        checkTable[hash] = checkTable[hash] + t.Read.WinAmount;
+                        checkTable[hash] = checkTable[hash] + t.Value.WinAmount;
                     if (checkTable[hash] > SameTicketWinLimit)
                         return false;
                     count++;

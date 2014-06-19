@@ -17,7 +17,7 @@ namespace ShieldedTests
 
             int preCommitFails = 0;
             // we will not allow any odd number to be committed into x.
-            Shield.PreCommit(() => (x.Read & 1) == 1, () => {
+            Shield.PreCommit(() => (x.Value & 1) == 1, () => {
                 Interlocked.Increment(ref preCommitFails);
                 throw new InvalidOperationException();
             });
@@ -33,7 +33,7 @@ namespace ShieldedTests
                             Interlocked.Increment(ref transactionCount);
                             int a = x;
                             Thread.Sleep(5);
-                            x.Assign(a + i);
+                            x.Value = a + i;
                         });
                     }
                     catch (InvalidOperationException) { }
@@ -92,7 +92,7 @@ namespace ShieldedTests
                     Interlocked.Increment(ref slowThread1Repeats);
                     int a = x;
                     Thread.Sleep(500);
-                    x.Assign(a - 1);
+                    x.Value = a - 1;
                 });
             });
             slowThread1.Start();
@@ -123,7 +123,7 @@ namespace ShieldedTests
             });
 
             // this will pass due to ownerThreadId == -1
-            Shield.InTransaction(() => x.Assign(0));
+            Shield.InTransaction(() => x.Value = 0);
 
             int slowThread2Repeats = 0;
             var slowThread2 = new Thread(() => {
@@ -134,7 +134,7 @@ namespace ShieldedTests
                         Interlocked.Increment(ref slowThread2Repeats);
                         int a = x;
                         Thread.Sleep(500);
-                        x.Assign(a - 1);
+                        x.Value = a - 1;
                     });
                 }
                 finally

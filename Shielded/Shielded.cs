@@ -34,8 +34,15 @@ namespace Shielded
             _current.Value = initial;
         }
 
+        /// <summary>
+        /// Enlists the field in the current transaction and, if this is the first
+        /// access, checks the write lock. Will spin-wait (or Monitor.Wait if SERVER
+        /// is defined) if the write stamp >= <see cref="Shield.ReadStamp"/>, until
+        /// write lock is released.
+        /// </summary>
         private void CheckLockAndEnlist()
         {
+            // if already enlisted, no need to check lock.
             if (!Shield.Enlist(this, _locals.HasValue))
                 return;
 
@@ -90,10 +97,10 @@ namespace Shielded
         }
 
         /// <summary>
-        /// If T is a value type, this returns a copy every time it's called!
-        /// Works out of transaction also.
+        /// Reads or writes into the content of the field. Reading can be
+        /// done out of transaction, but writes must be inside.
         /// </summary>
-        public T Read
+        public T Value
         {
             get
             {
@@ -107,24 +114,23 @@ namespace Shielded
                     throw new TransException("Writable read collision.");
                 return _locals.Value.Value;
             }
+            set
+            {
+                PrepareForWriting(false);
+                _locals.Value.Value = value;
+                Changed.Raise(this, EventArgs.Empty);
+            }
         }
 
         public delegate void ModificationDelegate(ref T value);
 
+        /// <summary>
+        /// Modifies the content of the field, i.e. read and write operation.
+        /// </summary>
         public void Modify(ModificationDelegate d)
         {
             PrepareForWriting(true);
             d(ref _locals.Value.Value);
-            Changed.Raise(this, EventArgs.Empty);
-        }
-
-        /// <summary>
-        /// Writes the value into the Shielded. Not commutable, for performance reasons.
-        /// </summary>
-        public void Assign(T value)
-        {
-            PrepareForWriting(false);
-            _locals.Value.Value = value;
             Changed.Raise(this, EventArgs.Empty);
         }
 
@@ -164,7 +170,7 @@ namespace Shielded
 
         public static implicit operator T(Shielded<T> obj)
         {
-            return obj.Read;
+            return obj.Value;
         }
 
         int IShielded.PseudoHash

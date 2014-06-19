@@ -74,7 +74,7 @@ namespace ShieldedTests
                             Interlocked.Increment(ref transactionCount);
                             int a = x;
                             Thread.Sleep(5);
-                            x.Assign(a + i);
+                            x.Value = a + i;
                             if (i == 100)
                                 throw new InvalidOperationException();
                         });
@@ -433,7 +433,7 @@ namespace ShieldedTests
                 b.Commute((ref int n) => n = a);
                 try
                 {
-                    var x = b.Read;
+                    var x = b.Value;
                     Assert.Fail();
                 }
                 catch (InvalidOperationException) {}

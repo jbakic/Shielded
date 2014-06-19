@@ -25,7 +25,7 @@ namespace Shielded
             public void ClearNext()
             {
                 // this somehow fixes the leak in Queue test... cannot explain it.
-                Next.Assign(null);
+                Next.Value = null;
             }
         }
 
@@ -69,7 +69,7 @@ namespace Shielded
         {
             get
             {
-                return _head.Read != null;
+                return _head.Value != null;
             }
         }
 
@@ -79,9 +79,9 @@ namespace Shielded
             {
                 Value = val
             };
-            if (_head.Read == null)
-                _tail.Assign(keeper);
-            _head.Assign(keeper);
+            if (_head.Value == null)
+                _tail.Value = keeper;
+            _head.Value = keeper;
             _count.Commute((ref int c) => c++);
         }
 
@@ -90,7 +90,7 @@ namespace Shielded
             get
             {
                 // single read => safe out of transaction.
-                var h = _head.Read;
+                var h = _head.Value;
                 if (h == null) throw new InvalidOperationException();
                 return h.Value;
             }
@@ -98,13 +98,13 @@ namespace Shielded
 
         public T TakeHead()
         {
-            var item = _head.Read;
+            var item = _head.Value;
             if (item == null)
                 throw new InvalidOperationException();
             Skip(_head);
             // NB we don't read the tail if not needed!
-            if (_head.Read == null)
-                _tail.Assign(null);
+            if (_head.Value == null)
+                _tail.Value = null;
             _count.Commute((ref int c) => c--);
             return item.Value;
         }
@@ -120,15 +120,15 @@ namespace Shielded
                 Value = val
             };
             Shield.EnlistCommute(() => {
-                if (_head.Read == null)
+                if (_head.Value == null)
                 {
-                    _head.Assign(newItem);
-                    _tail.Assign(newItem);
+                    _head.Value = newItem;
+                    _tail.Value = newItem;
                 }
                 else
                 {
                     _tail.Modify((ref ItemKeeper t) => {
-                        t.Next.Assign(newItem);
+                        t.Next.Value = newItem;
                         t = newItem;
                     });
                 }
@@ -143,7 +143,7 @@ namespace Shielded
                     throw new IndexOutOfRangeException();
                 var curr = _head;
                 for (; index > 0; index--)
-                    curr = curr.Read.Next;
+                    curr = curr.Value.Next;
                 return curr;
             });
         }
@@ -152,7 +152,7 @@ namespace Shielded
         {
             get
             {
-                return RefToIndex(index).Read.Value;
+                return RefToIndex(index).Value.Value;
             }
             set
             {
@@ -160,12 +160,12 @@ namespace Shielded
                 // to make this op transactional, we must create a new ItemKeeper and
                 // insert him in the list.
                 var refInd = RefToIndex(index);
-                var newItem = new ItemKeeper(refInd.Read.Next)
+                var newItem = new ItemKeeper(refInd.Value.Next)
                 {
                     Value = value
                 };
-                if (_tail.Read == refInd.Read)
-                    _tail.Assign(newItem);
+                if (_tail.Value == refInd.Value)
+                    _tail.Value = newItem;
                 refInd.Modify((ref ItemKeeper r) => {
                     r.ClearNext();
                     r = newItem;
@@ -196,16 +196,16 @@ namespace Shielded
             var curr = _head;
             ItemKeeper previous = null;
             int removed = 0;
-            while (curr.Read != null)
+            while (curr.Value != null)
             {
-                if (condition(curr.Read.Value))
+                if (condition(curr.Value.Value))
                 {
                     removed++;
-                    if (_tail.Read == curr.Read)
+                    if (_tail.Value == curr.Value)
                     {
-                        _tail.Assign(previous);
+                        _tail.Value = previous;
                         if (curr == _head)
-                            _head.Assign(null);
+                            _head.Value = null;
                         break;
                     }
                     Skip(curr);
@@ -213,7 +213,7 @@ namespace Shielded
                 else
                 {
                     previous = curr;
-                    curr = curr.Read.Next;
+                    curr = curr.Value.Next;
                 }
             }
             if (removed > 0)
@@ -222,9 +222,9 @@ namespace Shielded
 
         public void Clear()
         {
-            _head.Assign(null);
-            _tail.Assign(null);
-            _count.Assign(0);
+            _head.Value = null;
+            _tail.Value = null;
+            _count.Value = 0;
         }
 
         public void RemoveAt(int index)
@@ -232,19 +232,19 @@ namespace Shielded
             Shield.AssertInTransaction();
             if (index == 0)
             {
-                if (_head.Read == null)
+                if (_head.Value == null)
                     throw new IndexOutOfRangeException();
                 Skip(_head);
-                if (_head.Read == null)
-                    _tail.Assign(null);
+                if (_head.Value == null)
+                    _tail.Value = null;
             }
             else
             {
                 // slightly more tricky, in case we need to change _tail
-                var r = RefToIndex(index - 1).Read;
+                var r = RefToIndex(index - 1).Value;
                 Skip(r.Next);
-                if (r.Next.Read == null)
-                    _tail.Assign(r);
+                if (r.Next.Value == null)
+                    _tail.Value = r;
             }
             _count.Commute((ref int c) => c--);
         }
@@ -256,20 +256,20 @@ namespace Shielded
 
             var curr = _head;
             ItemKeeper previous = null;
-            while (curr.Read != null)
+            while (curr.Value != null)
             {
-                if (comp.Equals(item, curr.Read.Value))
+                if (comp.Equals(item, curr.Value.Value))
                 {
                     _count.Commute((ref int c) => c--);
-                    if (_tail.Read == curr.Read)
-                        _tail.Assign(previous);
+                    if (_tail.Value == curr.Value)
+                        _tail.Value = previous;
                     Skip(curr);
                     return true;
                 }
                 else
                 {
                     previous = curr;
-                    curr = curr.Read.Next;
+                    curr = curr.Value.Next;
                 }
             }
             return false;
@@ -282,12 +282,12 @@ namespace Shielded
             return Shield.InTransaction(() => {
                 var curr = _head;
                 int i = 0;
-                while (curr.Read != null && !comp.Equals(curr.Read.Value, item))
+                while (curr.Value != null && !comp.Equals(curr.Value.Value, item))
                 {
                     i++;
-                    curr = curr.Read.Next;
+                    curr = curr.Value.Next;
                 }
-                return curr.Read == null ? -1 : i;
+                return curr.Value == null ? -1 : i;
             });
         }
 
@@ -295,10 +295,10 @@ namespace Shielded
         {
             Shield.AssertInTransaction();
             var curr = _head;
-            while (curr.Read != null)
+            while (curr.Value != null)
             {
-                yield return curr.Read.Value;
-                curr = curr.Read.Next;
+                yield return curr.Value.Value;
+                curr = curr.Value.Next;
             }
         }
 

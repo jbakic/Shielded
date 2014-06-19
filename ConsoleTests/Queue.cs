@@ -64,7 +64,7 @@ namespace ConsoleTests
 
             var maxQueueCount = new Shielded<int>();
             Shield.Conditional(() => _queue.Count > maxQueueCount, () => {
-                maxQueueCount.Assign(_queue.Count);
+                maxQueueCount.Value = _queue.Count;
             });
 
             // create ItemCount items and push them in the queue.
@@ -83,7 +83,7 @@ namespace ConsoleTests
             Console.WriteLine("..all items added, waiting.");
             _barrier.SignalAndWait();
             var time = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine(" -- completed in {0} ms, with {1} max queue count.", time, maxQueueCount.Read);
+            Console.WriteLine(" -- completed in {0} ms, with {1} max queue count.", time, maxQueueCount.Value);
         }
 
         private void CountTracking()
@@ -97,7 +97,7 @@ namespace ConsoleTests
                 DateTime newNow = DateTime.UtcNow;
                 int count = _processed;
                 int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Assign(newNow);
+                lastTime.Value = newNow;
                 lastReport.Modify((ref int n) => n += reportEvery);
                 int sc = _subscribeCount;
                 int ptc = _processTestCount;

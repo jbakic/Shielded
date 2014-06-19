@@ -47,15 +47,15 @@ namespace Shielded
         private Shielded<Node> FindInternal(TKey key)
         {
             return Shield.InTransaction(() => {
-                var curr = _head.Read;
+                var curr = _head.Value;
                 int comparison;
                 while (curr != null &&
-                       (comparison = _comparer.Compare(curr.Read.Key, key)) != 0)
+                       (comparison = _comparer.Compare(curr.Value.Key, key)) != 0)
                 {
                     if (comparison > 0)
-                        curr = curr.Read.Left;
+                        curr = curr.Value.Left;
                     else
-                        curr = curr.Read.Right;
+                        curr = curr.Value.Right;
                 }
                 return curr;
             });
@@ -70,30 +70,30 @@ namespace Shielded
         {
             Shield.AssertInTransaction();
             Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
-            var curr = _head.Read;
+            var curr = _head.Value;
             while (curr != null)
             {
-                while (curr.Read.Left != null)
+                while (curr.Value.Left != null)
                 {
                     centerStack.Push(curr);
-                    curr = curr.Read.Left;
+                    curr = curr.Value.Left;
                 }
 
-                yield return new KeyValuePair<TKey, TValue>(curr.Read.Key, curr.Read.Value);
+                yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
 
-                while (curr.Read.Right == null && centerStack.Count > 0)
+                while (curr.Value.Right == null && centerStack.Count > 0)
                 {
                     curr = centerStack.Pop();
-                    yield return new KeyValuePair<TKey, TValue>(curr.Read.Key, curr.Read.Value);
+                    yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
                 }
-                curr = curr.Read.Right;
+                curr = curr.Value.Right;
             }
         }
 
         public IEnumerable<KeyValuePair<TKey, TValue>> Range(TKey from, TKey to)
         {
             foreach (var n in RangeInternal(from, to))
-                yield return new KeyValuePair<TKey, TValue>(n.Read.Key, n.Read.Value);
+                yield return new KeyValuePair<TKey, TValue>(n.Value.Key, n.Value.Value);
         }
 
         /// <summary>
@@ -105,32 +105,32 @@ namespace Shielded
                 yield break;
             Shield.AssertInTransaction();
             Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
-            var curr = _head.Read;
+            var curr = _head.Value;
             while (curr != null)
             {
-                while (curr.Read.Left != null &&
-                       _comparer.Compare(curr.Read.Key, from) >= 0)
+                while (curr.Value.Left != null &&
+                       _comparer.Compare(curr.Value.Key, from) >= 0)
                 {
                     centerStack.Push(curr);
-                    curr = curr.Read.Left;
+                    curr = curr.Value.Left;
                 }
 
-                if (_comparer.Compare(curr.Read.Key, to) > 0)
+                if (_comparer.Compare(curr.Value.Key, to) > 0)
                     yield break;
 
-                if (_comparer.Compare(curr.Read.Key, from) >= 0)
+                if (_comparer.Compare(curr.Value.Key, from) >= 0)
                     yield return curr;
 
-                while (curr.Read.Right == null &&
+                while (curr.Value.Right == null &&
                        centerStack.Count > 0)
                 {
                     curr = centerStack.Pop();
-                    if (_comparer.Compare(curr.Read.Key, to) <= 0)
+                    if (_comparer.Compare(curr.Value.Key, to) <= 0)
                         yield return curr;
                     else
                         yield break;
                 }
-                curr = curr.Read.Right;
+                curr = curr.Value.Right;
             }
         }
 
@@ -138,15 +138,15 @@ namespace Shielded
         {
             Shield.AssertInTransaction();
             Shielded<Node> parent = null;
-            var targetLoc = _head.Read;
+            var targetLoc = _head.Value;
             int comparison = 0;
             while (targetLoc != null)
             {
                 parent = targetLoc;
-                if ((comparison = _comparer.Compare(targetLoc.Read.Key, key)) > 0)
-                    targetLoc = targetLoc.Read.Left;
+                if ((comparison = _comparer.Compare(targetLoc.Value.Key, key)) > 0)
+                    targetLoc = targetLoc.Value.Left;
                 else
-                    targetLoc = targetLoc.Read.Right;
+                    targetLoc = targetLoc.Value.Right;
             }
             var shN = new Shielded<Node>(new Node()
             {
@@ -163,7 +163,7 @@ namespace Shielded
                     parent.Modify((ref Node p) => p.Right = shN);
             }
             else
-                _head.Assign(shN);
+                _head.Value = shN;
             InsertProcedure(shN);
             _count.Commute((ref int c) => c++);
         }
@@ -172,8 +172,8 @@ namespace Shielded
 
         private Shielded<Node> Grandparent(Shielded<Node> n)
         {
-            if (n != null && n.Read.Parent != null)
-                return n.Read.Parent.Read.Parent;
+            if (n != null && n.Value.Parent != null)
+                return n.Value.Parent.Value.Parent;
             else
                 return null;
         }
@@ -183,10 +183,10 @@ namespace Shielded
             Shielded<Node> g = Grandparent(n);
             if (g == null)
                 return null;
-            if (n.Read.Parent == g.Read.Left)
-                return g.Read.Right;
+            if (n.Value.Parent == g.Value.Left)
+                return g.Value.Right;
             else
-                return g.Read.Left;
+                return g.Value.Left;
         }
 
         private void RotateLeft(Shielded<Node> p)
@@ -197,7 +197,7 @@ namespace Shielded
             {
                 right = pInner.Right;
                 parent = pInner.Parent;
-                pInner.Right = right.Read.Left;
+                pInner.Right = right.Value.Left;
                 pInner.Parent = right;
             });
             right.Modify((ref Node r) =>
@@ -216,7 +216,7 @@ namespace Shielded
                         n.Right = right;
                 });
             else
-                _head.Assign(right);
+                _head.Value = right;
         }
 
         private void RotateRight(Shielded<Node> p)
@@ -227,7 +227,7 @@ namespace Shielded
             {
                 left = pInner.Left;
                 parent = pInner.Parent;
-                pInner.Left = left.Read.Right;
+                pInner.Left = left.Value.Right;
                 pInner.Parent = left;
             });
             left.Modify((ref Node l) =>
@@ -246,24 +246,24 @@ namespace Shielded
                         n.Right = left;
                 });
             else
-                _head.Assign(left);
+                _head.Value = left;
         }
 
         private void InsertProcedure(Shielded<Node> n)
         {
             while (true)
             {
-                if (n.Read.Parent == null)
+                if (n.Value.Parent == null)
                     n.Modify((ref Node nInn) => nInn.Color = Color.Black);
-                else if (n.Read.Parent.Read.Color == Color.Black)
+                else if (n.Value.Parent.Value.Color == Color.Black)
                     return;
                 else
                 {
                     Shielded<Node> u = Uncle(n);
                     Shielded<Node> g = Grandparent(n);
-                    if (u != null && u.Read.Color == Color.Red)
+                    if (u != null && u.Value.Color == Color.Red)
                     {
-                        n.Read.Parent.Modify((ref Node p) => p.Color = Color.Black);
+                        n.Value.Parent.Modify((ref Node p) => p.Color = Color.Black);
                         u.Modify((ref Node uInn) => uInn.Color = Color.Black);
                         g.Modify((ref Node gInn) => gInn.Color = Color.Red);
                         n = g;
@@ -271,20 +271,20 @@ namespace Shielded
                     }
                     else
                     {
-                        if (n == n.Read.Parent.Read.Right && n.Read.Parent == g.Read.Left)
+                        if (n == n.Value.Parent.Value.Right && n.Value.Parent == g.Value.Left)
                         {
-                            RotateLeft(n.Read.Parent);
-                            n = n.Read.Left;
+                            RotateLeft(n.Value.Parent);
+                            n = n.Value.Left;
                         }
-                        else if (n == n.Read.Parent.Read.Left && n.Read.Parent == g.Read.Right)
+                        else if (n == n.Value.Parent.Value.Left && n.Value.Parent == g.Value.Right)
                         {
-                            RotateRight(n.Read.Parent);
-                            n = n.Read.Right;
+                            RotateRight(n.Value.Parent);
+                            n = n.Value.Right;
                         }
 
-                        n.Read.Parent.Modify((ref Node p) => p.Color = Color.Black);
+                        n.Value.Parent.Modify((ref Node p) => p.Color = Color.Black);
                         g.Modify((ref Node gInn) => gInn.Color = Color.Red);
-                        if (n == n.Read.Parent.Read.Left)
+                        if (n == n.Value.Parent.Value.Left)
                             RotateRight(g);
                         else
                             RotateLeft(g);
@@ -304,7 +304,7 @@ namespace Shielded
             var node = RangeInternal(key, key).FirstOrDefault();
             if (node != null)
             {
-                val = node.Read.Value;
+                val = node.Value.Value;
                 RemoveInternal(node);
                 return true;
             }
@@ -320,18 +320,18 @@ namespace Shielded
             Shield.AssertInTransaction();
             // find the first follower in the right subtree (arbitrary choice..)
             Shielded<Node> follower;
-            if (node.Read.Right == null)
+            if (node.Value.Right == null)
                 follower = node;
             else
             {
-                follower = node.Read.Right;
-                while (follower.Read.Left != null)
-                    follower = follower.Read.Left;
+                follower = node.Value.Right;
+                while (follower.Value.Left != null)
+                    follower = follower.Value.Left;
 
                 // loosing the node value right now!
                 node.Modify((ref Node n) =>
                 {
-                    var f = follower.Read;
+                    var f = follower.Value;
                     n.Key = f.Key;
                     n.Value = f.Value;
                 });
@@ -344,7 +344,7 @@ namespace Shielded
 
         Shielded<Node> Sibling(Shielded<Node> n)
         {
-            var parent = n.Read.Parent.Read;
+            var parent = n.Value.Parent.Value;
             if (n == parent.Left)
                 return parent.Right;
             else
@@ -353,11 +353,11 @@ namespace Shielded
 
         void ReplaceNode(Shielded<Node> target, Shielded<Node> source)
         {
-            var targetParent = target.Read.Parent;
+            var targetParent = target.Value.Parent;
             if (source != null)
                 source.Modify((ref Node s) => s.Parent = targetParent);
             if (targetParent == null)
-                _head.Assign(source);
+                _head.Value = source;
             else
                 targetParent.Modify((ref Node p) =>
                 {
@@ -372,7 +372,7 @@ namespace Shielded
         void DeleteOneChild(Shielded<Node> node)
         {
             // node has at most one child!
-            Shielded<Node> child = node.Read.Right == null ? node.Read.Left : node.Read.Right;
+            Shielded<Node> child = node.Value.Right == null ? node.Value.Left : node.Value.Right;
             bool deleted = false;
 
             if (child != null)
@@ -380,9 +380,9 @@ namespace Shielded
                 ReplaceNode(node, child);
                 deleted = true;
             }
-            if (node.Read.Color == Color.Black)
+            if (node.Value.Color == Color.Black)
             {
-                if (child != null && child.Read.Color == Color.Red)
+                if (child != null && child.Value.Color == Color.Red)
                     child.Modify((ref Node c) => c.Color = Color.Black);
                 else
                 {
@@ -394,52 +394,52 @@ namespace Shielded
                     while (true)
                     {
                         // delete case 1
-                        if (child.Read.Parent != null)
+                        if (child.Value.Parent != null)
                         {
                             // delete case 2
                             Shielded<Node> s = Sibling(child);
          
-                            if (s.Read.Color == Color.Red)
+                            if (s.Value.Color == Color.Red)
                             {
-                                child.Read.Parent.Modify((ref Node p) => p.Color = Color.Red);
+                                child.Value.Parent.Modify((ref Node p) => p.Color = Color.Red);
                                 s.Modify((ref Node sInn) => sInn.Color = Color.Black);
-                                if (child == child.Read.Parent.Read.Left)
-                                    RotateLeft(child.Read.Parent);
+                                if (child == child.Value.Parent.Value.Left)
+                                    RotateLeft(child.Value.Parent);
                                 else
-                                    RotateRight(child.Read.Parent);
+                                    RotateRight(child.Value.Parent);
 
                                 s = Sibling(child);
                             }
 
                             // delete case 3
-                            if ((child.Read.Parent.Read.Color == Color.Black) &&
-                                (s.Read.Color == Color.Black) &&
-                                (s.Read.Left == null || s.Read.Left.Read.Color == Color.Black) &&
-                                (s.Read.Right == null || s.Read.Right.Read.Color == Color.Black))
+                            if ((child.Value.Parent.Value.Color == Color.Black) &&
+                                (s.Value.Color == Color.Black) &&
+                                (s.Value.Left == null || s.Value.Left.Value.Color == Color.Black) &&
+                                (s.Value.Right == null || s.Value.Right.Value.Color == Color.Black))
                             {
                                 s.Modify((ref Node sInn) => sInn.Color = Color.Red);
-                                child = child.Read.Parent;
+                                child = child.Value.Parent;
                                 continue; // back to 1
                             }
                             else
                             {
                                 // delete case 4
-                                if ((child.Read.Parent.Read.Color == Color.Red) &&
-                                    (s.Read.Color == Color.Black) &&
-                                    (s.Read.Left == null || s.Read.Left.Read.Color == Color.Black) &&
-                                    (s.Read.Right == null || s.Read.Right.Read.Color == Color.Black))
+                                if ((child.Value.Parent.Value.Color == Color.Red) &&
+                                    (s.Value.Color == Color.Black) &&
+                                    (s.Value.Left == null || s.Value.Left.Value.Color == Color.Black) &&
+                                    (s.Value.Right == null || s.Value.Right.Value.Color == Color.Black))
                                 {
                                     s.Modify((ref Node sInn) => sInn.Color = Color.Red);
-                                    child.Read.Parent.Modify((ref Node p) => p.Color = Color.Black);
+                                    child.Value.Parent.Modify((ref Node p) => p.Color = Color.Black);
                                 }
                                 else
                                 {
                                     // delete case 5
-                                    if (s.Read.Color == Color.Black)
+                                    if (s.Value.Color == Color.Black)
                                     {
-                                        if ((child == child.Read.Parent.Read.Left) &&
-                                            (s.Read.Right == null || s.Read.Right.Read.Color == Color.Black) &&
-                                            (s.Read.Left != null && s.Read.Left.Read.Color == Color.Red))
+                                        if ((child == child.Value.Parent.Value.Left) &&
+                                            (s.Value.Right == null || s.Value.Right.Value.Color == Color.Black) &&
+                                            (s.Value.Left != null && s.Value.Left.Value.Color == Color.Red))
                                         {
                                             s.Modify((ref Node sInn) =>
                                             {
@@ -449,9 +449,9 @@ namespace Shielded
                                             RotateRight(s);
                                             s = Sibling(child);
                                         }
-                                        else if ((child == child.Read.Parent.Read.Right) &&
-                                            (s.Read.Left == null || s.Read.Left.Read.Color == Color.Black) &&
-                                            (s.Read.Right != null && s.Read.Right.Read.Color == Color.Red))
+                                        else if ((child == child.Value.Parent.Value.Right) &&
+                                            (s.Value.Left == null || s.Value.Left.Value.Color == Color.Black) &&
+                                            (s.Value.Right != null && s.Value.Right.Value.Color == Color.Red))
                                         {
                                             s.Modify((ref Node sInn) =>
                                             {
@@ -464,22 +464,22 @@ namespace Shielded
                                     }
 
                                     // delete case 6
-                                    child.Read.Parent.Modify((ref Node p) =>
+                                    child.Value.Parent.Modify((ref Node p) =>
                                     {
                                         var c = p.Color;
                                         s.Modify((ref Node sInn) => sInn.Color = c);
                                         p.Color = Color.Black;
                                     });
      
-                                    if (child == child.Read.Parent.Read.Left)
+                                    if (child == child.Value.Parent.Value.Left)
                                     {
-                                        s.Read.Right.Modify((ref Node r) => r.Color = Color.Black);
-                                        RotateLeft(child.Read.Parent);
+                                        s.Value.Right.Modify((ref Node r) => r.Color = Color.Black);
+                                        RotateLeft(child.Value.Parent);
                                     }
                                     else
                                     {
-                                        s.Read.Left.Modify((ref Node l) => l.Color = Color.Black);
-                                        RotateRight(child.Read.Parent);
+                                        s.Value.Left.Modify((ref Node l) => l.Color = Color.Black);
+                                        RotateRight(child.Value.Parent);
                                     }
                                 }
                             }
@@ -491,15 +491,15 @@ namespace Shielded
             if (!deleted)
             {
                 // original node is still in the tree, and it still has no children.
-                if (node.Read.Parent != null)
-                    node.Read.Parent.Modify((ref Node p) => {
+                if (node.Value.Parent != null)
+                    node.Value.Parent.Modify((ref Node p) => {
                         if (p.Left == node)
                             p.Left = null;
                         else
                             p.Right = null;
                     });
                 else
-                    _head.Assign(null);
+                    _head.Value = null;
                 ClearLinks(node);
             }
         }
@@ -516,14 +516,14 @@ namespace Shielded
         public void Clear()
         {
             // ridiculously simple :)
-            _head.Assign(null);
-            _count.Assign(0);
+            _head.Value = null;
+            _count.Value = 0;
         }
 
         public bool Contains(KeyValuePair<TKey, TValue> item)
         {
             return Shield.InTransaction(() =>
-                RangeInternal(item.Key, item.Key).Any(n => n.Read.Value == item.Value));
+                RangeInternal(item.Key, item.Key).Any(n => n.Value.Value == item.Value));
         }
 
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
@@ -538,7 +538,7 @@ namespace Shielded
 
         public bool Remove(KeyValuePair<TKey, TValue> item)
         {
-            var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n => n.Read.Value == item.Value);
+            var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n => n.Value.Value == item.Value);
             if (target == null)
                 return false;
             RemoveInternal(target);
@@ -591,7 +591,7 @@ namespace Shielded
             value = Shield.InTransaction(() => {
                 var n = FindInternal(key);
                 res = n != null;
-                return res ? n.Read.Value : null;
+                return res ? n.Value.Value : null;
             });
             return res;
         }
@@ -608,7 +608,7 @@ namespace Shielded
                     var n = FindInternal(key);
                     if (n == null)
                         throw new KeyNotFoundException();
-                    return n.Read.Value;
+                    return n.Value.Value;
                 });
             }
             set
@@ -618,7 +618,7 @@ namespace Shielded
                 var n = FindInternal(key);
                 if (n == null)
                     Add(key, value);
-                else if (n.Read.Value != value)
+                else if (n.Value.Value != value)
                     n.Modify((ref Node nInner) => nInner.Value = value);
             }
         }

@@ -80,7 +80,12 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Multi-set containing read stamps of all open transactions. Used to determine
+        /// smallest open stamp when trimming old copies.
+        /// </summary>
         private static VersionList _transactions = new VersionList();
+
         [ThreadStatic]
         private static TransItems _localItems;
         [ThreadStatic]
@@ -113,9 +118,16 @@ namespace Shielded
             return false;
         }
 
+        /// <summary>
+        /// When an item is enlisted for which we have defined commutes, it causes those
+        /// commutes to be executed immediately. This happens before the field is read or
+        /// written into. The algorithm here allows for one commute to trigger others,
+        /// guaranteeing that they will all execute in correct order provided that each
+        /// commute correctly defined the fields which, if accessed, must cause it to
+        /// degenerate.
+        /// </summary>
         private static void CheckCommutes(IShielded item)
         {
-            // does a commute have to degenerate?
             if (_localItems.Commutes == null || _localItems.Commutes.Count == 0)
                 return;
 
@@ -165,7 +177,7 @@ namespace Shielded
         private static bool _blockCommute;
 
         /// <summary>
-        /// The strict version of EnlistCommute(), which will monitor that the code in
+        /// The strict version of EnlistCommute, which will monitor that the code in
         /// perform does not enlist anything except the one item, affecting.
         /// </summary>
         internal static void EnlistStrictCommute(Action perform, ICommutableShielded affecting)
@@ -251,6 +263,7 @@ namespace Shielded
         /// Enlists a side-effect - an operation to be performed only if the transaction
         /// commits. Optionally receives an action to perform in case of a rollback.
         /// If the transaction is rolled back, all enlisted side-effects are (also) cleared.
+        /// Should be used to perform all IO and such operations (except maybe logging).
         /// 
         /// If this is called out of transaction, the fx action (if one was provided)
         /// will be directly executed. This preserves correct behavior if the call finds
@@ -320,12 +333,7 @@ namespace Shielded
 
         /// <summary>
         /// Rolls the transaction back and retries it from the beginning. If you don't
-        /// want the transaction to repeat, you will have to throw and catch an exception
-        /// yourself. There was a Rollback version which supported silently failing a
-        /// transaction, but this destroys composability - what if you fail a transaction
-        /// that does not expect this? How would it even know that the values it extracted
-        /// from a transaction run are actually invalid? If you throw your own exception,
-        /// then the outer transaction and it's caller will certainly know something is up.
+        /// want the transaction to repeat, throw and catch an exception yourself.
         /// </summary>
         public static void Rollback()
         {
@@ -336,8 +344,9 @@ namespace Shielded
         /// <summary>
         /// Runs the action, and returns a set of IShieldeds that the action enlisted.
         /// It will make sure to restore original enlisted items, merged with the ones
-        /// that the action enlisted, before returning. The isolated action may still
-        /// cause outer transaction's commutes to degenerate.
+        /// that the action enlisted, before returning. This is important to make sure
+        /// all thread-local state is cleared on transaction exit. The isolated action
+        /// may still cause outer transaction's commutes to degenerate.
         /// </summary>
         internal static ISet<IShielded> IsolatedRun(Action act)
         {
@@ -382,6 +391,8 @@ namespace Shielded
         }
 
         /// <summary>
+        /// Executes the commutes, returning through the out param the set of items that the
+        /// commutes had accessed.
         /// Increases the current start stamp, and leaves the commuted items unmerged with the
         /// main transaction items!
         /// </summary>
@@ -587,7 +598,8 @@ repeatCommutes: if (brokeInCommutes)
 
 
 
-        // the long is their current version, but being in this list indicates they have something older.
+        // the long is their current version (at the time the copies were registered), but being
+        // in this list indicates they have something older.
         private static ConcurrentQueue<Tuple<long, IEnumerable<IShielded>>> _copiesByVersion =
             new ConcurrentQueue<Tuple<long, IEnumerable<IShielded>>>();
 

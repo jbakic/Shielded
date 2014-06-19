@@ -18,8 +18,7 @@ namespace Shielded.ProxyGen
     {
         static ConcurrentDictionary<Type, Type> proxies = new ConcurrentDictionary<Type, Type>();
         private const string ShieldedFieldName = "_data";
-        private const string ShieldedReadProperty = "Read";
-        private const string ShieldedAssignMethod = "Assign";
+        private const string ShieldedValueProperty = "Value";
 
         public static Type GetFor(Type t)
         {
@@ -152,7 +151,7 @@ namespace Shielded.ProxyGen
                         TargetObject = new CodeThisReferenceExpression(),
                         FieldName = ShieldedFieldName,
                     },
-                    PropertyName = ShieldedReadProperty,
+                    PropertyName = ShieldedValueProperty,
                 },
                 FieldName = pi.Name,
             }));
@@ -168,7 +167,7 @@ namespace Shielded.ProxyGen
                         TargetObject = new CodeThisReferenceExpression(),
                         FieldName = ShieldedFieldName,
                     },
-                    PropertyName = ShieldedReadProperty,
+                    PropertyName = ShieldedValueProperty,
                 },
             });
             mp.SetStatements.Add(new CodeAssignStatement(
@@ -178,17 +177,16 @@ namespace Shielded.ProxyGen
                 },
                 new CodePropertySetValueReferenceExpression()
             ));
-            var assignCall = new CodeMethodInvokeExpression() {
-                Method = new CodeMethodReferenceExpression() {
+            var assignment = new CodeAssignStatement(
+                 new CodePropertyReferenceExpression() {
                     TargetObject = new CodeFieldReferenceExpression() {
                         FieldName = ShieldedFieldName,
                         TargetObject = new CodeThisReferenceExpression(),
                     },
-                    MethodName = ShieldedAssignMethod,
+                    PropertyName = ShieldedValueProperty,
                 },
-            };
-            assignCall.Parameters.Add(new CodeVariableReferenceExpression("a"));
-            mp.SetStatements.Add(assignCall);
+                new CodeVariableReferenceExpression("a"));
+            mp.SetStatements.Add(assignment);
 
             return mp;
         }

@@ -303,7 +303,7 @@ namespace Shielded
         {
             Shield.AssertInTransaction();
             // force conflict if _count changes. even if it changes back to same value!
-            var c = _count.Read;
+            var c = _count.Value;
             var locals = _localDict.HasValue ? _localDict.Value.Items : null;
             var keys = locals != null ? _dict.Keys.Except(locals.Keys) : _dict.Keys;
             foreach (var key in keys)
