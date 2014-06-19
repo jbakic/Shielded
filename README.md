@@ -27,8 +27,8 @@ array. Here, in a dictionary:
 ```csharp
 var dict = new ShieldedDict<int, int>();
 ParallelEnumerable.Range(0, 100000)
-    .ForAll(i => Shield.InTransaction(
-        () => dict[i % 100] = dict.ContainsKey(i % 100) ? dict[i % 100] + 1 : 1));
+    .ForAll(i => Shield.InTransaction(() =>
+        dict[i % 100] = dict.ContainsKey(i % 100) ? dict[i % 100] + 1 : 1));
 ```
 
 If you have a class you want to make transactional:
