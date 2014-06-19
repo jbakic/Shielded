@@ -4,55 +4,56 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using Shielded;
+using Shielded.ProxyGen;
 
 namespace ConsoleTests
 {
-    public struct Event
+    public class Event
     {
-        public int Id;
-        public string HomeTeam;
-        public string AwayTeam;
-        public ShieldedSeq<Shielded<BetOffer>> BetOffers;
+        public virtual int Id { get; set; }
+        public virtual string HomeTeam { get; set; }
+        public virtual string AwayTeam { get; set; }
+        public readonly IList<BetOffer> BetOffers =
+            new ShieldedSeq<BetOffer>();
     }
 
-    public struct BetOffer
+    public class BetOffer
     {
-        public int Id;
-        public Shielded<Event> Event;
-        public string Pick;
-        public decimal Odds;
+        public virtual int Id { get; set; }
+        public virtual Event Event { get; set; }
+        public virtual string Pick { get; set; }
+        public virtual decimal Odds { get; set; }
     }
 
-    public struct Ticket
+    public class Ticket
     {
-        public int Id;
-        public decimal PayInAmount;
-        public decimal WinAmount;
-        // readonly
-        public Bet[] Bets;
+        public virtual int Id { get; set; }
+        public virtual decimal PayInAmount { get; set; }
+        public virtual decimal WinAmount { get; set; }
+        public virtual Bet[] Bets { get; set; }
     }
 
-    public struct Bet
+    public class Bet
     {
-        public Shielded<BetOffer> Offer;
-        public decimal Odds;
+        public virtual BetOffer Offer { get; set; }
+        public virtual decimal Odds { get; set; }
     }
 
     public class BetShop
     {
-        public readonly ShieldedDict<int, Shielded<Event>> Events;
+        public readonly ShieldedDict<int, Event> Events;
 
         private int _ticketIdGenerator = 0;
-        public readonly ShieldedDict<int, Shielded<Ticket>> Tickets =
-            new ShieldedDict<int, Shielded<Ticket>>();
+        public readonly ShieldedDict<int, Ticket> Tickets =
+            new ShieldedDict<int, Ticket>();
         private ShieldedDict<string, decimal> _sameTicketWins =
             new ShieldedDict<string, decimal>();
 
         public decimal SameTicketWinLimit = 1000m;
 
-        static string GetOfferHash(Shielded<Ticket> newTicket)
+        static string GetOfferHash(Ticket newTicket)
         {
-            return newTicket.Value.Bets.Select(b => b.Offer.Value.Id)
+            return newTicket.Bets.Select(b => b.Offer.Id)
                 .OrderBy(id => id)
                 .Aggregate(new StringBuilder(), (sb, next) => 
                 {
@@ -63,37 +64,33 @@ namespace ConsoleTests
                 }, sb => sb.ToString());
         }
 
-        public int? BuyTicket(decimal payIn, params Shielded<BetOffer>[] bets)
+        public Ticket BuyTicket(decimal payIn, params BetOffer[] bets)
         {
             var newId = Interlocked.Increment(ref _ticketIdGenerator);
-            var newTicket = new Shielded<Ticket>(new Ticket()
-            {
-                Id = newId,
-                PayInAmount = payIn
-            });
+            var newTicket = Factory.NewShielded<Ticket>();
             return Shield.InTransaction(() =>
             {
-                newTicket.Modify((ref Ticket t) =>
-                {
-                    t.Bets = bets.Select(shBo => new Bet()
-                        {
-                            Offer = shBo,
-                            Odds = shBo.Value.Odds
-                        }).ToArray();
-                    t.WinAmount = t.PayInAmount *
-                        t.Bets.Aggregate(1m, (curr, nextBet) => curr * nextBet.Odds);
-                });
+                newTicket.Id = newId;
+                newTicket.PayInAmount = payIn;
+                newTicket.Bets = bets.Select(shBo => {
+                    var bet = Factory.NewShielded<Bet>();
+                    bet.Offer = shBo;
+                    bet.Odds = shBo.Odds;
+                    return bet;
+                }).ToArray();
+                newTicket.WinAmount = newTicket.PayInAmount *
+                    newTicket.Bets.Aggregate(1m, (curr, nextBet) => curr * nextBet.Odds);
 
                 var hash = GetOfferHash(newTicket);
                 var totalWin = _sameTicketWins.ContainsKey(hash) ?
-                    _sameTicketWins[hash] + newTicket.Value.WinAmount : newTicket.Value.WinAmount;
+                    _sameTicketWins[hash] + newTicket.WinAmount : newTicket.WinAmount;
                 if (totalWin > SameTicketWinLimit)
-                    return false;
+                    return null;
 
                 Tickets[newId] = newTicket;
                 _sameTicketWins[hash] = totalWin;
-                return true;
-            }) ? (int?)newId : null;
+                return newTicket;
+            });
         }
 
         /// <summary>
@@ -102,7 +99,7 @@ namespace ConsoleTests
         /// </summary>
         public BetShop(int n)
         {
-            List<Shielded<Event>> initialEvents = new List<Shielded<Event>>();
+            List<Event> initialEvents = new List<Event>();
 
             Shield.InTransaction(() =>
             {
@@ -110,44 +107,37 @@ namespace ConsoleTests
                 int offerIdGenerator = 1;
                 for (int i = 0; i < n; i++)
                 {
-                    var newEvent = new Shielded<Event>(new Event()
-                    {
-                        Id = eventIdGenerator++,
-                        HomeTeam = "Home " + i,
-                        AwayTeam = "Away " + i
-                    });
-                    // we have to use Modify, because each offer needs a ref to the shielded
-                    // event, which we do not have before that shielded event is constructed. And,
-                    // after he is constructed, he can only be changed like this.
-                    newEvent.Modify((ref Event e) =>
-                        e.BetOffers = new ShieldedSeq<Shielded<BetOffer>>(
-                            new Shielded<BetOffer>(new BetOffer()
-                            {
-                                Id = offerIdGenerator++,
-                                Event = newEvent,
-                                Pick = "1",
-                                Odds = 2m
-                            }),
-                            new Shielded<BetOffer>(new BetOffer()
-                            {
-                                Id = offerIdGenerator++,
-                                Event = newEvent,
-                                Pick = "X",
-                                Odds = 4m
-                            }),
-                            new Shielded<BetOffer>(new BetOffer()
-                            {
-                                Id = offerIdGenerator++,
-                                Event = newEvent,
-                                Pick = "2",
-                                Odds = 4.5m
-                            })));
+                    var newEvent = Factory.NewShielded<Event>();
+                    newEvent.Id = eventIdGenerator++;
+                    newEvent.HomeTeam = "Home " + i;
+                    newEvent.AwayTeam = "Away " + i;
                     initialEvents.Add(newEvent);
+
+                    var no = Factory.NewShielded<BetOffer>();
+                    no.Id = offerIdGenerator++;
+                    no.Event = newEvent;
+                    no.Pick = "1";
+                    no.Odds = 2m;
+                    newEvent.BetOffers.Add(no);
+
+                    no = Factory.NewShielded<BetOffer>();
+                    no.Id = offerIdGenerator++;
+                    no.Event = newEvent;
+                    no.Pick = "X";
+                    no.Odds = 4m;
+                    newEvent.BetOffers.Add(no);
+
+                    no = Factory.NewShielded<BetOffer>();
+                    no.Id = offerIdGenerator++;
+                    no.Event = newEvent;
+                    no.Pick = "2";
+                    no.Odds = 4.5m;
+                    newEvent.BetOffers.Add(no);
                 }
             });
 
-            Events = new ShieldedDict<int, Shielded<Event>>(
-                initialEvents.Select(e => new KeyValuePair<int, Shielded<Event>>(e.Value.Id, e)));
+            Events = new ShieldedDict<int, Event>(
+                initialEvents.Select(e => new KeyValuePair<int, Event>(e.Id, e)));
         }
 
         /// <summary>
@@ -163,9 +153,9 @@ namespace ConsoleTests
                 {
                     var hash = GetOfferHash(t);
                     if (!checkTable.ContainsKey(hash))
-                        checkTable[hash] = t.Value.WinAmount;
+                        checkTable[hash] = t.WinAmount;
                     else
-                        checkTable[hash] = checkTable[hash] + t.Value.WinAmount;
+                        checkTable[hash] = checkTable[hash] + t.WinAmount;
                     if (checkTable[hash] > SameTicketWinLimit)
                         return false;
                     count++;

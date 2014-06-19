@@ -329,9 +329,9 @@ namespace ConsoleTests
                 int offer3Ind = randomizr.Next(3);
                 return Task.Factory.StartNew(() => Shield.InTransaction(() =>
                 {
-                    var offer1 = betShop.Events[event1Id].Value.BetOffers[offer1Ind];
-                    var offer2 = betShop.Events[event2Id].Value.BetOffers[offer2Ind];
-                    var offer3 = betShop.Events[event3Id].Value.BetOffers[offer3Ind];
+                    var offer1 = betShop.Events[event1Id].BetOffers[offer1Ind];
+                    var offer2 = betShop.Events[event2Id].BetOffers[offer2Ind];
+                    var offer3 = betShop.Events[event3Id].BetOffers[offer3Ind];
                     betShop.BuyTicket(payIn, offer1, offer2, offer3);
                 }));
             });
@@ -408,9 +408,9 @@ namespace ConsoleTests
                 int offer3Ind = randomizr.Next(3);
                 bags[i % numThreads].Add(() => Shield.InTransaction(() =>
                 {
-                    var offer1 = betShop.Events[event1Id].Value.BetOffers[offer1Ind];
-                    var offer2 = betShop.Events[event2Id].Value.BetOffers[offer2Ind];
-                    var offer3 = betShop.Events[event3Id].Value.BetOffers[offer3Ind];
+                    var offer1 = betShop.Events[event1Id].BetOffers[offer1Ind];
+                    var offer2 = betShop.Events[event2Id].BetOffers[offer2Ind];
+                    var offer3 = betShop.Events[event3Id].BetOffers[offer3Ind];
                     betShop.BuyTicket(payIn, offer1, offer2, offer3);
                     complete.Commute((ref int n) => n++);
                 }));
@@ -985,13 +985,13 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
             //BetShopPoolTest();
 
             //TreeTest();
 
-            TreePoolTest();
+            //TreePoolTest();
 
             //SimpleOps();
 

@@ -257,6 +257,31 @@ namespace ShieldedTests
             Assert.AreEqual(1, seq2[0]);
             Assert.AreEqual(2, seq2[1]);
         }
+
+        [Test]
+        public void InsertTest()
+        {
+            var seq = new ShieldedSeq<int>(2, 3, 4, 6, 7);
+
+            Shield.InTransaction(() => seq.Insert(0, 1));
+            Assert.AreEqual(6, seq.Count);
+            Assert.AreEqual(1, seq[0]);
+            Assert.AreEqual(2, seq[1]);
+
+            Shield.InTransaction(() => seq.Insert(4, 5));
+            Assert.AreEqual(7, seq.Count);
+            Assert.AreEqual(1, seq[0]);
+            Assert.AreEqual(2, seq[1]);
+            Assert.AreEqual(5, seq[4]);
+            Assert.AreEqual(6, seq[5]);
+
+            Shield.InTransaction(() => seq.Insert(7, 8));
+            Assert.AreEqual(8, seq.Count);
+            Shield.InTransaction(() => {
+                for (int i=0; i < seq.Count; i++)
+                    Assert.AreEqual(i + 1, seq[i]);
+            });
+        }
     }
 }
 

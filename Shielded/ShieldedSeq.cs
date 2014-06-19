@@ -10,7 +10,7 @@ namespace Shielded
     /// involves a search, O(n).
     /// Uses ShieldedRefs, so this class itself does not need to be shielded.
     /// </summary>
-    public class ShieldedSeq<T> : IEnumerable<T>
+    public class ShieldedSeq<T> : IList<T>
     {
         private class ItemKeeper
         {
@@ -156,7 +156,6 @@ namespace Shielded
             }
             set
             {
-                Shield.AssertInTransaction();
                 // to make this op transactional, we must create a new ItemKeeper and
                 // insert him in the list.
                 var refInd = RefToIndex(index);
@@ -229,7 +228,6 @@ namespace Shielded
 
         public void RemoveAt(int index)
         {
-            Shield.AssertInTransaction();
             if (index == 0)
             {
                 if (_head.Value == null)
@@ -291,6 +289,11 @@ namespace Shielded
             });
         }
 
+        public int IndexOf(T item)
+        {
+            return IndexOf(item, null);
+        }
+
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
         {
             Shield.AssertInTransaction();
@@ -305,6 +308,59 @@ namespace Shielded
         IEnumerator IEnumerable.GetEnumerator()
         {
             return ((IEnumerable<T>)this).GetEnumerator();
+        }
+
+        public void Add(T item)
+        {
+            Append(item);
+        }
+
+        public bool Contains(T item)
+        {
+            return IndexOf(item) >= 0;
+        }
+
+        public void CopyTo(T[] array, int arrayIndex)
+        {
+            Shield.InTransaction(() => {
+                if (_count + arrayIndex > array.Length)
+                    throw new IndexOutOfRangeException();
+                foreach (var v in this)
+                    array[arrayIndex++] = v;
+            });
+        }
+
+        public bool Remove(T item)
+        {
+            return Remove(item, null);
+        }
+
+        public bool IsReadOnly
+        {
+            get
+            {
+                return false;
+            }
+        }
+
+        public void Insert(int index, T item)
+        {
+            if (index == _count)
+            {
+                Append(item);
+                return;
+            }
+
+            RefToIndex(index).Modify((ref ItemKeeper r) => {
+                var newItem = new ItemKeeper(r)
+                {
+                    Value = item
+                };
+                if (r == null)
+                    _tail.Value = newItem;
+                r = newItem;
+            });
+            _count.Commute((ref int c) => c++);
         }
     }
 }
