@@ -37,8 +37,9 @@ namespace Shielded
         /// <summary>
         /// Enlists the field in the current transaction and, if this is the first
         /// access, checks the write lock. Will spin-wait (or Monitor.Wait if SERVER
-        /// is defined) if the write stamp >= <see cref="Shield.ReadStamp"/>, until
-        /// write lock is released.
+        /// is defined) if the write stamp &lt;= <see cref="Shield.ReadStamp"/>, until
+        /// write lock is released. Since write stamps are increasing, this is
+        /// likely to happen only at the beginning of transactions.
         /// </summary>
         private void CheckLockAndEnlist()
         {
