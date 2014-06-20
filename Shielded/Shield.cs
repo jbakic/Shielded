@@ -44,14 +44,31 @@ namespace Shielded
         private enum CommuteState
         {
             Ok = 0,
+
+            /// <summary>
+            /// Commute must execute due to transaction accessing a field it works on.
+            /// </summary>
             Broken,
+
+            /// <summary>
+            /// Commute was executed.
+            /// </summary>
             Executed
         }
 
         private class Commute
         {
+            /// <summary>
+            /// The commutable action.
+            /// </summary>
             public Action Perform;
+
+            /// <summary>
+            /// The fields which, if enlisted by the main transaction, must cause the commute to
+            /// execute in-transaction.
+            /// </summary>
             public ICommutableShielded[] Affecting;
+
             public CommuteState State;
         }
 
@@ -579,8 +596,7 @@ repeatCommutes: if (brokeInCommutes)
             CloseTransaction();
 
             if (items.Fx != null)
-                foreach (var fx in items.Fx)
-                    items.Fx.Select(f => (Action)f.Rollback).SafeRun();
+                items.Fx.Select(f => (Action)f.Rollback).SafeRun();
 
             TrimCopies();
         }
