@@ -31,7 +31,10 @@ ParallelEnumerable.Range(0, 100000)
         dict[i % 100] = dict.ContainsKey(i % 100) ? dict[i % 100] + 1 : 1));
 ```
 
-If you have a class you want to make transactional:
+Shielded works with value types, and the language automatically does the needed
+cloning. For ref types, it only makes the reference itself transactional.
+The class should then be immutable, or, if you have a class you want to make
+transactional:
 
 ```csharp
 public class TestClass {

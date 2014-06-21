@@ -156,6 +156,7 @@ namespace Shielded
             }
             set
             {
+                Shield.AssertInTransaction();
                 // to make this op transactional, we must create a new ItemKeeper and
                 // insert him in the list.
                 var refInd = RefToIndex(index);
@@ -228,6 +229,7 @@ namespace Shielded
 
         public void RemoveAt(int index)
         {
+            Shield.AssertInTransaction();
             if (index == 0)
             {
                 if (_head.Value == null)
