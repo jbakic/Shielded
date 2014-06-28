@@ -52,7 +52,7 @@ namespace Shielded.ProxyGen
         private static void AddAssemblyReference(CodeCompileUnit cu, Type t)
         {
             cu.ReferencedAssemblies.Add(t.Assembly.Location);
-            cu.ReferencedAssemblies.Add("Shielded");
+            cu.ReferencedAssemblies.Add("Shielded.dll");
         }
 
         private static void ThrowErrors(CompilerErrorCollection compilerErrorCollection)
