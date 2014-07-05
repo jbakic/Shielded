@@ -48,7 +48,7 @@ namespace Shielded
                 return;
 
 #if SERVER
-            var stamp = Shield.CurrentTransactionStartStamp;
+            var stamp = Shield.ReadStamp;
             var w = _writerStamp;
             if (w != null && w.Version <= stamp)
                 lock (_locals)

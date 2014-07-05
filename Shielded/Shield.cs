@@ -424,15 +424,19 @@ namespace Shielded
                 {
                     WithTransactionContext(commutedItems, () =>
                     {
-                        foreach (var comm in commutes)
-                            comm.Perform();
+                        for (int i = 0; i < commutes.Count; i++)
+                            commutes[i].Perform();
                     }, merge: false);
                     return;
                 }
                 catch (TransException ex)
                 {
+#if USE_STD_HASHSET
                     foreach (var item in commutedItems.Enlisted)
                         item.Rollback();
+#else
+                    ((SimpleHashSet)commutedItems.Enlisted).Rollback();
+#endif
                     commutedItems = null;
                 }
             }
@@ -451,7 +455,7 @@ namespace Shielded
             TransItems commutedItems = null;
             long oldReadStamp = _readStamp.Value;
             bool commit = false;
-            bool brokeInCommutes = items.Commutes != null && items.Commutes.Any();
+            bool brokeInCommutes = items.Commutes != null && items.Commutes.Count > 0;
 
             if (SubscriptionContext.PreCommit.Count > 0)
             {
@@ -486,17 +490,25 @@ repeatCommutes: if (brokeInCommutes)
                     try
                     {
                         if (brokeInCommutes)
-                        {
+#if USE_STD_HASHSET
                             foreach (var item in commutedItems.Enlisted)
                                 if (!item.CanCommit(writeStamp))
                                     goto repeatCommutes;
-                        }
+#else
+                            if (!((SimpleHashSet)commutedItems.Enlisted).CanCommit(writeStamp))
+                                goto repeatCommutes;
+#endif
 
                         _readStamp = oldReadStamp;
                         brokeInCommutes = false;
+#if USE_STD_HASHSET
                         foreach (var item in items.Enlisted)
                             if (!item.CanCommit(writeStamp))
                                 return false;
+#else
+                        if (!((SimpleHashSet)items.Enlisted).CanCommit(writeStamp))
+                            return false;
+#endif
 
                         Interlocked.Increment(ref _lastStamp);
                         commit = true;
@@ -505,12 +517,19 @@ repeatCommutes: if (brokeInCommutes)
                     {
                         if (!commit)
                         {
+#if USE_STD_HASHSET
                             if (commutedItems != null)
                                 foreach (var item in commutedItems.Enlisted)
                                     item.Rollback();
                             if (!brokeInCommutes)
                                 foreach (var item in items.Enlisted)
                                     item.Rollback();
+#else
+                            if (commutedItems != null)
+                                ((SimpleHashSet)commutedItems.Enlisted).Rollback();
+                            if (!brokeInCommutes)
+                                ((SimpleHashSet)items.Enlisted).Rollback();
+#endif
                         }
                     }
                 }
@@ -531,14 +550,22 @@ repeatCommutes: if (brokeInCommutes)
         {
             var items = _localItems;
             bool hasChanges = (items.Commutes != null && items.Commutes.Count > 0) ||
+#if USE_STD_HASHSET
                 items.Enlisted.Any(HasChanges);
+#else
+                ((SimpleHashSet)items.Enlisted).HasChanges;
+#endif
 
             WriteStamp writeStamp = null;
             bool commit = true;
             if (!hasChanges)
             {
+#if USE_STD_HASHSET
                 foreach (var item in items.Enlisted)
                     item.Commit();
+#else
+                ((SimpleHashSet)items.Enlisted).CommitWoChanges();
+#endif
 
                 CloseTransaction();
 
@@ -547,16 +574,21 @@ repeatCommutes: if (brokeInCommutes)
             }
             else if (CommitCheck(out writeStamp))
             {
-                var trigger = new List<IShielded>();
+                List<IShielded> trigger;
                 // this must not be interrupted by a Thread.Abort!
                 try { }
                 finally
                 {
+#if USE_STD_HASHSET
+                    trigger = new List<IShielded>();
                     foreach (var item in items.Enlisted)
                     {
                         if (item.HasChanges) trigger.Add(item);
                         item.Commit();
                     }
+#else
+                    trigger = ((SimpleHashSet)items.Enlisted).Commit();
+#endif
                     RegisterCopies(writeStamp.Version, trigger);
                     CloseTransaction();
                 }
@@ -591,8 +623,12 @@ repeatCommutes: if (brokeInCommutes)
         private static void DoRollback()
         {
             var items = _localItems;
+#if USE_STD_HASHSET
             foreach (var item in items.Enlisted)
                 item.Rollback();
+#else
+            ((SimpleHashSet)items.Enlisted).Rollback();
+#endif
             CloseTransaction();
 
             if (items.Fx != null)

@@ -64,6 +64,70 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Checks if any enlisted item has changes.
+        /// </summary>
+        public bool HasChanges
+        {
+            get
+            {
+                for (int i = 0; i < _array.Length; i++)
+                    if (_array[i] != null && _array[i].HasChanges)
+                        return true;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Performs the commit check on the enlisted items.
+        /// </summary>
+        public bool CanCommit(WriteStamp ws)
+        {
+            for (int i = 0; i < _array.Length; i++)
+                if (_array[i] != null && !_array[i].CanCommit(ws))
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Commits the enlisted items.
+        /// </summary>
+        public List<IShielded> Commit()
+        {
+            List<IShielded> changes = new List<IShielded>();
+            for (int i = 0; i < _array.Length; i++)
+            {
+                var item = _array[i];
+                if (item != null)
+                {
+                    if (item.HasChanges) changes.Add(item);
+                    item.Commit();
+                }
+            }
+            return changes;
+        }
+
+        /// <summary>
+        /// Commits items without preparing a list of changed ones, to use
+        /// when you know that there are no changes.
+        /// </summary>
+        public void CommitWoChanges()
+        {
+            for (int i = 0; i < _array.Length; i++)
+                if (_array[i] != null)
+                    _array[i].Commit();
+        }
+
+        /// <summary>
+        /// Rolls the enlisted items back.
+        /// </summary>
+        public void Rollback()
+        {
+            for (int i = 0; i < _array.Length; i++)
+                if (_array[i] != null)
+                    _array[i].Rollback();
+        }
+
         #region IEnumerable implementation
         IEnumerator IEnumerable.GetEnumerator()
         {
@@ -100,12 +164,13 @@ namespace Shielded
             return _array[i] != null;
         }
 
-        void ICollection<IShielded>.CopyTo(IShielded[] array, int arrayIndex)
+        void ICollection<IShielded>.CopyTo(IShielded[] target, int arrayIndex)
         {
-            if (_count + arrayIndex > array.Length)
+            if (_count + arrayIndex > target.Length)
                 throw new IndexOutOfRangeException();
-            foreach (var item in this)
-                array[arrayIndex++] = item;
+            for (int i = 0; i < _array.Length; i++)
+                if (_array[i] != null)
+                    target[arrayIndex++] = _array[i];
         }
 
         bool ICollection<IShielded>.Remove(IShielded item)
@@ -168,18 +233,35 @@ namespace Shielded
 
         public bool Overlaps(IEnumerable<IShielded> other)
         {
-            return other.Any(Contains);
+            var otherAsSet = other as SimpleHashSet;
+            if (otherAsSet == null)
+                return other.Any(Contains);
+            for (int i = 0; i < otherAsSet._array.Length; i++)
+                if (otherAsSet._array[i] != null && Contains(otherAsSet._array[i]))
+                    return true;
+            return false;
         }
 
         public bool SetEquals(IEnumerable<IShielded> other)
         {
-            int counter = 0;
-            foreach (var item in other)
+            var otherAsSet = other as SimpleHashSet;
+            if (otherAsSet == null)
             {
-                if (++counter > _count || !Contains(item))
-                    return false;
+                int counter = 0;
+                foreach (var item in other)
+                {
+                    if (++counter > _count || !Contains(item))
+                        return false;
+                }
+                return counter == _count;
             }
-            return counter == _count;
+
+            if (otherAsSet._count != _count)
+                return false;
+            for (int i = 0; i < otherAsSet._array.Length; i++)
+                if (otherAsSet._array[i] != null && !Contains(otherAsSet._array[i]))
+                    return false;
+            return true;
         }
 
         void ISet<IShielded>.SymmetricExceptWith(IEnumerable<IShielded> other)
@@ -189,8 +271,14 @@ namespace Shielded
 
         public void UnionWith(IEnumerable<IShielded> other)
         {
-            foreach (var item in other)
-                AddInternal(item);
+            var otherAsSet = other as SimpleHashSet;
+            if (otherAsSet == null)
+                foreach (var item in other)
+                    AddInternal(item);
+            else
+                for (int i = 0; i < otherAsSet._array.Length; i++)
+                    if (otherAsSet._array[i] != null)
+                        AddInternal(otherAsSet._array[i]);
         }
         #endregion
 

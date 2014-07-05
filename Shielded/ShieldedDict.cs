@@ -58,7 +58,7 @@ namespace Shielded
                 return;
 
 #if SERVER
-            var stamp = Shield.CurrentTransactionStartStamp;
+            var stamp = Shield.ReadStamp;
             WriteStamp w;
             if (_writeStamps.TryGetValue(key, out w) && w.Version <= stamp)
                 lock (_localDict)
@@ -234,7 +234,7 @@ namespace Shielded
                 lock (_localDict)
                 {
                     foreach (var key in _localDict.Value.Items.Keys)
-                        if (_writeStamps.TryGetValue(key, out ws) && ws.Item1 == Thread.CurrentThread.ManagedThreadId)
+                        if (_writeStamps.TryGetValue(key, out ws) && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
                             _writeStamps.TryRemove(key, out ws);
                     Monitor.PulseAll(_localDict);
                 }
