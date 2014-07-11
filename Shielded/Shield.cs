@@ -684,7 +684,12 @@ repeatCommutes: if (brokeInCommutes)
                 var minTransactionNo = _transactions.Min() ?? lastStamp;
 
                 Tuple<long, IEnumerable<IShielded>> curr;
-                var toTrim = new HashSet<IShielded>();
+                var toTrim = 
+#if USE_STD_HASHSET
+                    new HashSet<IShielded>();
+#else
+                    new SimpleHashSet();
+#endif
                 while (_copiesByVersion.TryPeek(out curr) && curr.Item1 <= minTransactionNo)
                 {
                     toTrim.UnionWith(curr.Item2);
