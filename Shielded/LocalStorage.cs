@@ -40,7 +40,16 @@ namespace Shielded
                 {
                     var holder = Interlocked.CompareExchange(ref _holderThreadId, threadId, 0);
                     if (holder == threadId || holder == 0)
+                    {
                         _heldValue = value;
+                        // A bugfix for a bug that never was. -- If we're just now taking over
+                        // local fields, then what if we already had something in the dictionary?
+                        // Let's remove it then. The bug, however, never happened, because no user
+                        // of this class makes two consecutive writes. They put something in,
+                        // then null, and only then something else. But it's best to be safe.
+                        if (holder == 0 && LocalStorageHold.Storage != null)
+                            LocalStorageHold.Storage.Remove(this);
+                    }
                     else
                     {
                         if (LocalStorageHold.Storage == null)
