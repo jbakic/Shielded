@@ -7,9 +7,16 @@ using System.Threading;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Shielded;
+using Shielded.ProxyGen;
 
 namespace ConsoleTests
 {
+    public class SimpleEntity
+    {
+        public virtual int Id { get; set; }
+        public virtual void Commute(Action a) { a(); }
+    }
+
     class MainClass
     {
         private static Stopwatch _timer;
@@ -716,6 +723,133 @@ namespace ConsoleTests
                               (nCommuteTime - oneCommuteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
         }
 
+        public static void SimpleProxyOps()
+        {
+            var entity = Factory.NewShielded<SimpleEntity>();
+
+            long time;
+            _timer = Stopwatch.StartNew();
+            var numItems = 200000;
+            var repeatsPerTrans = 100;
+
+            Console.WriteLine(
+                "Testing simple proxy ops with {0} iterations, and repeats per trans (N) = {1}",
+                numItems, repeatsPerTrans);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    var a = entity.Id;
+                    entity.Id = 3;
+                });
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("WARM UP in {0} ms.", time);
+
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => { });
+            var emptyTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("empty transactions in {0} ms.", emptyTime);
+
+            // this version uses the generic, result-returning InTransaction, which involves creation
+            // of a closure, i.e. an allocation.
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => 5);
+            var emptyReturningTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1 non-transactional read w/ returning result in {0} ms.", emptyReturningTime);
+
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => { var a = entity.Id; });
+            var oneReadTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-read transactions in {0} ms.", oneReadTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    int a;
+                    for (int i = 0; i < repeatsPerTrans; i++)
+                        a = entity.Id;
+                });
+            var nReadTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("N-reads transactions in {0} ms.", nReadTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    var a = entity.Id;
+                    entity.Id = 1;
+                });
+            var oneReadWriteTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-read-1-write transactions in {0} ms.", oneReadWriteTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => entity.Id = 1);
+            var oneWriteTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-write transactions in {0} ms.", oneWriteTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    for (int i = 0; i < repeatsPerTrans; i++)
+                        entity.Id = 1;
+                });
+            var nWriteTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("N-write transactions in {0} ms.", nWriteTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    entity.Id = 2;
+                    int a;
+                    for (int i = 0; i < repeatsPerTrans; i++)
+                        a = entity.Id;
+                });
+            var oneWriteNReadTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-write-N-reads transactions in {0} ms.", oneWriteNReadTime);
+
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => entity.Commute(() => entity.Id = 1));
+            var oneCommuteTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("1-commute transactions in {0} ms.", oneCommuteTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => {
+                    for (int i = 0; i < repeatsPerTrans; i++)
+                        entity.Commute(() => entity.Id = 1);
+                });
+            var nCommuteTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("N-commute transactions in {0} ms.", nCommuteTime);
+
+
+            Console.WriteLine("\ncost of empty transaction = {0:0.000} us", emptyTime / (numItems / 1000.0));
+            Console.WriteLine("cost of the closure in InTransaction<T> = {0:0.000} us",
+                              (emptyReturningTime - emptyTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of the first read = {0:0.000} us",
+                              (oneReadTime - emptyTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of an additional read = {0:0.000} us",
+                              (nReadTime - oneReadTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
+            Console.WriteLine("cost of write after read = {0:0.000} us",
+                              (oneReadWriteTime - oneReadTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of the first write = {0:0.000} us",
+                              (oneWriteTime - emptyTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of an additional write = {0:0.000} us",
+                              (nWriteTime - oneWriteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
+            Console.WriteLine("cost of a read after write = {0:0.000} us",
+                              (oneWriteNReadTime - oneWriteTime) / (repeatsPerTrans * numItems / 1000.0));
+            Console.WriteLine("cost of the first commute = {0:0.000} us",
+                              (oneCommuteTime - emptyTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of an additional commute = {0:0.000} us",
+                              (nCommuteTime - oneCommuteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
+        }
+
         public static void MultiFieldOps()
         {
             long time;
@@ -985,7 +1119,7 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
             //BetShopPoolTest();
 
@@ -996,6 +1130,8 @@ namespace ConsoleTests
             //SimpleOps();
 
             //MultiFieldOps();
+
+            SimpleProxyOps();
 
             //SkewTest();
 
