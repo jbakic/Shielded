@@ -26,16 +26,16 @@ namespace Shielded
 
         private class LocalDict
         {
-            public Dictionary<TKey, ItemKeeper> Items;
-            public HashSet<TKey> Reads = new HashSet<TKey>();
+            public Dictionary<TKey, ItemKeeper> Items = new Dictionary<TKey, ItemKeeper>();
+            public bool HasChanges;
         }
 
         private readonly ConcurrentDictionary<TKey, ItemKeeper> _dict;
         // This is the only protection for iterators - each iterating op will read the count, just
         // to provoke a conflict with any transaction that modifies the Count! Simple as hell.
         private readonly Shielded<int> _count;
-        private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps
-            = new ConcurrentDictionary<TKey, WriteStamp>();
+        private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps =
+            new ConcurrentDictionary<TKey, WriteStamp>();
         private readonly LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
 
         public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items)
@@ -54,7 +54,7 @@ namespace Shielded
 
         private void CheckLockAndEnlist(TKey key)
         {
-            if (!Shield.Enlist(this, _localDict.HasValue) && _localDict.Value.Reads.Contains(key))
+            if (!Shield.Enlist(this, _localDict.HasValue) && _localDict.Value.Items.ContainsKey(key))
                 return;
 
 #if SERVER
@@ -77,8 +77,6 @@ namespace Shielded
 
         private ItemKeeper CurrentTransactionOldValue(TKey key)
         {
-            PrepareLocal(key);
-
             ItemKeeper point;
             _dict.TryGetValue(key, out point);
             while (point != null && point.Version > Shield.ReadStamp)
@@ -86,17 +84,44 @@ namespace Shielded
             return point;
         }
 
-        private bool IsLocalPrepared()
+        private LocalDict PrepareLocals()
         {
-            return _localDict.HasValue;
+            LocalDict locals;
+            if (_localDict.HasValue)
+                locals = _localDict.Value;
+            else
+                _localDict.Value = locals = new LocalDict();
+            return locals;
         }
 
-        private void PrepareLocal(TKey key)
+        /// <summary>
+        /// Returns an existing local entry, if any.
+        /// </summary>
+        private ItemKeeper PrepareWrite(TKey key)
         {
             CheckLockAndEnlist(key);
-            if (!_localDict.HasValue)
-                _localDict.Value = new LocalDict();
-            _localDict.Value.Reads.Add(key);
+            var locals = PrepareLocals();
+            ItemKeeper existing;
+            if (locals.Items.TryGetValue(key, out existing))
+                return existing;
+            return null;
+        }
+
+        private ItemKeeper Read(TKey key)
+        {
+            CheckLockAndEnlist(key);
+            ItemKeeper v, curr;
+            var locals = PrepareLocals();
+            bool hasLocal;
+            if (!(hasLocal = locals.Items.TryGetValue(key, out v)) || v == null)
+            {
+                if (!hasLocal)
+                    locals.Items.Add(key, null);
+                v = CurrentTransactionOldValue(key);
+            }
+            else if (_dict.TryGetValue(key, out curr) && curr.Version > Shield.ReadStamp)
+                throw new TransException("Writable read collision.");
+            return v;
         }
 
         public TItem this [TKey key]
@@ -104,48 +129,43 @@ namespace Shielded
             get
             {
                 ItemKeeper v;
-                if (!Shield.IsInTransaction || !IsLocalPrepared() ||
-                    _localDict.Value.Items == null || !_localDict.Value.Items.ContainsKey(key))
+                if (!Shield.IsInTransaction)
                 {
-                    if (Shield.IsInTransaction)
-                        v = CurrentTransactionOldValue(key);
-                    else if (!_dict.TryGetValue(key, out v))
-                        throw new KeyNotFoundException();
-                    if (v == null || v.Empty)
+                    if (!_dict.TryGetValue(key, out v) || v.Empty)
                         throw new KeyNotFoundException();
                     return v.Value;
                 }
-                else if (_dict.TryGetValue(key, out v) && v.Version > Shield.ReadStamp)
-                    throw new TransException("Writable read collision.");
 
-                if (_localDict.Value.Items[key].Empty)
+                v = Read(key);
+                if (v == null || v.Empty)
                     throw new KeyNotFoundException();
-                return _localDict.Value.Items[key].Value;
+                return v.Value;
             }
             set
             {
-                PrepareLocal(key);
+                ItemKeeper local = PrepareWrite(key);
                 ItemKeeper curr;
                 bool hasValue;
                 if ((hasValue = _dict.TryGetValue(key, out curr)) && curr.Version > Shield.ReadStamp)
                     throw new TransException("Write collision.");
 
-                ItemKeeper localItem;
-                if (_localDict.Value.Items == null)
-                    _localDict.Value.Items = new Dictionary<TKey, ItemKeeper>();
-                else if (_localDict.Value.Items.TryGetValue(key, out localItem))
+                if (local == null)
                 {
-                    if (localItem.Empty)
+                    var locals = _localDict.Value;
+                    locals.Items[key] = new ItemKeeper() { Value = value };
+                    locals.HasChanges = true;
+                    if (!hasValue || curr.Empty)
+                        _count.Commute((ref int n) => n++);
+                }
+                else
+                {
+                    if (local.Empty)
                     {
                         _count.Commute((ref int n) => n++);
-                        localItem.Empty = false;
+                        local.Empty = false;
                     }
-                    localItem.Value = value;
-                    return;
+                    local.Value = value;
                 }
-                _localDict.Value.Items[key] = new ItemKeeper() { Value = value };
-                if (!hasValue || curr.Empty)
-                    _count.Commute((ref int n) => n++);
             }
         }
 
@@ -162,26 +182,28 @@ namespace Shielded
         {
             get
             {
-                return IsLocalPrepared() && _localDict.Value.Items != null;
+                return _localDict.HasValue && _localDict.Value.HasChanges;
             }
         }
 
         bool IShielded.CanCommit(WriteStamp writeStamp)
         {
+            var locals = _localDict.Value;
             // locals were prepared when we enlisted.
-            if (_localDict.Value.Reads.Any(key =>
+            if (locals.Items.Any(kvp =>
                     {
                         ItemKeeper v;
-                        return _writeStamps.ContainsKey(key) ||
-                            (_dict.TryGetValue(key, out v) && v.Version > Shield.ReadStamp);
+                        return _writeStamps.ContainsKey(kvp.Key) ||
+                            (_dict.TryGetValue(kvp.Key, out v) && v.Version > Shield.ReadStamp);
                     }))
                 return false;
             else
             {
                 // touch only the ones we plan to change
-                if (_localDict.Value.Items != null)
-                    foreach (var key in _localDict.Value.Items.Keys)
-                        _writeStamps[key] = writeStamp;
+                if (locals.HasChanges)
+                    foreach (var kvp in locals.Items)
+                        if (kvp.Value != null)
+                            _writeStamps[kvp.Key] = writeStamp;
                 return true;
             }
         }
@@ -191,18 +213,24 @@ namespace Shielded
 
         void IShielded.Commit()
         {
-            if (_localDict.Value.Items != null)
+            var locals = _localDict.Value;
+            if (locals.HasChanges)
             {
-                long version = _writeStamps[_localDict.Value.Items.First().Key].Version;
-                var copyList = new List<TKey>(_localDict.Value.Items.Count);
+                long? version = null;
+                var copyList = new List<TKey>();
                 foreach (var kvp in _localDict.Value.Items)
                 {
+                    if (kvp.Value == null)
+                        continue;
+                    if (version == null)
+                        version = _writeStamps[kvp.Key].Version;
+
                     ItemKeeper v = null;
                     if (_dict.TryGetValue(kvp.Key, out v))
                         copyList.Add(kvp.Key);
 
                     var newCurrent = kvp.Value;
-                    newCurrent.Version = version;
+                    newCurrent.Version = (long)version;
                     newCurrent.Older = v;
                     lock (_dict)
                         _dict[kvp.Key] = newCurrent;
@@ -218,7 +246,8 @@ namespace Shielded
                     _writeStamps.TryRemove(kvp.Key, out ws);
 #endif
                 }
-                _copies.Enqueue(Tuple.Create(version, copyList));
+                if (version.HasValue)
+                    _copies.Enqueue(Tuple.Create((long)version, copyList));
             }
             _localDict.Value = null;
         }
@@ -227,21 +256,34 @@ namespace Shielded
         {
             if (!_localDict.HasValue)
                 return;
-            if (_localDict.Value.Items != null)
+            var locals = _localDict.Value;
+            if (locals.HasChanges)
             {
                 WriteStamp ws;
 #if SERVER
                 lock (_localDict)
                 {
-                    foreach (var key in _localDict.Value.Items.Keys)
-                        if (_writeStamps.TryGetValue(key, out ws) && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
-                            _writeStamps.TryRemove(key, out ws);
+                    foreach (var kvp in locals.Items)
+                    {
+                        if (kvp.Value != null &&
+                            _writeStamps.TryGetValue(kvp.Key, out ws) &&
+                            ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
+                        {
+                            _writeStamps.TryRemove(kvp.Key, out ws);
+                        }
+                    }
                     Monitor.PulseAll(_localDict);
                 }
 #else
-                foreach (var key in _localDict.Value.Items.Keys)
-                    if (_writeStamps.TryGetValue(key, out ws) && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
-                        _writeStamps.TryRemove(key, out ws);
+                foreach (var kvp in locals.Items)
+                {
+                    if (kvp.Value != null &&
+                        _writeStamps.TryGetValue(kvp.Key, out ws) &&
+                        ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
+                    {
+                        _writeStamps.TryRemove(kvp.Key, out ws);
+                    }
+                }
 #endif
             }
             _localDict.Value = null;
@@ -304,17 +346,14 @@ namespace Shielded
             Shield.AssertInTransaction();
             // force conflict if _count changes. even if it changes back to same value!
             var c = _count.Value;
-            var locals = _localDict.HasValue ? _localDict.Value.Items : null;
-            var keys = locals != null ? _dict.Keys.Except(locals.Keys) : _dict.Keys;
+            var keys = _localDict.HasValue ?
+                _dict.Keys.Union(_localDict.Value.Items.Keys) : _dict.Keys;
             foreach (var key in keys)
             {
-                var v = CurrentTransactionOldValue(key);
+                var v = Read(key);
                 if (v == null || v.Empty) continue;
                 yield return new KeyValuePair<TKey, TItem>(key, v.Value);
             }
-            if (locals != null)
-                foreach (var kvp in locals.Where(l => !l.Value.Empty))
-                    yield return new KeyValuePair<TKey, TItem>(kvp.Key, kvp.Value.Value);
         }
         #endregion
 
@@ -389,11 +428,9 @@ namespace Shielded
         {
             ItemKeeper v;
             if (!Shield.IsInTransaction)
-                return _dict.TryGetValue(key, out v) && !v.Empty;
+                return _dict.TryGetValue(key, out v) && v != null && !v.Empty;
 
-            v = _localDict.HasValue && _localDict.Value.Items != null &&
-                _localDict.Value.Items.ContainsKey(key) ?
-                    _localDict.Value.Items[key] : CurrentTransactionOldValue(key);
+            v = Read(key);
             return v != null && !v.Empty;
         }
 
@@ -403,9 +440,9 @@ namespace Shielded
             if (!ContainsKey(key))
                 return false;
 
-            if (_localDict.Value.Items == null)
-                _localDict.Value.Items = new Dictionary<TKey, ItemKeeper>();
-            _localDict.Value.Items[key] = new ItemKeeper() { Empty = true };
+            var locals = _localDict.Value;
+            locals.HasChanges = true;
+            locals.Items[key] = new ItemKeeper() { Empty = true };
 
             _count.Commute((ref int n) => n--);
             return true;
@@ -413,9 +450,9 @@ namespace Shielded
 
         public bool TryGetValue(TKey key, out TItem value)
         {
+            ItemKeeper v;
             if (!Shield.IsInTransaction)
             {
-                ItemKeeper v;
                 if (_dict.TryGetValue(key, out v) && !v.Empty)
                 {
                     value = v.Value;
@@ -425,12 +462,10 @@ namespace Shielded
                 return false;
             }
 
-            var c = _localDict.HasValue && _localDict.Value.Items != null &&
-                _localDict.Value.Items.ContainsKey(key) ?
-                    _localDict.Value.Items [key] : CurrentTransactionOldValue(key);
-            if (c != null && !c.Empty)
+            v = Read(key);
+            if (v != null && !v.Empty)
             {
-                value = c.Value;
+                value = v.Value;
                 return true;
             }
             value = default(TItem);
