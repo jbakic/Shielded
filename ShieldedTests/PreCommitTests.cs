@@ -44,6 +44,8 @@ namespace ShieldedTests
             Assert.Greater(transactionCount, 100);
         }
 
+        public class ValidationException : Exception {}
+
         [Test]
         public void Validation()
         {
@@ -53,7 +55,7 @@ namespace ShieldedTests
             int validationFails = 0;
             Shield.PreCommit(() => list1.Count + list2.Count != 100, () => {
                 Interlocked.Increment(ref validationFails);
-                throw new InvalidOperationException("Lost an item?");
+                throw new ValidationException();
             });
 
             int transactionCount = 0;
@@ -71,7 +73,7 @@ namespace ShieldedTests
                         });
                         Assert.AreNotEqual(100, i);
                     }
-                    catch (InvalidOperationException)
+                    catch (ValidationException)
                     {
                         Assert.AreEqual(100, i);
                     }
@@ -97,7 +99,7 @@ namespace ShieldedTests
             });
             slowThread1.Start();
 
-            foreach (int i in Enumerable.Range(1, 200))
+            foreach (int i in Enumerable.Range(1, 1000))
             {
                 Shield.InTransaction(() => {
                     x.Modify((ref int a) => a++);
@@ -106,7 +108,7 @@ namespace ShieldedTests
             slowThread1.Join();
 
             Assert.Greater(slowThread1Repeats, 1);
-            Assert.AreEqual(199, x);
+            Assert.AreEqual(999, x);
 
             // now, we introduce prioritization.
             // this condition gets triggered before any attempt to write into x
@@ -144,7 +146,7 @@ namespace ShieldedTests
             });
             slowThread2.Start();
 
-            foreach (int i in Enumerable.Range(1, 200))
+            foreach (int i in Enumerable.Range(1, 1000))
             {
                 Shield.InTransaction(() => {
                     x.Modify((ref int a) => a++);
@@ -153,7 +155,7 @@ namespace ShieldedTests
             slowThread2.Join();
 
             Assert.AreEqual(1, slowThread2Repeats);
-            Assert.AreEqual(199, x);
+            Assert.AreEqual(999, x);
         }
 
         [Test]

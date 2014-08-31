@@ -508,7 +508,7 @@ namespace Shielded
 
         #region ICollection implementation
 
-        public void Add(KeyValuePair<TKey, TValue> item)
+        void ICollection<KeyValuePair<TKey, TValue>>.Add(KeyValuePair<TKey, TValue> item)
         {
             InsertInternal(item.Key, item.Value);
         }
@@ -520,13 +520,17 @@ namespace Shielded
             _count.Value = 0;
         }
 
+        /// <summary>
+        /// Checks both the key and value, which may be useful due to the tree supporting multiple
+        /// entries with the same key.
+        /// </summary>
         public bool Contains(KeyValuePair<TKey, TValue> item)
         {
             return Shield.InTransaction(() =>
                 RangeInternal(item.Key, item.Key).Any(n => n.Value.Value == item.Value));
         }
 
-        public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
+        void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
         {
             Shield.InTransaction(() => {
                 if (_count + arrayIndex > array.Length)
@@ -536,6 +540,10 @@ namespace Shielded
             });
         }
 
+        /// <summary>
+        /// Checks both the key and value, which may be useful due to the tree supporting multiple
+        /// entries with the same key.
+        /// </summary>
         public bool Remove(KeyValuePair<TKey, TValue> item)
         {
             var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n => n.Value.Value == item.Value);
@@ -553,7 +561,7 @@ namespace Shielded
             }
         }
 
-        public bool IsReadOnly
+        bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly
         {
             get
             {
@@ -627,9 +635,10 @@ namespace Shielded
         {
             get
             {
-                return ((IEnumerable<KeyValuePair<TKey, TValue>>)this)
-                    .Select(kvp => kvp.Key)
-                    .ToList();
+                return Shield.InTransaction(
+                    () => ((IEnumerable<KeyValuePair<TKey, TValue>>)this)
+                        .Select(kvp => kvp.Key)
+                        .ToList());
             }
         }
 
@@ -637,9 +646,10 @@ namespace Shielded
         {
             get
             {
-                return ((IEnumerable<KeyValuePair<TKey, TValue>>)this)
-                    .Select(kvp => kvp.Value)
-                    .ToList();
+                return Shield.InTransaction(
+                    () => ((IEnumerable<KeyValuePair<TKey, TValue>>)this)
+                        .Select(kvp => kvp.Value)
+                        .ToList());
             }
         }
 

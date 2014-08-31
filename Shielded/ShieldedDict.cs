@@ -358,7 +358,7 @@ namespace Shielded
         #endregion
 
         #region ICollection implementation
-        public void Add(KeyValuePair<TKey, TItem> item)
+        void ICollection<KeyValuePair<TKey, TItem>>.Add(KeyValuePair<TKey, TItem> item)
         {
             Add(item.Key, item.Value);
         }
@@ -375,12 +375,12 @@ namespace Shielded
         /// <summary>
         /// Checks the key only.
         /// </summary>
-        public bool Contains(KeyValuePair<TKey, TItem> item)
+        bool ICollection<KeyValuePair<TKey, TItem>>.Contains(KeyValuePair<TKey, TItem> item)
         {
             return ContainsKey(item.Key);
         }
 
-        public void CopyTo(KeyValuePair<TKey, TItem>[] array, int arrayIndex)
+        void ICollection<KeyValuePair<TKey, TItem>>.CopyTo(KeyValuePair<TKey, TItem>[] array, int arrayIndex)
         {
             Shield.InTransaction(() => {
                 if (_count + arrayIndex > array.Length)
@@ -393,7 +393,7 @@ namespace Shielded
         /// <summary>
         /// Checks the key only, removed value may be different.
         /// </summary>
-        public bool Remove(KeyValuePair<TKey, TItem> item)
+        bool ICollection<KeyValuePair<TKey, TItem>>.Remove(KeyValuePair<TKey, TItem> item)
         {
             return Remove(item.Key);
         }
@@ -406,7 +406,7 @@ namespace Shielded
             }
         }
 
-        public bool IsReadOnly
+        bool ICollection<KeyValuePair<TKey, TItem>>.IsReadOnly
         {
             get
             {
@@ -476,9 +476,10 @@ namespace Shielded
         {
             get
             {
-                return ((IEnumerable<KeyValuePair<TKey, TItem>>)this)
-                    .Select(kvp => kvp.Key)
-                    .ToList();
+                return Shield.InTransaction(
+                    () => ((IEnumerable<KeyValuePair<TKey, TItem>>)this)
+                        .Select(kvp => kvp.Key)
+                        .ToList());
             }
         }
 
@@ -486,9 +487,10 @@ namespace Shielded
         {
             get
             {
-                return ((IEnumerable<KeyValuePair<TKey, TItem>>)this)
-                    .Select(kvp => kvp.Value)
-                    .ToList();
+                return Shield.InTransaction(
+                    () => ((IEnumerable<KeyValuePair<TKey, TItem>>)this)
+                        .Select(kvp => kvp.Value)
+                        .ToList());
             }
         }
 

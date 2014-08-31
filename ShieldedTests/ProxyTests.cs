@@ -108,7 +108,7 @@ namespace ShieldedTests
             var test = Factory.NewShielded<TestEntity>();
 
             int transactionCount = 0, commuteCount = 0;
-            Task.WaitAll(Enumerable.Range(1, 100).Select(i => Task.Factory.StartNew(() => {
+            Task.WaitAll(Enumerable.Range(1, 500).Select(i => Task.Factory.StartNew(() => {
                 Shield.InTransaction(() => {
                     Interlocked.Increment(ref transactionCount);
                     test.Commute(() => {
@@ -117,10 +117,10 @@ namespace ShieldedTests
                     });
                 });
             }, TaskCreationOptions.LongRunning)).ToArray());
-            Assert.AreEqual(5050, test.Counter);
+            Assert.AreEqual(125250, test.Counter);
             // commutes never conflict (!)
-            Assert.AreEqual(100, transactionCount);
-            Assert.Greater(commuteCount, 100);
+            Assert.AreEqual(500, transactionCount);
+            Assert.Greater(commuteCount, 500);
 
             try
             {
