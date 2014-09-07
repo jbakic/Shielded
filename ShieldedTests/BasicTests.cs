@@ -275,6 +275,37 @@ namespace ShieldedTests
         }
 
         [Test]
+        public void DegeneratingCommuteTest()
+        {
+            var a = new Shielded<int>();
+            int numInc = 100000;
+            int transactionCount = 0, commuteCount = 0;
+            ParallelEnumerable.Repeat(1, numInc/2).ForAll(i => Shield.InTransaction(() => {
+                Interlocked.Increment(ref transactionCount);
+                a.Commute((ref int n) => {
+                    Interlocked.Increment(ref commuteCount);
+                    n++;
+                });
+                a.Commute((ref int n) => {
+                    Interlocked.Increment(ref commuteCount);
+                    n++;
+                });
+                // so, we cause it to degenerate. there was a subtle bug in enlisting which
+                // would allow a degenerated commute to execute before checking the lock!
+                // this test catches that bug. we also do two commutes to confirm that
+                // Shield.CheckCommutes can be reentered with the same item (see comment in Enlist).
+                int x = a;
+            }));
+            Assert.AreEqual(numInc, a);
+            // degenerated commutes conflict, which means transaction will repeat. conflict
+            // may be detected before the commute lambda actually gets to execute, so the
+            // trans count can be greater than commute count.
+            Assert.GreaterOrEqual(transactionCount, commuteCount/2);
+            // classic, just to confirm there was at least one conflict.
+            Assert.Greater(commuteCount, numInc);
+        }
+
+        [Test]
         public void ComplexCommute()
         {
             // some more complex commute combinations. first, with ShieldedSeq ops.

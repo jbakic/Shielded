@@ -127,10 +127,14 @@ namespace Shielded
             if (!_enforceTracking && hasLocals)
                 return false;
             AssertInTransaction();
-            if (_localItems.Enlisted.Add(item))
+            if (!_localItems.Enlisted.Contains(item))
             {
+                // must not add into Enlisted before we run commutes, otherwise commutes' calls
+                // to Enlist would return false, and the commutes, although running first, would
+                // not actually check the lock! this also means that CheckCommutes must tolerate
+                // being reentered with the same item.
                 CheckCommutes(item);
-                return true;
+                return _localItems.Enlisted.Add(item);
             }
             return false;
         }
