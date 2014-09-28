@@ -50,17 +50,17 @@ namespace Shielded
 #if SERVER
             var stamp = Shield.ReadStamp;
             var w = _writerStamp;
-            if (w != null && w.Version <= stamp)
+            if (w != null && w.Version != null && w.Version <= stamp)
                 lock (_locals)
                 {
-                    if ((w = _writerStamp) != null && w.Version <= stamp)
+                    if ((w = _writerStamp) != null && w.Version != null && w.Version <= stamp)
                         Monitor.Wait(_locals);
                 }
 #else
             SpinWait.SpinUntil(() =>
             {
                 var w = _writerStamp;
-                return w == null || w.Version > Shield.ReadStamp;
+                return w == null ||  w.Version == null || w.Version > Shield.ReadStamp;
             });
 #endif
         }
@@ -206,7 +206,7 @@ namespace Shielded
                 return;
             var newCurrent = _locals.Value;
             newCurrent.Older = _current;
-            newCurrent.Version = _writerStamp.Version;
+            newCurrent.Version = _writerStamp.Version.Value;
             _current = newCurrent;
             _locals.Value = null;
 #if SERVER

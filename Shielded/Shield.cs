@@ -453,6 +453,8 @@ namespace Shielded
             return item.HasChanges;
         }
 
+        private static long _lastWriteStamp;
+
         static bool CommitCheck(out WriteStamp writeStamp)
         {
             var items = _localItems;
@@ -485,57 +487,65 @@ repeatCommutes: if (brokeInCommutes)
                         throw new InvalidOperationException("Invalid commute - conflict with transaction.");
                 }
 
-                lock (_stampLock)
+//                lock (_stampLock)
+                CommitLock theLock = null;
+                try
                 {
+                    CommitLocker.Enter(
+                        items.Enlisted,
+                        commutedItems != null ? commutedItems.Enlisted : null,
+                        out theLock);
+
                     writeStamp = new WriteStamp(
-                        Thread.CurrentThread.ManagedThreadId,
-                        Interlocked.Read(ref _lastStamp) + 1);
+                        Thread.CurrentThread.ManagedThreadId);
 
-                    try
-                    {
-                        if (brokeInCommutes)
+                    if (brokeInCommutes)
 #if USE_STD_HASHSET
-                            foreach (var item in commutedItems.Enlisted)
-                                if (!item.CanCommit(writeStamp))
-                                    goto repeatCommutes;
-#else
-                            if (!((SimpleHashSet)commutedItems.Enlisted).CanCommit(writeStamp))
-                                goto repeatCommutes;
-#endif
-
-                        _readStamp = oldReadStamp;
-                        brokeInCommutes = false;
-#if USE_STD_HASHSET
-                        foreach (var item in items.Enlisted)
+                        foreach (var item in commutedItems.Enlisted)
                             if (!item.CanCommit(writeStamp))
-                                return false;
+                                goto repeatCommutes;
 #else
-                        if (!((SimpleHashSet)items.Enlisted).CanCommit(writeStamp))
-                            return false;
+                        if (!((SimpleHashSet)commutedItems.Enlisted).CanCommit(writeStamp))
+                            goto repeatCommutes;
 #endif
 
-                        Interlocked.Increment(ref _lastStamp);
-                        commit = true;
-                    }
-                    finally
-                    {
-                        if (!commit)
-                        {
+                    _readStamp = oldReadStamp;
+                    brokeInCommutes = false;
 #if USE_STD_HASHSET
-                            if (commutedItems != null)
-                                foreach (var item in commutedItems.Enlisted)
-                                    item.Rollback();
-                            if (!brokeInCommutes)
-                                foreach (var item in items.Enlisted)
-                                    item.Rollback();
+                    foreach (var item in items.Enlisted)
+                        if (!item.CanCommit(writeStamp))
+                            return false;
 #else
-                            if (commutedItems != null)
-                                ((SimpleHashSet)commutedItems.Enlisted).Rollback();
-                            if (!brokeInCommutes)
-                                ((SimpleHashSet)items.Enlisted).Rollback();
+                    if (!((SimpleHashSet)items.Enlisted).CanCommit(writeStamp))
+                        return false;
 #endif
-                        }
+
+                    long target;
+                    writeStamp.Version = target = Interlocked.Increment(ref _lastWriteStamp);
+                    SpinWait.SpinUntil(() =>
+                        Interlocked.CompareExchange(ref _lastStamp, target, target - 1) == target - 1);
+                    commit = true;
+                }
+                finally
+                {
+                    if (!commit)
+                    {
+#if USE_STD_HASHSET
+                        if (commutedItems != null)
+                            foreach (var item in commutedItems.Enlisted)
+                                item.Rollback();
+                        if (!brokeInCommutes)
+                            foreach (var item in items.Enlisted)
+                                item.Rollback();
+#else
+                        if (commutedItems != null)
+                            ((SimpleHashSet)commutedItems.Enlisted).Rollback();
+                        if (!brokeInCommutes)
+                            ((SimpleHashSet)items.Enlisted).Rollback();
+#endif
                     }
+                    if (theLock != null)
+                        CommitLocker.Exit(theLock);
                 }
                 return true;
             }
@@ -593,7 +603,7 @@ repeatCommutes: if (brokeInCommutes)
 #else
                     trigger = ((SimpleHashSet)items.Enlisted).Commit();
 #endif
-                    RegisterCopies(writeStamp.Version, trigger);
+                    RegisterCopies(writeStamp.Version.Value, trigger);
                     CloseTransaction();
                 }
 

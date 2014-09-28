@@ -14,6 +14,7 @@ test-results/
 *.user
 *.sln.docstates
 *.userprefs
+*.usertasks
 
 # Build results
 [Dd]ebug/

@@ -41,8 +41,12 @@ namespace ConsoleTests
         {
             var randomizr = new Random();
             int transactionCounter;
-            int sleepTime = 1;
-            int taskCount = 10000;
+            int sleepTime = 0;
+            int taskCount = 100000;
+
+            // a little warm up for Shielded
+            var warmUp = new Shielded<int>();
+            Shield.InTransaction(() => warmUp.Value = warmUp + 1);
 
             foreach (var i in Enumerable.Repeat(0, 5))
             {
@@ -443,9 +447,6 @@ namespace ConsoleTests
         {
             int numThreads = 4;
             int numItems = 200000;
-            // for some reason, if this is replaced with ShieldedDict, KeyAlreadyPresent
-            // exception is thrown. under one key you can then find an entity which does
-            // not have that key. complete mystery.
             var tree = new ShieldedDict<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);
             int reportEvery = 10000;
@@ -1111,7 +1112,7 @@ namespace ConsoleTests
 
         public static void Main(string[] args)
         {
-            //TimeTests();
+            TimeTests();
 
             //OneTransaction();
 
@@ -1131,7 +1132,7 @@ namespace ConsoleTests
 
             //MultiFieldOps();
 
-            SimpleProxyOps();
+            //SimpleProxyOps();
 
             //SkewTest();
 

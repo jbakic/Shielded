@@ -18,13 +18,16 @@ namespace Shielded
         /// locked object. All threads which should be able to read this
         /// version (i.e. their <see cref="Shield.ReadStamp"/> is greater
         /// or equal to this value) must wait for the lock to be released.
+        /// If the Version is null, then this stamp is not yet confirmed,
+        /// and readers may proceed (since when and if it is confirmed, the
+        /// Version will be at least 1 bigger than the current Shield._lastStamp,
+        /// which means no current reader can have a bigger or equal stamp).
         /// </summary>
-        public readonly long Version;
+        public long? Version;
 
-        public WriteStamp(int threadId, long version)
+        public WriteStamp(int threadId)
         {
             ThreadId = threadId;
-            Version = version;
         }
     }
 }
