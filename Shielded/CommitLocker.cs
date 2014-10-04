@@ -8,7 +8,11 @@ namespace Shielded
     {
     }
 
-    internal class CommitLocker
+    /// <summary>
+    /// This class does locking for the commit checks. If two threads use this, they
+    /// conflict only if their transaction items overlap.
+    /// </summary>
+    internal static class CommitLocker
     {
         private class LockState
         {

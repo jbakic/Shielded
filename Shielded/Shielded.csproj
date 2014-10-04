@@ -60,7 +60,6 @@
     <Compile Include="ShieldedSeq.cs" />
     <Compile Include="ShieldedTree.cs" />
     <Compile Include="LocalStorage.cs" />
-    <Compile Include="VersionList.cs" />
     <Compile Include="ShieldedEvent.cs" />
     <Compile Include="Actions.cs" />
     <Compile Include="SubscriptionContext.cs" />
@@ -68,6 +67,7 @@
     <Compile Include="SimpleHashSet.cs" />
     <Compile Include="WriteStamp.cs" />
     <Compile Include="CommitLocker.cs" />
+    <Compile Include="VersionList.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

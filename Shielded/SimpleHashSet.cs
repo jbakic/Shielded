@@ -23,8 +23,21 @@ namespace Shielded
         private const int SizeShift = 3;
         private const int InitSize = 1 << SizeShift;
 
-        private int _mask = InitSize - 1;
-        private IShielded[] _array = new IShielded[InitSize];
+        private int _mask;
+        private IShielded[] _array;
+
+        public SimpleHashSet()
+        {
+            _mask = InitSize - 1;
+            _array = new IShielded[InitSize];
+        }
+
+        private SimpleHashSet(SimpleHashSet template)
+        {
+            _count = template.Count;
+            _mask = template._mask;
+            _array = template._array;
+        }
 
         bool AddInternal(IShielded item)
         {
@@ -62,6 +75,21 @@ namespace Shielded
                 if (oldArray[i] != null)
                     Place(oldArray[i]);
             }
+        }
+
+        /// <summary>
+        /// Returns a clone which actually uses the same underlying storage. This is used
+        /// because the CommitCheck method grows the Enlisted set of the current transaction
+        /// if that transaction had commutes. While this growing is happening, some other thread
+        /// might still be checking those items for overlaps (in
+        /// <see cref="TransactionList.GetWriteLock"/>). That other thread can handle items added
+        /// to the same array, but it cannot handle the array growing! (Specifically, it just needs
+        /// _array to be constant.)
+        /// </summary>
+        /// <returns>The clone.</returns>
+        public SimpleHashSet SharingClone()
+        {
+            return new SimpleHashSet(this);
         }
 
         /// <summary>

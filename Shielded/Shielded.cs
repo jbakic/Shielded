@@ -60,7 +60,7 @@ namespace Shielded
             SpinWait.SpinUntil(() =>
             {
                 var w = _writerStamp;
-                return w == null ||  w.Version == null || w.Version > Shield.ReadStamp;
+                return w == null || w.Version == null || w.Version > Shield.ReadStamp;
             });
 #endif
         }
