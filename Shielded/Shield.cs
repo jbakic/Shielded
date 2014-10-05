@@ -328,12 +328,7 @@ namespace Shielded
                 try
                 {
                     _localItems = new TransItems();
-                    // this should not be interrupted by an Abort. the moment between
-                    // getting the ticket and putting it in _readTicket...
-                    try {} finally
-                    {
-                        _readTicket = VersionList.GetReaderTicket();
-                    }
+                    VersionList.GetReaderTicket(out _readTicket);
 
                     act();
                     if (DoCommit())

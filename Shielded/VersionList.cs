@@ -39,20 +39,28 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Reader should keep a reference to his ticket, and just set it to null once
-        /// done with it. When the GC finalizes it, old versions will be marked for trimming.
+        /// Reader should keep a reference to his ticket, and release it with a call
+        /// to <see cref="ReleaseReaderTicket"/> when done.
         /// </summary>
-        public static ReadTicket GetReaderTicket()
+        public static void GetReaderTicket(out ReadTicket ticket)
         {
-            var curr = _current;
-            // TODO: This here is a problem, although no test has revealed it. Specifically,
-            // this thread could be switched out after taking _current, and then another thread
-            // could come in, take the _current, commit a new version and release it's ticket.
-            // At that point, _current points to the new version, and our ref is old, and it's
-            // reader count is zero, we have not incremented it yet. So, trimming could freely
-            // remove data that we need.
-            Interlocked.Increment(ref curr.ReaderCount);
-            return curr;
+            try {} finally
+            {
+                while (true)
+                {
+                    var curr = _current;
+                    Interlocked.Increment(ref curr.ReaderCount);
+                    // if the curr changed before we incremented, it could have theoretically
+                    // been trimmed away. so, if the _current changed, drop the old, and take the new.
+                    if (curr == _current)
+                    {
+                        ticket = curr;
+                        break;
+                    }
+                    else
+                        Interlocked.Decrement(ref curr.ReaderCount);
+                }
+            }
         }
 
         /// <summary>
