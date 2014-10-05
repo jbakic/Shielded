@@ -413,7 +413,7 @@ namespace Shielded
             var commutes = _localItems.Commutes;
             while (true)
             {
-                _readTicket = new ReadTicket() { Stamp = VersionList.GetUntrackedReadStamp() };
+                _readTicket = VersionList.GetUntrackedReadStamp();
                 commutedItems = new TransItems();
                 try
                 {

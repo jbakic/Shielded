@@ -6,13 +6,32 @@ using System.Linq;
 
 namespace Shielded
 {
-    internal class ReadTicket
+    /// <summary>
+    /// Issued by the <see cref="VersionList"/> static class, tells holders
+    /// which version of data they should read. The VersionList will
+    /// keep track of issued tickets for the purpose of safe trimming of
+    /// old versions.
+    /// </summary>
+    internal abstract class ReadTicket
     {
-        public long Stamp;
+        /// <summary>
+        /// The version number of the ticket.
+        /// </summary>
+        public long Stamp { get; protected set; }
     }
 
-    internal class WriteTicket : ReadTicket
+    /// <summary>
+    /// Issued by the <see cref="VersionList"/> static class to writers, telling
+    /// them which version number to use when writing, and allwing them to
+    /// report changes they make back to the VersionList.
+    /// </summary>
+    internal abstract class WriteTicket : ReadTicket
     {
+        /// <summary>
+        /// After writers complete a write, they must place into this field
+        /// an enumerable of the fields they changed. Needed for trimming old
+        /// versions.
+        /// </summary>
         public IEnumerable<IShielded> Changes;
     }
 
@@ -27,6 +46,11 @@ namespace Shielded
         {
             public int ReaderCount;
             public VersionEntry Later;
+
+            public void SetStamp(long val)
+            {
+                Stamp = val;
+            }
         }
 
         private static VersionEntry _current;
@@ -67,9 +91,9 @@ namespace Shielded
         /// For commute running block, because it knows that the ticket taken by
         /// the main transaction is all the protection it needs.
         /// </summary>
-        public static long GetUntrackedReadStamp()
+        public static ReadTicket GetUntrackedReadStamp()
         {
-            return _current.Stamp;
+            return _current;
         }
 
         /// <summary>
@@ -146,8 +170,9 @@ namespace Shielded
             {
                 while (current.Later != null)
                     current = current.Later;
-                newNode.Stamp = current.Stamp + 1;
-                stamp.Version = newNode.Stamp;
+                var newStamp = current.Stamp + 1;
+                newNode.SetStamp(newStamp);
+                stamp.Version = newStamp;
             } while (Interlocked.CompareExchange(ref current.Later, newNode, null) != null);
             MoveCurrent();
             return newNode;
