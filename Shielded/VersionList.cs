@@ -180,10 +180,15 @@ namespace Shielded
 
         private static void MoveCurrent()
         {
-            var current = _current;
-            while (current.Later != null)
-                current = current.Later;
-            _current = current;
+            while (true)
+            {
+                var current = _current;
+                if (current.Later == null)
+                    break;
+                while (current.Later != null)
+                    current = current.Later;
+                _current = current;
+            }
         }
     }
 }
