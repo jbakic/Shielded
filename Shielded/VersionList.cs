@@ -30,7 +30,8 @@ namespace Shielded
         /// <summary>
         /// After writers complete a write, they must place into this field
         /// an enumerable of the fields they changed. Needed for trimming old
-        /// versions.
+        /// versions. It is crucial to set it to something != null, otherwise
+        /// trimming will never get past this version!
         /// </summary>
         public IEnumerable<IShielded> Changes;
     }
@@ -160,11 +161,14 @@ namespace Shielded
         /// GetReaderTicket will return your stamp number before it has been
         /// written into your stamp lock! After completing your write, place your
         /// changes into the ticket, and this class will trim the old versions at
-        /// the correct time.
+        /// the correct time. It is critical that this be done, which is why this
+        /// method returns it as an out param - to make sure no exception can
+        /// cause us to lose the ref to the ticket, if it is already in the chain.
         /// </summary>
-        public static WriteTicket NewVersion(WriteStamp stamp)
+        public static void NewVersion(WriteStamp stamp, out WriteTicket ticket)
         {
             var newNode = new VersionEntry();
+            ticket = newNode;
             var current = _current;
             do
             {
@@ -175,7 +179,6 @@ namespace Shielded
                 stamp.Version = newStamp;
             } while (Interlocked.CompareExchange(ref current.Later, newNode, null) != null);
             MoveCurrent();
-            return newNode;
         }
 
         private static void MoveCurrent()

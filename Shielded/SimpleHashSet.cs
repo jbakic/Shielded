@@ -85,7 +85,7 @@ namespace Shielded
         /// because the CommitCheck method grows the Enlisted set of the current transaction
         /// if that transaction had commutes. While this growing is happening, some other thread
         /// might still be checking those items for overlaps (in
-        /// <see cref="TransactionList.GetWriteLock"/>). That other thread can handle items added
+        /// <see cref="CommitLocker.Enter"/>). That other thread can handle items added
         /// to the same array, but it cannot handle the array growing! (Specifically, it just needs
         /// _array to be constant.)
         /// </summary>

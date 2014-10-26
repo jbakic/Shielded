@@ -95,12 +95,6 @@ namespace Shielded
             }
         }
 
-        /// <summary>
-        /// Multi-set containing read stamps of all open transactions. Used to determine
-        /// smallest open stamp when trimming old copies.
-        /// </summary>
-        //private static VersionList _transactions = new VersionList();
-
         [ThreadStatic]
         private static TransItems _localItems;
         [ThreadStatic]
@@ -442,6 +436,15 @@ namespace Shielded
             return item.HasChanges;
         }
 
+        /// <summary>
+        /// Performs the commit check, returning the outcome. Also returns a write ticket.
+        /// The ticket is obtained before leaving the lock here, so that any thread which
+        /// later conflicts with us will surely (in its retry) read the version we are now
+        /// writing. The idea is to avoid senseless repetitions, retries after which a
+        /// thread would again read old data and be doomed to fail again.
+        /// It is critical that this ticket be marked when complete (i.e. Changes set to
+        /// something non-null), because trimming will not go past it until this happens.
+        /// </summary>
         static bool CommitCheck(out WriteTicket ticket)
         {
             ticket = null;
@@ -482,7 +485,6 @@ repeatCommutes: if (brokeInCommutes)
                         throw new InvalidOperationException("Invalid commute - conflict with transaction.");
                 }
 
-//                lock (_stampLock)
                 CommitLock theLock = null;
                 var writeStamp = new WriteStamp(
                     Thread.CurrentThread.ManagedThreadId);
@@ -535,7 +537,7 @@ repeatCommutes: if (brokeInCommutes)
 #endif
                     }
                     else
-                        ticket = VersionList.NewVersion(writeStamp);
+                        VersionList.NewVersion(writeStamp, out ticket);
 
                     if (theLock != null)
                         CommitLocker.Exit(theLock);
@@ -563,59 +565,79 @@ repeatCommutes: if (brokeInCommutes)
                 ((SimpleHashSet)items.Enlisted).HasChanges;
 #endif
 
-            WriteTicket ticket = null;
             if (!hasChanges)
             {
-#if USE_STD_HASHSET
-                foreach (var item in items.Enlisted)
-                    item.Commit();
-#else
-                ((SimpleHashSet)items.Enlisted).CommitWoChanges();
-#endif
-
-                CloseTransaction();
-
-                if (items.Fx != null)
-                    items.Fx.Select(f => (Action)f.Commit).SafeRun();
-
-                return true;
-            }
-            else if (CommitCheck(out ticket))
-            {
-                List<IShielded> trigger;
-                // this must not be interrupted by a Thread.Abort!
-                try { }
-                finally
-                {
-#if USE_STD_HASHSET
-                    trigger = new List<IShielded>();
-                    foreach (var item in items.Enlisted)
-                    {
-                        if (item.HasChanges) trigger.Add(item);
-                        item.Commit();
-                    }
-#else
-                    trigger = ((SimpleHashSet)items.Enlisted).Commit();
-#endif
-                    ticket.Changes = trigger;
-                    CloseTransaction();
-                }
-
-                (items.Fx != null ? items.Fx.Select(f => (Action)f.Commit) : null)
-                    .SafeConcat(SubscriptionContext.PostCommit.Trigger(trigger))
-                    .SafeRun();
-
+                CommitWoChanges();
                 return true;
             }
             else
             {
-                CloseTransaction();
-
-                if (items.Fx != null)
-                    items.Fx.Select(f => (Action)f.Rollback).SafeRun();
-
-                return false;
+                WriteTicket ticket = null;
+                try
+                {
+                    if (CommitCheck(out ticket))
+                    {
+                        CommitWChanges(ticket);
+                        return true;
+                    }
+                    else
+                    {
+                        // items already rolled back, so just this:
+                        CloseTransaction();
+                        if (items.Fx != null)
+                            items.Fx.Select(f => (Action)f.Rollback).SafeRun();
+                        return false;
+                    }
+                }
+                finally
+                {
+                    if (ticket != null && ticket.Changes == null)
+                        ticket.Changes = Enumerable.Empty<IShielded>();
+                }
             }
+        }
+
+        private static void CommitWoChanges()
+        {
+            var items = _localItems;
+#if USE_STD_HASHSET
+            foreach (var item in items.Enlisted)
+                item.Commit();
+#else
+            ((SimpleHashSet)items.Enlisted).CommitWoChanges();
+#endif
+
+            CloseTransaction();
+
+            if (items.Fx != null)
+                items.Fx.Select(f => (Action)f.Commit).SafeRun();
+        }
+
+        private static void CommitWChanges(WriteTicket ticket)
+        {
+            var items = _localItems;
+            List<IShielded> trigger;
+            // this must not be interrupted by a Thread.Abort!
+            try { }
+            finally
+            {
+#if USE_STD_HASHSET
+                trigger = new List<IShielded>();
+                foreach (var item in items.Enlisted)
+                {
+                    if (item.HasChanges) trigger.Add(item);
+                    item.Commit();
+                }
+#else
+                trigger = ((SimpleHashSet)items.Enlisted).Commit();
+#endif
+                ticket.Changes = trigger;
+                CloseTransaction();
+            }
+
+            (items.Fx != null ? items.Fx.Select(f => (Action)f.Commit) : null)
+                .SafeConcat(SubscriptionContext.PostCommit.Trigger(trigger))
+                .SafeRun();
         }
 
         private static IEnumerable<T> SafeConcat<T>(this IEnumerable<T> first, IEnumerable<T> second)
