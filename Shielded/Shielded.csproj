@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <ProductVersion>10.0.0</ProductVersion>
+    <ProductVersion>8.0.30703</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}</ProjectGuid>
     <OutputType>Library</OutputType>
@@ -60,13 +60,13 @@
     <Compile Include="ShieldedSeq.cs" />
     <Compile Include="ShieldedTree.cs" />
     <Compile Include="LocalStorage.cs" />
-    <Compile Include="VersionList.cs" />
     <Compile Include="ShieldedEvent.cs" />
     <Compile Include="Actions.cs" />
     <Compile Include="SubscriptionContext.cs" />
     <Compile Include="Subscription.cs" />
     <Compile Include="SimpleHashSet.cs" />
     <Compile Include="WriteStamp.cs" />
+    <Compile Include="VersionList.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>

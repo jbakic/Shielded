@@ -23,13 +23,21 @@ namespace Shielded
         private const int SizeShift = 3;
         private const int InitSize = 1 << SizeShift;
 
-        private int _mask = InitSize - 1;
-        private IShielded[] _array = new IShielded[InitSize];
+        private int _mask;
+        private IShielded[] _array;
+        private int _bloom;
+
+        public SimpleHashSet()
+        {
+            _mask = InitSize - 1;
+            _array = new IShielded[InitSize];
+        }
 
         bool AddInternal(IShielded item)
         {
             if (Place(item))
             {
+                _bloom = _bloom | (1 << (item.PseudoHash & 0x1F));
                 if (++_count >= (_mask ^ (_mask >> 2)))
                     Increase();
                 return true;
@@ -159,6 +167,9 @@ namespace Shielded
 
         public bool Contains(IShielded item)
         {
+            if (((1 << (item.PseudoHash & 0x1F)) & _bloom) == 0)
+                return false;
+
             var i = item.PseudoHash & _mask;
             for ( ; _array[i] != null && _array[i] != item; i = (++i & _mask)) ;
             return _array[i] != null;
@@ -236,6 +247,8 @@ namespace Shielded
             var otherAsSet = other as SimpleHashSet;
             if (otherAsSet == null)
                 return other.Any(Contains);
+            if ((otherAsSet._bloom & this._bloom) == 0)
+                return false;
             for (int i = 0; i < otherAsSet._array.Length; i++)
                 if (otherAsSet._array[i] != null && Contains(otherAsSet._array[i]))
                     return true;
@@ -256,7 +269,7 @@ namespace Shielded
                 return counter == _count;
             }
 
-            if (otherAsSet._count != _count)
+            if (otherAsSet._bloom != this._bloom || otherAsSet._count != _count)
                 return false;
             for (int i = 0; i < otherAsSet._array.Length; i++)
                 if (otherAsSet._array[i] != null && !Contains(otherAsSet._array[i]))

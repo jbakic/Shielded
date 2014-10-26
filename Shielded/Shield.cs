@@ -8,10 +8,8 @@ namespace Shielded
 {
     public static class Shield
     {
-        private static long _lastStamp;
-
         [ThreadStatic]
-        private static long? _readStamp;
+        private static ReadTicket _readTicket;
         /// <summary>
         /// Current transaction's read stamp, i.e. the latest version it can read.
         /// Thread-static. Throws if called out of transaction.
@@ -20,7 +18,7 @@ namespace Shielded
         {
             get
             {
-                return _readStamp.Value;
+                return _readTicket.Stamp;
             }
         }
 
@@ -31,13 +29,13 @@ namespace Shielded
         {
             get
             {
-                return _readStamp.HasValue;
+                return _readTicket != null;
             }
         }
 
         public static void AssertInTransaction()
         {
-            if (_readStamp == null)
+            if (_readTicket == null)
                 throw new InvalidOperationException("Operation needs to be in a transaction.");
         }
 
@@ -96,12 +94,6 @@ namespace Shielded
                         Fx.AddRange(other.Fx);
             }
         }
-
-        /// <summary>
-        /// Multi-set containing read stamps of all open transactions. Used to determine
-        /// smallest open stamp when trimming old copies.
-        /// </summary>
-        private static VersionList _transactions = new VersionList();
 
         [ThreadStatic]
         private static TransItems _localItems;
@@ -293,7 +285,7 @@ namespace Shielded
         /// </summary>
         public static void SideEffect(Action fx, Action rollbackFx = null)
         {
-            if (!_readStamp.HasValue)
+            if (!IsInTransaction)
             {
                 if (fx != null) fx();
                 return;
@@ -319,7 +311,7 @@ namespace Shielded
         /// </summary>
         public static void InTransaction(Action act)
         {
-            if (_readStamp.HasValue)
+            if (IsInTransaction)
             {
                 act();
                 return;
@@ -330,23 +322,16 @@ namespace Shielded
                 try
                 {
                     _localItems = new TransItems();
-                    // this should not be interrupted by an Abort. the moment between
-                    // adding the version into the list, and writing it into _current..
-                    try { }
-                    finally
-                    {
-                        _readStamp = _transactions.SafeAdd(
-                            () => Interlocked.Read(ref _lastStamp));
-                    }
+                    VersionList.GetReaderTicket(out _readTicket);
 
                     act();
                     if (DoCommit())
                         return;
                 }
-                catch (TransException ex) { }
+                catch (TransException) { }
                 finally
                 {
-                    if (_readStamp.HasValue)
+                    if (_readTicket != null)
                         DoRollback();
                 }
             } while (true);
@@ -422,7 +407,7 @@ namespace Shielded
             var commutes = _localItems.Commutes;
             while (true)
             {
-                _readStamp = Interlocked.Read(ref _lastStamp);
+                _readTicket = VersionList.GetUntrackedReadStamp();
                 commutedItems = new TransItems();
                 try
                 {
@@ -433,7 +418,7 @@ namespace Shielded
                     }, merge: false);
                     return;
                 }
-                catch (TransException ex)
+                catch (TransException)
                 {
 #if USE_STD_HASHSET
                     foreach (var item in commutedItems.Enlisted)
@@ -446,18 +431,28 @@ namespace Shielded
             }
         }
 
-        private static object _stampLock = new object();
-
         private static bool HasChanges(IShielded item)
         {
             return item.HasChanges;
         }
 
-        static bool CommitCheck(out WriteStamp writeStamp)
+        private static object _checkLock = new object();
+
+        /// <summary>
+        /// Performs the commit check, returning the outcome. Also returns a write ticket.
+        /// The ticket is obtained before leaving the lock here, so that any thread which
+        /// later conflicts with us will surely (in its retry) read the version we are now
+        /// writing. The idea is to avoid senseless repetitions, retries after which a
+        /// thread would again read old data and be doomed to fail again.
+        /// It is critical that this ticket be marked when complete (i.e. Changes set to
+        /// something non-null), because trimming will not go past it until this happens.
+        /// </summary>
+        static bool CommitCheck(out WriteTicket ticket)
         {
+            ticket = null;
             var items = _localItems;
             TransItems commutedItems = null;
-            long oldReadStamp = _readStamp.Value;
+            var oldReadTicket = _readTicket;
             bool commit = false;
             bool brokeInCommutes = items.Commutes != null && items.Commutes.Count > 0;
 
@@ -485,12 +480,10 @@ repeatCommutes: if (brokeInCommutes)
                         throw new InvalidOperationException("Invalid commute - conflict with transaction.");
                 }
 
-                lock (_stampLock)
+                var writeStamp = new WriteStamp(
+                    Thread.CurrentThread.ManagedThreadId);
+                lock (_checkLock)
                 {
-                    writeStamp = new WriteStamp(
-                        Thread.CurrentThread.ManagedThreadId,
-                        Interlocked.Read(ref _lastStamp) + 1);
-
                     try
                     {
                         if (brokeInCommutes)
@@ -503,7 +496,7 @@ repeatCommutes: if (brokeInCommutes)
                                 goto repeatCommutes;
 #endif
 
-                        _readStamp = oldReadStamp;
+                        _readTicket = oldReadTicket;
                         brokeInCommutes = false;
 #if USE_STD_HASHSET
                         foreach (var item in items.Enlisted)
@@ -514,7 +507,6 @@ repeatCommutes: if (brokeInCommutes)
                             return false;
 #endif
 
-                        Interlocked.Increment(ref _lastStamp);
                         commit = true;
                     }
                     finally
@@ -535,14 +527,16 @@ repeatCommutes: if (brokeInCommutes)
                                 ((SimpleHashSet)items.Enlisted).Rollback();
 #endif
                         }
+                        else
+                            VersionList.NewVersion(writeStamp, out ticket);
                     }
                 }
                 return true;
             }
             finally
             {
-                if (_readStamp != oldReadStamp)
-                    _readStamp = oldReadStamp;
+                if (_readTicket != oldReadTicket)
+                    _readTicket = oldReadTicket;
                 // note that this changes the _localItems.Enlisted hashset to contain the
                 // commute-enlists as well, regardless of the check outcome.
                 if (commutedItems != null)
@@ -560,58 +554,79 @@ repeatCommutes: if (brokeInCommutes)
                 ((SimpleHashSet)items.Enlisted).HasChanges;
 #endif
 
-            WriteStamp writeStamp = null;
-            bool commit = true;
             if (!hasChanges)
             {
-#if USE_STD_HASHSET
-                foreach (var item in items.Enlisted)
-                    item.Commit();
-#else
-                ((SimpleHashSet)items.Enlisted).CommitWoChanges();
-#endif
-
-                CloseTransaction();
-
-                if (items.Fx != null)
-                    items.Fx.Select(f => (Action)f.Commit).SafeRun();
-            }
-            else if (CommitCheck(out writeStamp))
-            {
-                List<IShielded> trigger;
-                // this must not be interrupted by a Thread.Abort!
-                try { }
-                finally
-                {
-#if USE_STD_HASHSET
-                    trigger = new List<IShielded>();
-                    foreach (var item in items.Enlisted)
-                    {
-                        if (item.HasChanges) trigger.Add(item);
-                        item.Commit();
-                    }
-#else
-                    trigger = ((SimpleHashSet)items.Enlisted).Commit();
-#endif
-                    RegisterCopies(writeStamp.Version, trigger);
-                    CloseTransaction();
-                }
-
-                (items.Fx != null ? items.Fx.Select(f => (Action)f.Commit) : null)
-                    .SafeConcat(SubscriptionContext.PostCommit.Trigger(trigger))
-                    .SafeRun();
+                CommitWoChanges();
+                return true;
             }
             else
             {
-                commit = false;
-                CloseTransaction();
+                WriteTicket ticket = null;
+                try
+                {
+                    if (CommitCheck(out ticket))
+                    {
+                        CommitWChanges(ticket);
+                        return true;
+                    }
+                    else
+                    {
+                        // items already rolled back, so just this:
+                        CloseTransaction();
+                        if (items.Fx != null)
+                            items.Fx.Select(f => (Action)f.Rollback).SafeRun();
+                        return false;
+                    }
+                }
+                finally
+                {
+                    if (ticket != null && ticket.Changes == null)
+                        ticket.Changes = Enumerable.Empty<IShielded>();
+                }
+            }
+        }
 
-                if (items.Fx != null)
-                    items.Fx.Select(f => (Action)f.Rollback).SafeRun();
+        private static void CommitWoChanges()
+        {
+            var items = _localItems;
+#if USE_STD_HASHSET
+            foreach (var item in items.Enlisted)
+                item.Commit();
+#else
+            ((SimpleHashSet)items.Enlisted).CommitWoChanges();
+#endif
+
+            CloseTransaction();
+
+            if (items.Fx != null)
+                items.Fx.Select(f => (Action)f.Commit).SafeRun();
+        }
+
+        private static void CommitWChanges(WriteTicket ticket)
+        {
+            var items = _localItems;
+            List<IShielded> trigger;
+            // this must not be interrupted by a Thread.Abort!
+            try { }
+            finally
+            {
+#if USE_STD_HASHSET
+                trigger = new List<IShielded>();
+                foreach (var item in items.Enlisted)
+                {
+                    if (item.HasChanges) trigger.Add(item);
+                    item.Commit();
+                }
+#else
+                trigger = ((SimpleHashSet)items.Enlisted).Commit();
+#endif
+                ticket.Changes = trigger;
+                CloseTransaction();
             }
 
-            TrimCopies();
-            return commit;
+            (items.Fx != null ? items.Fx.Select(f => (Action)f.Commit) : null)
+                .SafeConcat(SubscriptionContext.PostCommit.Trigger(trigger))
+                .SafeRun();
         }
 
         private static IEnumerable<T> SafeConcat<T>(this IEnumerable<T> first, IEnumerable<T> second)
@@ -637,8 +652,6 @@ repeatCommutes: if (brokeInCommutes)
 
             if (items.Fx != null)
                 items.Fx.Select(f => (Action)f.Rollback).SafeRun();
-
-            TrimCopies();
         }
 
         private static void CloseTransaction()
@@ -646,67 +659,9 @@ repeatCommutes: if (brokeInCommutes)
             try { }
             finally
             {
-                _transactions.Remove(_readStamp.Value);
-                _readStamp = null;
+                VersionList.ReleaseReaderTicket(_readTicket);
+                _readTicket = null;
                 _localItems = null;
-            }
-        }
-
-
-
-        // the long is their current version (at the time the copies were registered), but being
-        // in this list indicates they have something older.
-        private static ConcurrentQueue<Tuple<long, IEnumerable<IShielded>>> _copiesByVersion =
-            new ConcurrentQueue<Tuple<long, IEnumerable<IShielded>>>();
-
-        private static void RegisterCopies(long version, IEnumerable<IShielded> copies)
-        {
-            if (copies.Any())
-                _copiesByVersion.Enqueue(Tuple.Create(version, copies));
-        }
-
-        private static int _trimFlag = 0;
-        private static int _trimClock = 0;
-
-        private static void TrimCopies()
-        {
-            // trimming won't start every time..
-            if ((Interlocked.Increment(ref _trimClock) & 0xF) != 0)
-                return;
-
-            bool tookFlag = false;
-            try
-            {
-                try { }
-                finally
-                {
-                    tookFlag = Interlocked.CompareExchange(ref _trimFlag, 1, 0) == 0;
-                }
-                if (!tookFlag) return;
-
-                var lastStamp = Interlocked.Read(ref _lastStamp);
-                var minTransactionNo = _transactions.Min() ?? lastStamp;
-
-                Tuple<long, IEnumerable<IShielded>> curr;
-                var toTrim = 
-#if USE_STD_HASHSET
-                    new HashSet<IShielded>();
-#else
-                    new SimpleHashSet();
-#endif
-                while (_copiesByVersion.TryPeek(out curr) && curr.Item1 <= minTransactionNo)
-                {
-                    toTrim.UnionWith(curr.Item2);
-                    _copiesByVersion.TryDequeue(out curr);
-                }
-
-                foreach (var sh in toTrim)
-                    sh.TrimCopies(minTransactionNo);
-            }
-            finally
-            {
-                if (tookFlag)
-                    Interlocked.Exchange(ref _trimFlag, 0);
             }
         }
 

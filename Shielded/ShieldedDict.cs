@@ -60,17 +60,17 @@ namespace Shielded
 #if SERVER
             var stamp = Shield.ReadStamp;
             WriteStamp w;
-            if (_writeStamps.TryGetValue(key, out w) && w.Version <= stamp)
+            if (_writeStamps.TryGetValue(key, out w) && w.Version != null && w.Version <= stamp)
                 lock (_localDict)
                 {
-                    while (_writeStamps.TryGetValue(key, out w) && w.Version <= stamp)
+                    while (_writeStamps.TryGetValue(key, out w) && w.Version != null && w.Version <= stamp)
                         Monitor.Wait(_localDict);
                 }
 #else
             SpinWait.SpinUntil(() =>
             {
                 WriteStamp w;
-                return !_writeStamps.TryGetValue(key, out w) || w.Version > Shield.ReadStamp;
+                return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
             });
 #endif
         }
