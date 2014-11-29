@@ -72,11 +72,10 @@ namespace Shielded
 
         private class TransItems
         {
-            public ISet<IShielded> Enlisted =
 #if USE_STD_HASHSET
-                new HashSet<IShielded>();
+            public ISet<IShielded> Enlisted = new HashSet<IShielded>();
 #else
-                new SimpleHashSet();
+            public SimpleHashSet Enlisted = new SimpleHashSet();
 #endif
             public List<SideEffect> Fx;
             public List<Commute> Commutes;
@@ -405,17 +404,18 @@ namespace Shielded
         static void RunCommutes(out TransItems commutedItems)
         {
             var commutes = _localItems.Commutes;
+            Action commuteRunner = () => {
+                for (int i = 0; i < commutes.Count; i++)
+                    commutes[i].Perform();
+            };
+
             while (true)
             {
                 _readTicket = VersionList.GetUntrackedReadStamp();
                 commutedItems = new TransItems();
                 try
                 {
-                    WithTransactionContext(commutedItems, () =>
-                    {
-                        for (int i = 0; i < commutes.Count; i++)
-                            commutes[i].Perform();
-                    }, merge: false);
+                    WithTransactionContext(commutedItems, commuteRunner, merge: false);
                     return;
                 }
                 catch (TransException)
@@ -424,7 +424,7 @@ namespace Shielded
                     foreach (var item in commutedItems.Enlisted)
                         item.Rollback();
 #else
-                    ((SimpleHashSet)commutedItems.Enlisted).Rollback();
+                    commutedItems.Enlisted.Rollback();
 #endif
                     commutedItems = null;
                 }
@@ -492,7 +492,7 @@ repeatCommutes: if (brokeInCommutes)
                                 if (!item.CanCommit(writeStamp))
                                     goto repeatCommutes;
 #else
-                            if (!((SimpleHashSet)commutedItems.Enlisted).CanCommit(writeStamp))
+                            if (!commutedItems.Enlisted.CanCommit(writeStamp))
                                 goto repeatCommutes;
 #endif
 
@@ -503,7 +503,7 @@ repeatCommutes: if (brokeInCommutes)
                             if (!item.CanCommit(writeStamp))
                                 return false;
 #else
-                        if (!((SimpleHashSet)items.Enlisted).CanCommit(writeStamp))
+                        if (!items.Enlisted.CanCommit(writeStamp))
                             return false;
 #endif
 
@@ -522,9 +522,9 @@ repeatCommutes: if (brokeInCommutes)
                                     item.Rollback();
 #else
                             if (commutedItems != null)
-                                ((SimpleHashSet)commutedItems.Enlisted).Rollback();
+                                commutedItems.Enlisted.Rollback();
                             if (!brokeInCommutes)
-                                ((SimpleHashSet)items.Enlisted).Rollback();
+                                items.Enlisted.Rollback();
 #endif
                         }
                         else
@@ -551,7 +551,7 @@ repeatCommutes: if (brokeInCommutes)
 #if USE_STD_HASHSET
                 items.Enlisted.Any(HasChanges);
 #else
-                ((SimpleHashSet)items.Enlisted).HasChanges;
+                items.Enlisted.HasChanges;
 #endif
 
             if (!hasChanges)
@@ -574,7 +574,7 @@ repeatCommutes: if (brokeInCommutes)
                         // items already rolled back, so just this:
                         CloseTransaction();
                         if (items.Fx != null)
-                            items.Fx.Select(f => (Action)f.Rollback).SafeRun();
+                            items.Fx.Select(f => f.OnRollback).SafeRun();
                         return false;
                     }
                 }
@@ -593,13 +593,13 @@ repeatCommutes: if (brokeInCommutes)
             foreach (var item in items.Enlisted)
                 item.Commit();
 #else
-            ((SimpleHashSet)items.Enlisted).CommitWoChanges();
+            items.Enlisted.CommitWoChanges();
 #endif
 
             CloseTransaction();
 
             if (items.Fx != null)
-                items.Fx.Select(f => (Action)f.Commit).SafeRun();
+                items.Fx.Select(f => f.OnCommit).SafeRun();
         }
 
         private static void CommitWChanges(WriteTicket ticket)
@@ -618,13 +618,13 @@ repeatCommutes: if (brokeInCommutes)
                     item.Commit();
                 }
 #else
-                trigger = ((SimpleHashSet)items.Enlisted).Commit();
+                trigger = items.Enlisted.Commit();
 #endif
                 ticket.Changes = trigger;
                 CloseTransaction();
             }
 
-            (items.Fx != null ? items.Fx.Select(f => (Action)f.Commit) : null)
+            (items.Fx != null ? items.Fx.Select(f => f.OnCommit) : null)
                 .SafeConcat(SubscriptionContext.PostCommit.Trigger(trigger))
                 .SafeRun();
         }
@@ -646,12 +646,12 @@ repeatCommutes: if (brokeInCommutes)
             foreach (var item in items.Enlisted)
                 item.Rollback();
 #else
-            ((SimpleHashSet)items.Enlisted).Rollback();
+            items.Enlisted.Rollback();
 #endif
             CloseTransaction();
 
             if (items.Fx != null)
-                items.Fx.Select(f => (Action)f.Rollback).SafeRun();
+                items.Fx.Select(f => f.OnRollback).SafeRun();
         }
 
         private static void CloseTransaction()

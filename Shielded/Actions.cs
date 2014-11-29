@@ -13,14 +13,14 @@ namespace Shielded
         /// </summary>
         public static void SafeRun(this IEnumerable<Action> actions)
         {
-            if (actions == null || !actions.Any()) return;
+            if (actions == null) return;
 
             List<Exception> exceptions = null;
             foreach (var act in actions)
             {
                 try
                 {
-                    act();
+                    if (act != null) act();
                 }
                 catch (Exception ex)
                 {
