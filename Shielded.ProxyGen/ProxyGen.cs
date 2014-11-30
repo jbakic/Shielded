@@ -156,37 +156,17 @@ namespace Shielded.ProxyGen
                 FieldName = pi.Name,
             }));
 
+            // call base setter first, so they can see the old value (using getter) and new (using value)
             mp.SetStatements.Add(new CodeAssignStatement(
                 new CodePropertyReferenceExpression() {
                     TargetObject = new CodeBaseReferenceExpression(),
                     PropertyName = pi.Name,
                 }, new CodePropertySetValueReferenceExpression()));
-            mp.SetStatements.Add(new CodeVariableDeclarationStatement(structType, "a") {
-                InitExpression = new CodePropertyReferenceExpression() {
-                    TargetObject = new CodeFieldReferenceExpression() {
-                        TargetObject = new CodeThisReferenceExpression(),
-                        FieldName = ShieldedFieldName,
-                    },
-                    PropertyName = ShieldedValueProperty,
-                },
-            });
-            mp.SetStatements.Add(new CodeAssignStatement(
-                new CodePropertyReferenceExpression() {
-                    TargetObject = new CodeVariableReferenceExpression("a"),
-                    PropertyName = pi.Name,
-                },
-                new CodePropertySetValueReferenceExpression()
-            ));
-            var assignment = new CodeAssignStatement(
-                 new CodePropertyReferenceExpression() {
-                    TargetObject = new CodeFieldReferenceExpression() {
-                        FieldName = ShieldedFieldName,
-                        TargetObject = new CodeThisReferenceExpression(),
-                    },
-                    PropertyName = ShieldedValueProperty,
-                },
-                new CodeVariableReferenceExpression("a"));
-            mp.SetStatements.Add(assignment);
+            // using Modify has a huge advantage - if a class is big, we don't want to be passing
+            // copies of the underlying struct around.
+            mp.SetStatements.Add(new CodeSnippetStatement(
+                string.Format("{0}.Modify((ref {1} a) => a.{2} = value);",
+                    ShieldedFieldName, structType, pi.Name)));
 
             return mp;
         }
