@@ -14,11 +14,12 @@ namespace Shielded
     {
         private class ItemKeeper
         {
-            public T Value;
+            public readonly T Value;
             public readonly Shielded<ItemKeeper> Next;
 
-            public ItemKeeper(ItemKeeper initialNext)
+            public ItemKeeper(T val, ItemKeeper initialNext)
             {
+                Value = val;
                 Next = new Shielded<ItemKeeper>(initialNext);
             }
 
@@ -41,10 +42,7 @@ namespace Shielded
             ItemKeeper item = null;
             for (int i = items.Length - 1; i >= 0; i--)
             {
-                item = new ItemKeeper(item)
-                {
-                    Value = items[i]
-                };
+                item = new ItemKeeper(items[i], item);
                 if (_tail == null)
                     _tail = new Shielded<ItemKeeper>(item);
             }
@@ -75,10 +73,7 @@ namespace Shielded
 
         public void Prepend(T val)
         {
-            var keeper = new ItemKeeper(_head)
-            {
-                Value = val
-            };
+            var keeper = new ItemKeeper(val, _head);
             if (_head.Value == null)
                 _tail.Value = keeper;
             _head.Value = keeper;
@@ -115,10 +110,7 @@ namespace Shielded
         /// </summary>
         public void Append(T val)
         {
-            var newItem = new ItemKeeper(null)
-            {
-                Value = val
-            };
+            var newItem = new ItemKeeper(val, null);
             Shield.EnlistCommute(() => {
                 if (_head.Value == null)
                 {
@@ -132,8 +124,8 @@ namespace Shielded
                         t = newItem;
                     });
                 }
-            }, _head, _tail); // the commute degenerates if you read from the seq..
-            _count.Commute((ref int c) => c++);
+                _count.Modify((ref int c) => c++);
+            }, _head, _tail, _count); // the commute degenerates if you read from the seq..
         }
 
         private Shielded<ItemKeeper> RefToIndex(int index)
@@ -160,10 +152,7 @@ namespace Shielded
                 // to make this op transactional, we must create a new ItemKeeper and
                 // insert him in the list.
                 var refInd = RefToIndex(index);
-                var newItem = new ItemKeeper(refInd.Value.Next)
-                {
-                    Value = value
-                };
+                var newItem = new ItemKeeper(value, refInd.Value.Next);
                 if (_tail.Value == refInd.Value)
                     _tail.Value = newItem;
                 refInd.Modify((ref ItemKeeper r) => {
@@ -194,30 +183,37 @@ namespace Shielded
         {
             Shield.AssertInTransaction();
             var curr = _head;
+            var tail = _tail.Value;
             ItemKeeper previous = null;
             int removed = 0;
-            while (curr.Value != null)
+            try
             {
-                if (condition(curr.Value.Value))
+                while (curr.Value != null)
                 {
-                    removed++;
-                    if (_tail.Value == curr.Value)
+                    if (condition(curr.Value.Value))
                     {
-                        _tail.Value = previous;
-                        if (curr == _head)
-                            _head.Value = null;
-                        break;
+                        removed++;
+                        if (tail == curr.Value)
+                        {
+                            _tail.Value = previous;
+                            if (previous == null)
+                                _head.Value = null;
+                            break;
+                        }
+                        Skip(curr);
                     }
-                    Skip(curr);
-                }
-                else
-                {
-                    previous = curr;
-                    curr = curr.Value.Next;
+                    else
+                    {
+                        previous = curr;
+                        curr = curr.Value.Next;
+                    }
                 }
             }
-            if (removed > 0)
-                _count.Commute((ref int c) => c -= removed);
+            finally
+            {
+                if (removed > 0)
+                    _count.Commute((ref int c) => c -= removed);
+            }
         }
 
         public void Clear()
@@ -296,7 +292,7 @@ namespace Shielded
             return IndexOf(item, null);
         }
 
-        IEnumerator<T> IEnumerable<T>.GetEnumerator()
+        public IEnumerator<T> GetEnumerator()
         {
             Shield.AssertInTransaction();
             var curr = _head;
@@ -354,10 +350,7 @@ namespace Shielded
             }
 
             RefToIndex(index).Modify((ref ItemKeeper r) => {
-                var newItem = new ItemKeeper(r)
-                {
-                    Value = item
-                };
+                var newItem = new ItemKeeper(item, r);
                 if (r == null)
                     _tail.Value = newItem;
                 r = newItem;
