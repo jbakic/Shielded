@@ -153,7 +153,10 @@ namespace Shielded
         }
 
         /// <summary>
-        /// For use by the ProxyGen, since I cannot create a ModificationDelegate closure in CodeDom..
+        /// For use by the ProxyGen, since the users of it know only about the base type used
+        /// to generate the proxy. The struct used internally is not exposed, and so users
+        /// of proxy classes could not write a ModificationDelegate which works on an argument
+        /// whose type is that hidden struct.
         /// </summary>
         public void Commute(Action perform)
         {
