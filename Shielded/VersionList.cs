@@ -127,7 +127,11 @@ namespace Shielded
                 if (!tookFlag) return;
 
                 var old = _oldestRead;
+#if USE_STD_HASHSET
                 ISet<IShielded> toTrim = null;
+#else
+                SimpleHashSet toTrim = null;
+#endif
                 while (old != _current && old.ReaderCount == 0 && old.Changes != null)
                 {
                     if (toTrim == null)
