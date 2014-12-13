@@ -170,31 +170,15 @@ namespace Shielded
         /// </summary>
         public static void NewVersion(WriteStamp stamp, out WriteTicket ticket)
         {
+            // this version is running under the _checkLock, guaranteed to be alone!
             var newNode = new VersionEntry();
             ticket = newNode;
-            var current = _current;
-            do
-            {
-                while (current.Later != null)
-                    current = current.Later;
-                var newStamp = current.Stamp + 1;
-                newNode.SetStamp(newStamp);
-                stamp.Version = newStamp;
-            } while (Interlocked.CompareExchange(ref current.Later, newNode, null) != null);
-            MoveCurrent();
-        }
 
-        private static void MoveCurrent()
-        {
-            while (true)
-            {
-                var current = _current;
-                if (current.Later == null)
-                    break;
-                while (current.Later != null)
-                    current = current.Later;
-                _current = current;
-            }
+            var newStamp = _current.Stamp + 1;
+            newNode.SetStamp(newStamp);
+            stamp.Version = newStamp;
+            _current.Later = newNode;
+            _current = newNode;
         }
     }
 }
