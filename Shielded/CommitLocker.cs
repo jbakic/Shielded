@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Shielded
 {
@@ -51,23 +52,27 @@ namespace Shielded
                 Enlisted = enlisted,
                 CommEnlisted = commEnlisted
             };
-            try {} finally
+            LockNode lastRoundChecked = null;
+            l = null;
+            do
             {
-                LockNode lastRoundChecked = null;
-                do
+                newNode.State = new LockState(false, _head);
+                var current = newNode.State.Next;
+                while (current != null && current != lastRoundChecked)
                 {
-                    newNode.State = new LockState(false, _head);
-                    var current = newNode.State.Next;
-                    while (current != null && current != lastRoundChecked)
-                    {
-                        if (!current.State.Deleted && IsConflict(current, newNode))
-                            SpinWait.SpinUntil(() => current.State.Deleted);
-                        current = current.State.Next;
-                    }
-                    lastRoundChecked = newNode.State.Next;
-                } while (Interlocked.CompareExchange(ref _head, newNode, lastRoundChecked) != lastRoundChecked);
-                l = newNode;
-            }
+                    if (!current.State.Deleted && IsConflict(current, newNode))
+                        SpinWait.SpinUntil(() => current.State.Deleted);
+                    current = current.State.Next;
+                }
+                lastRoundChecked = newNode.State.Next;
+
+                RuntimeHelpers.PrepareConstrainedRegions();
+                try {} finally
+                {
+                    if (Interlocked.CompareExchange(ref _head, newNode, lastRoundChecked) == lastRoundChecked)
+                        l = newNode;
+                }
+            } while (l == null);
         }
 
         static void MarkDeleted(LockNode node)
@@ -82,6 +87,11 @@ namespace Shielded
             } while (oldState != newOldState);
         }
 
+        /// <summary>
+        /// Releases the given lock. This method expects to be executed from a finally clause,
+        /// since a <see cref="ThreadAbortException"/> might leave the lock system in an invalid
+        /// state.
+        /// </summary>
         public static void Exit(CommitLock l)
         {
             var node = (LockNode)l;
