@@ -104,13 +104,12 @@ namespace Shielded
         {
             var node = (VersionEntry)ticket;
             Interlocked.Decrement(ref node.ReaderCount);
-            TrimCopies();
         }
         
         private static int _trimFlag = 0;
         private static int _trimClock = 0;
 
-        private static void TrimCopies()
+        public static void TrimCopies()
         {
             // trimming won't start every time..
             if ((Interlocked.Increment(ref _trimClock) & 0xF) != 0)
