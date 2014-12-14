@@ -67,6 +67,16 @@
     <Compile Include="SimpleHashSet.cs" />
     <Compile Include="WriteStamp.cs" />
     <Compile Include="VersionList.cs" />
+    <Compile Include="ProxyGen\Factory.cs" />
+    <Compile Include="ProxyGen\NothingToDo.cs" />
+    <Compile Include="ProxyGen\ProxyGen.cs" />
+    <Compile Include="ProxyGen\ProxyGenerationException.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <ItemGroup>
+    <Folder Include="ProxyGen\" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ProxyGen\README.txt" />
+  </ItemGroup>
 </Project>

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <ProductVersion>10.0.0</ProductVersion>
+    <ProductVersion>8.0.30703</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{C217F353-1145-4062-9D76-B0FC90854883}</ProjectGuid>
     <OutputType>Exe</OutputType>
@@ -46,10 +46,6 @@
     <ProjectReference Include="..\Shielded\Shielded.csproj">
       <Project>{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}</Project>
       <Name>Shielded</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Shielded.ProxyGen\Shielded.ProxyGen.csproj">
-      <Project>{FA5D7038-DDDC-4E0F-B40A-488ECC566F42}</Project>
-      <Name>Shielded.ProxyGen</Name>
     </ProjectReference>
   </ItemGroup>
 </Project>
