@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using Shielded;
 using Shielded.ProxyGen;
+using System.Diagnostics;
 
 namespace ConsoleTests
 {
@@ -93,12 +94,27 @@ namespace ConsoleTests
             });
         }
 
+        private void PrepareFactory()
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            Factory.PrepareTypes(new [] {
+                typeof(Event),
+                typeof(BetOffer),
+                typeof(Ticket),
+                typeof(Bet)
+            });
+            sw.Stop();
+            Console.WriteLine("Factory prepared proxies in {0} ms.", sw.ElapsedMilliseconds);
+        }
+
         /// <summary>
         /// Creates n events, with three typical offers (1,X,2) for each.
         /// The events get IDs 1-n.
         /// </summary>
         public BetShop(int n)
         {
+            PrepareFactory();
+
             List<Event> initialEvents = new List<Event>();
 
             Shield.InTransaction(() =>

@@ -5,6 +5,9 @@ using Shielded.ProxyGen;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
+using ShieldedTests.ProxyTestEntities;
+using System.Reflection;
+using ShieldedTests.ProxyTestEntities2;
 
 namespace ShieldedTests
 {
@@ -145,6 +148,43 @@ namespace ShieldedTests
 
             // just confirms that the ProtectedSetter field is not transactional.
             t.SetProtectedField(1);
+        }
+
+        private void AssertTransactional<T>(IIdentifiable<T> item)
+        {
+            try
+            {
+                item.Id = default(T);
+                Assert.Fail();
+            }
+            catch (InvalidOperationException) { }
+
+            Shield.InTransaction(() => {
+                item.Id = default(T);
+            });
+        }
+
+        [Test]
+        public void PreparationTest()
+        {
+            // first, let's get one before the preparation
+            var e1 = Factory.NewShielded<Entity1>();
+            AssertTransactional(e1);
+
+            Factory.PrepareTypes(
+                Assembly.GetExecutingAssembly().GetTypes()
+                    .Where(t =>
+                        t.Namespace != null &&
+                        t.Namespace.StartsWith("ShieldedTests.ProxyTestEntities") &&
+                        t.IsClass)
+                    .ToArray());
+
+            var e2 = Factory.NewShielded<Entity2>();
+            AssertTransactional(e2);
+            var e3 = Factory.NewShielded<Entity3>();
+            AssertTransactional(e3);
+            var e4 = Factory.NewShielded<Entity4>();
+            AssertTransactional(e4);
         }
     }
 }

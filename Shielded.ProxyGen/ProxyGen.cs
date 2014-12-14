@@ -20,6 +20,34 @@ namespace Shielded.ProxyGen
         private const string ShieldedFieldName = "_data";
         private const string ShieldedValueProperty = "Value";
 
+        /// <summary>
+        /// Prepare the specified types. They should all be in the same namespace.
+        /// </summary>
+        public static void Prepare(Type[] types)
+        {
+            if (!types.Any())
+                return;
+
+            var unpreparedTypes = types
+                .Where(t => !proxies.ContainsKey(t))
+                .ToArray();
+            var compiledAssembly = MakeAssembly(cu => {
+                cu.ReferencedAssemblies.Add("Shielded.dll");
+                foreach (var loc in unpreparedTypes.Select(t => t.Assembly.Location).Distinct())
+                    cu.ReferencedAssemblies.Add(loc);
+
+                foreach (var t in unpreparedTypes)
+                {
+                    var ns = CreateNamespace(t);
+                    CreateType(t, ns);
+                    cu.Namespaces.Add(ns);
+                }
+            });
+            foreach (var t in unpreparedTypes)
+                proxies.TryAdd(t, compiledAssembly.GetType(
+                    t.Namespace + "." + GetNameForDerivedClass(t)));
+        }
+
         public static Type GetFor(Type t)
         {
             return proxies.GetOrAdd(t, CreateFor);
@@ -27,12 +55,24 @@ namespace Shielded.ProxyGen
 
         private static Type CreateFor(Type t)
         {
+            var compiledAssembly = MakeAssembly(cu => {
+                cu.ReferencedAssemblies.Add(t.Assembly.Location);
+                cu.ReferencedAssemblies.Add("Shielded.dll");
+
+                var ns = CreateNamespace(t);
+                CreateType(t, ns);
+                cu.Namespaces.Add(ns);
+            });
+            return compiledAssembly.GetTypes()[0];
+        }
+
+        private static Assembly MakeAssembly(Action<CodeCompileUnit> contentGenerator)
+        {
             var provider = new CSharpCodeProvider();
             CompilerParameters cp = new CompilerParameters();
             cp.GenerateInMemory = true;
             CodeCompileUnit cu = new CodeCompileUnit();
-            AddAssemblyReference(cu, t);
-            cu.Namespaces.Add(CreateNamespace(t));
+            contentGenerator(cu);
 
 #if DEBUG
             StringWriter sw = new StringWriter();
@@ -46,13 +86,7 @@ namespace Shielded.ProxyGen
             {
                 ThrowErrors(cr.Errors);
             }
-            return cr.CompiledAssembly.GetTypes()[0];
-        }
-
-        private static void AddAssemblyReference(CodeCompileUnit cu, Type t)
-        {
-            cu.ReferencedAssemblies.Add(t.Assembly.Location);
-            cu.ReferencedAssemblies.Add("Shielded.dll");
+            return cr.CompiledAssembly;
         }
 
         private static void ThrowErrors(CompilerErrorCollection compilerErrorCollection)
@@ -67,7 +101,11 @@ namespace Shielded.ProxyGen
 
         private static CodeNamespace CreateNamespace(Type t)
         {
-            var nsp = new CodeNamespace(t.Namespace);
+            return new CodeNamespace(t.Namespace);
+        }
+
+        private static void CreateType(Type t, CodeNamespace nsp)
+        {
             var decl = new CodeTypeDeclaration();
             decl.Name = GetNameForDerivedClass(t);
             decl.TypeAttributes = TypeAttributes.NotPublic;
@@ -116,9 +154,7 @@ namespace Shielded.ProxyGen
             }
 
             decl.Members.Add(theStruct);
-
             nsp.Types.Add(decl);
-            return nsp;
         }
 
         internal static bool IsInteresting(PropertyInfo pi)

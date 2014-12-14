@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Reflection;
 
 namespace Shielded.ProxyGen
 {
@@ -31,6 +32,38 @@ namespace Shielded.ProxyGen
         public static T NewShielded<T>() where T : class
         {
             return Activator.CreateInstance(ShieldedType(typeof(T))) as T;
+        }
+
+        /// <summary>
+        /// Returns true if we can generate a proxy subclass for the given type.
+        /// It would be recommended not to use this when preparing types - try to
+        /// prepare every type you think should be prepared. That way, if one of your
+        /// types is not OK, you will get an exception at preparation time, rather
+        /// than later, when some piece of code tries to use the factory to construct
+        /// one of those types.
+        /// </summary>
+        public static bool CanGenerateProxy(Type t)
+        {
+            return !NothingToDo.With(t);
+        }
+
+        /// <summary>
+        /// Prepares proxy subclasses for given types, all in one new assembly. (Normally,
+        /// when doing one by one, each gets its own assembly.) If any of the types is
+        /// not suitable, you will get an <see cref="InvalidOperationException"/>.
+        /// </summary>
+        public static void PrepareTypes(Type[] types)
+        {
+            if (types.Any(NothingToDo.With))
+                throw new InvalidOperationException(
+                    "Unable to make proxies for types: " +
+                    types.Where(NothingToDo.With)
+                        .Aggregate(
+                            new StringBuilder(),
+                            (sb, t) => sb.Length > 0 ? sb.Append(", " + t.FullName) : sb.Append(t.FullName))
+                        .ToString());
+
+            ProxyGen.Prepare(types);
         }
     }
 }
