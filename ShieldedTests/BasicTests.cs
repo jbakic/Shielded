@@ -472,6 +472,28 @@ namespace ShieldedTests
         }
 
         [Test]
+        public void CommuteInACommute()
+        {
+            var a = new Shielded<int>();
+            var b = new Shielded<int>();
+
+            try
+            {
+                // there is only one _blockEnlist, and if it is "reused" by an inner call, it
+                // would get set to null when the inner commute ends. this would allow later code
+                // in the outer commute to violate the access restriction.
+                Shield.InTransaction(() => {
+                    a.Commute((ref int aRef) => {
+                        a.Commute((ref int aRef2) => aRef2++);
+                        b.Value = 1;
+                    });
+                });
+                Assert.Fail();
+            }
+            catch (InvalidOperationException) { }
+        }
+
+        [Test]
         public void EventTest()
         {
             var a = new Shielded<int>(1);

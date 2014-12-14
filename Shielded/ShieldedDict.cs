@@ -169,15 +169,6 @@ namespace Shielded
             }
         }
 
-        int IShielded.PseudoHash
-        {
-            get
-            {
-                return _pseudoHash;
-            }
-        }
-        int _pseudoHash = SimpleHash.Get();
-        
         bool IShielded.HasChanges
         {
             get

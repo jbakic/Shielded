@@ -196,6 +196,15 @@ namespace Shielded
         internal static void EnlistStrictCommute(Action perform, ICommutableShielded affecting)
         {
             EnlistCommute(() => {
+                // if a strict commute is enlisted from within another strict commute...
+                // if != null, this definitely equals our affecting. even if not so,
+                // perform trying to access anything else will be prevented in Enlist().
+                if (_blockEnlist != null)
+                {
+                    perform();
+                    return;
+                }
+
                 try
                 {
                     _blockEnlist = affecting;

@@ -6,16 +6,6 @@ using System.Linq;
 
 namespace Shielded
 {
-    internal class SimpleHash
-    {
-        private static int _seed = 0;
-
-        public static int Get()
-        {
-            return unchecked(Interlocked.Increment(ref _seed) * 37);
-        }
-    }
-
     internal class SimpleHashSet : ISet<IShielded>
     {
         private int _count;
@@ -45,7 +35,7 @@ namespace Shielded
         {
             if (Place(item))
             {
-                _bloom = _bloom | (1 << (item.PseudoHash & 0x1F));
+                _bloom = _bloom | (1 << (item.GetHashCode() & 0x1F));
                 if (++_count >= (_mask ^ (_mask >> 2)))
                     Increase();
                 return true;
@@ -55,7 +45,7 @@ namespace Shielded
 
         bool Place(IShielded item)
         {
-            var i = item.PseudoHash & _mask;
+            var i = item.GetHashCode() & _mask;
             for ( ; _array[i] != null && _array[i] != item; i = (++i & _mask)) ;
 
             if (_array[i] == null)
@@ -190,10 +180,11 @@ namespace Shielded
 
         public bool Contains(IShielded item)
         {
-            if (((1 << (item.PseudoHash & 0x1F)) & _bloom) == 0)
+            var hash = item.GetHashCode();
+            if (((1 << (hash & 0x1F)) & _bloom) == 0)
                 return false;
 
-            var i = item.PseudoHash & _mask;
+            var i = hash & _mask;
             for ( ; _array[i] != null && _array[i] != item; i = (++i & _mask)) ;
             return _array[i] != null;
         }

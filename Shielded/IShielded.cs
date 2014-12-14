@@ -7,11 +7,6 @@ namespace Shielded
     /// </summary>
     internal interface IShielded
     {
-        /// <summary>
-        /// Gets a very simple "hash", used only by the <see cref="Shielded.SimpleHashSet"/>.
-        /// </summary>
-        int PseudoHash { get; }
-
         bool HasChanges { get; }
 
         /// <summary>

@@ -38,7 +38,7 @@ namespace Shielded
         /// </summary>
         public static void Run(this IEnumerable<Action> actions)
         {
-            if (actions == null || !actions.Any()) return;
+            if (actions == null) return;
             foreach (var act in actions)
                 act();
         }
