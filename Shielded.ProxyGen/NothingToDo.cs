@@ -11,6 +11,7 @@ namespace Shielded.ProxyGen
         public static bool With(Type t)
         {
             return !t.IsClass || t.IsSealed || !t.IsPublic ||
+                t.GetConstructor(Type.EmptyTypes) == null ||
                 !t.GetProperties().Any(ProxyGen.IsInteresting);
         }
     }

@@ -27,6 +27,15 @@ namespace Shielded.ProxyGen
         {
             if (!types.Any())
                 return;
+            if (types.Any(NothingToDo.With))
+                throw new InvalidOperationException(
+                    "Unable to make proxies for types: " +
+                    types.Where(NothingToDo.With)
+                    .Aggregate(
+                        new StringBuilder(),
+                        (sb, t) => sb.Length > 0 ? sb.Append(", " + t.FullName) : sb.Append(t.FullName))
+                    .ToString());
+
 
             var unpreparedTypes = types
                 .Where(t => !proxies.ContainsKey(t))
@@ -55,6 +64,10 @@ namespace Shielded.ProxyGen
 
         private static Type CreateFor(Type t)
         {
+            if (NothingToDo.With(t))
+                throw new InvalidOperationException(
+                    "Unable to create proxy type - base type must be public and have virtual properties.");
+
             var compiledAssembly = MakeAssembly(cu => {
                 cu.ReferencedAssemblies.Add(t.Assembly.Location);
                 cu.ReferencedAssemblies.Add("Shielded.dll");
