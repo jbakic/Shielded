@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Linq;
-using System.Runtime.CompilerServices;
 
 namespace Shielded
 {
@@ -669,7 +668,6 @@ repeatCommutes: if (brokeInCommutes)
 
         private static void CloseTransaction()
         {
-            RuntimeHelpers.PrepareConstrainedRegions();
             try { }
             finally
             {
