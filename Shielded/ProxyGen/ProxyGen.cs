@@ -21,7 +21,7 @@ namespace Shielded.ProxyGen
         private const string ShieldedValueProperty = "Value";
 
         /// <summary>
-        /// Prepare the specified types. They should all be in the same namespace.
+        /// Prepare the specified types.
         /// </summary>
         public static void Prepare(Type[] types)
         {
