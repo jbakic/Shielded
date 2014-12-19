@@ -6,6 +6,10 @@ using System.Linq;
 
 namespace Shielded
 {
+    /// <summary>
+    /// Central class of the Shielded library. Contains, among other things, methods
+    /// for directly running transactions, and creating conditional transactions.
+    /// </summary>
     public static class Shield
     {
         [ThreadStatic]
@@ -33,6 +37,9 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Throws <see cref="InvalidOperationException"/> if called out of a transaction.
+        /// </summary>
         public static void AssertInTransaction()
         {
             if (_readTicket == null)
@@ -305,7 +312,12 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Executes the function in a transaction, and returns it's final result. Nesting allowed.
+        /// Executes the function in a transaction, and returns its final result.
+        /// Transactions may, in case of conflicts, get repeated from beginning. Your
+        /// delegate should be ready for this. If you wish to do IO or similar
+        /// operations, which should not be repeated, pass them to
+        /// <see cref="Shield.SideEffect"/>. Nesting InTransaction calls is allowed,
+        /// the nested transactions are treated as normal parts of the outer transaction.
         /// </summary>
         public static T InTransaction<T>(Func<T> act)
         {
@@ -315,7 +327,12 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Executes the action in a transaction. Nesting allowed, it's a NOP.
+        /// Executes the action in a transaction.
+        /// Transactions may, in case of conflicts, get repeated from beginning. Your
+        /// delegate should be ready for this. If you wish to do IO or similar
+        /// operations, which should not be repeated, pass them to
+        /// <see cref="Shield.SideEffect"/>. Nesting InTransaction calls is allowed,
+        /// the nested transactions are treated as normal parts of the outer transaction.
         /// </summary>
         public static void InTransaction(Action act)
         {
@@ -382,6 +399,7 @@ namespace Shielded
         /// enlist, regardless of previous enlist status.
         /// </summary>
         /// <param name="isolatedItems">The instance which temporarily replaces <see cref="Shield._localItems"/>.</param>
+        /// <param name="act">The action to execute in the context.</param>
         /// <param name="merge">Whether to merge the isolated items into the original items when done. Defaults to <c>true</c>.
         /// If items are left unmerged, take care to handle TransExceptions and roll back the items yourself!</param>
         private static void WithTransactionContext(

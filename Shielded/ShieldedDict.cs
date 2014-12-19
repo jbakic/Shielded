@@ -38,6 +38,9 @@ namespace Shielded
             new ConcurrentDictionary<TKey, WriteStamp>();
         private readonly LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
 
+        /// <summary>
+        /// Initializes a new instance with the given initial contents.
+        /// </summary>
         public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items)
         {
             _dict = new ConcurrentDictionary<TKey, ItemKeeper>(items
@@ -46,6 +49,9 @@ namespace Shielded
             _count = new Shielded<int>(_dict.Count);
         }
 
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
         public ShieldedDict()
         {
             _dict = new ConcurrentDictionary<TKey, ItemKeeper>();
@@ -124,6 +130,9 @@ namespace Shielded
             return v;
         }
 
+        /// <summary>
+        /// Gets or sets the value under the specified key.
+        /// </summary>
         public TItem this [TKey key]
         {
             get
@@ -332,6 +341,11 @@ namespace Shielded
         #endregion
 
         #region IEnumerable implementation
+        /// <summary>
+        /// Get an enumerator for the dictionary contents. Iterating over a dictionary
+        /// conflicts with any concurrent write on the dictionary (of course, not if
+        /// your transaction is read-only).
+        /// </summary>
         public IEnumerator<KeyValuePair<TKey, TItem>> GetEnumerator()
         {
             Shield.AssertInTransaction();
@@ -389,6 +403,9 @@ namespace Shielded
             return Remove(item.Key);
         }
 
+        /// <summary>
+        /// Get the number of keys in the dictionary.
+        /// </summary>
         public int Count
         {
             get
@@ -407,6 +424,10 @@ namespace Shielded
         #endregion
 
         #region IDictionary implementation
+        /// <summary>
+        /// Add the specified key and value to the dictionary.
+        /// </summary>
+        /// <exception cref="ArgumentException">Thrown if the key is already present in the dictionary.</exception>
         public void Add(TKey key, TItem value)
         {
             Shield.AssertInTransaction();
@@ -415,6 +436,9 @@ namespace Shielded
             this[key] = value;
         }
 
+        /// <summary>
+        /// Check if the dictionary contains the given key.
+        /// </summary>
         public bool ContainsKey(TKey key)
         {
             ItemKeeper v;
@@ -425,6 +449,9 @@ namespace Shielded
             return v != null && !v.Empty;
         }
 
+        /// <summary>
+        /// Remove the specified key from the collection.
+        /// </summary>
         public bool Remove(TKey key)
         {
             Shield.AssertInTransaction();
@@ -439,6 +466,10 @@ namespace Shielded
             return true;
         }
 
+        /// <summary>
+        /// Safe read based on the key - returns true if the key is present, and
+        /// then also returns the value stored under that key through the out parameter.
+        /// </summary>
         public bool TryGetValue(TKey key, out TItem value)
         {
             ItemKeeper v;
@@ -463,6 +494,10 @@ namespace Shielded
             return false;
         }
 
+        /// <summary>
+        /// Get a collection of all the keys in the dictionary. Can be used out of transactions.
+        /// The result is a copy, it will not be updated if the dictionary is later changed.
+        /// </summary>
         public ICollection<TKey> Keys
         {
             get
@@ -474,6 +509,10 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Get a collection of all the values in the dictionary. Can be used out of transactions.
+        /// The result is a copy, it will not be updated if the dictionary is later changed.
+        /// </summary>
         public ICollection<TItem> Values
         {
             get

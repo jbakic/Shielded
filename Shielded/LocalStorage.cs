@@ -10,6 +10,11 @@ namespace Shielded
         public static Dictionary<object, object> Storage;
     }
 
+    /// <summary>
+    /// Thread-local storage - multiple threads can share a ref to this, each sees only
+    /// what it put inside. It is very simple, using direct local fields when one thread
+    /// is using it, and resorting to a ThreadStatic dictionary otherwise.
+    /// </summary>
     public class LocalStorage<T> where T : class
     {
         // These two are faster, immediate storage, which can be used by one thread only.
@@ -17,6 +22,9 @@ namespace Shielded
         private int _holderThreadId;
         private T _heldValue;
 
+        /// <summary>
+        /// Returns <c>true</c> if current thread has something (non-null!) inside this storage.
+        /// </summary>
         public bool HasValue
         {
             get
@@ -26,6 +34,11 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Gets or sets the value for the current thread. Setting it to null releases
+        /// the storage used by the current thread. Getter throws if there is no value
+        /// for this thread.
+        /// </summary>
         public T Value
         {
             get

@@ -23,11 +23,17 @@ namespace Shielded
         private volatile WriteStamp _writerStamp;
         private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
 
+        /// <summary>
+        /// Constructs a new Shielded container, containing default value of type T.
+        /// </summary>
         public Shielded()
         {
             _current = new ValueKeeper();
         }
 
+        /// <summary>
+        /// Constructs a new Shielded container, containing the given initial value.
+        /// </summary>
         public Shielded(T initial)
         {
             _current = new ValueKeeper();
@@ -123,10 +129,19 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Delegate type used for modifications, i.e. read and write operations.
+        /// It has the advantage of working directly on the internal, thread-local
+        /// storage copy, to which it gets a reference. This is more efficient if
+        /// the type T is a big value-type.
+        /// </summary>
         public delegate void ModificationDelegate(ref T value);
 
         /// <summary>
         /// Modifies the content of the field, i.e. read and write operation.
+        /// It has the advantage of working directly on the internal, thread-local
+        /// storage copy, to which it gets a reference. This is more efficient if
+        /// the type T is a big value-type.
         /// </summary>
         public void Modify(ModificationDelegate d)
         {

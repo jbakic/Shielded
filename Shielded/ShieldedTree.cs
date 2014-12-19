@@ -7,8 +7,9 @@ using System.Collections.Generic;
 namespace Shielded
 {
     /// <summary>
-    /// A shielded red-black tree. Each node is a Shielded struct, so parallel
-    /// operations are possible. Multiple items may be added with the same key.
+    /// A shielded red-black tree, for keeping sorted data. Each node is a
+    /// Shielded struct, so parallel operations are possible. Multiple items
+    /// may be added under the same key.
     /// </summary>
     public class ShieldedTree<TKey, TValue> : IDictionary<TKey, TValue> where TValue : class
     {
@@ -37,6 +38,10 @@ namespace Shielded
         private readonly Shielded<int> _count;
         private readonly IComparer<TKey> _comparer;
 
+        /// <summary>
+        /// Initializes a new tree, which will use a given comparer, or using the .NET default
+        /// comparer if none is specified.
+        /// </summary>
         public ShieldedTree(IComparer<TKey> comparer = null)
         {
             _head = new Shielded<Shielded<Node>>();
@@ -90,6 +95,11 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Enumerate all key-value pairs, whose keys are in the given range. The range
+        /// is inclusive, both from and to are included in the result (if the tree contains
+        /// those keys). The items are returned sorted.
+        /// </summary>
         public IEnumerable<KeyValuePair<TKey, TValue>> Range(TKey from, TKey to)
         {
             foreach (var n in RangeInternal(from, to))
@@ -513,6 +523,9 @@ namespace Shielded
             InsertInternal(item.Key, item.Value);
         }
 
+        /// <summary>
+        /// Clear this instance. Efficient, O(1).
+        /// </summary>
         public void Clear()
         {
             // ridiculously simple :)
@@ -541,8 +554,9 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Checks both the key and value, which may be useful due to the tree supporting multiple
-        /// entries with the same key.
+        /// Remove the given key-value pair from the tree. Checks both the key and
+        /// value, which may be useful due to the tree supporting multiple entries
+        /// with the same key.
         /// </summary>
         public bool Remove(KeyValuePair<TKey, TValue> item)
         {
@@ -553,6 +567,9 @@ namespace Shielded
             return true;
         }
 
+        /// <summary>
+        /// Get the number of items in the tree.
+        /// </summary>
         public int Count
         {
             get
@@ -573,11 +590,18 @@ namespace Shielded
 
         #region IDictionary implementation
 
+        /// <summary>
+        /// Add the given key and value to the tree. Same key can be added multiple times
+        /// into the tree!
+        /// </summary>
         public void Add(TKey key, TValue value)
         {
             InsertInternal(key, value);
         }
 
+        /// <summary>
+        /// Check if the key is present in the tree.
+        /// </summary>
         public bool ContainsKey(TKey key)
         {
             return FindInternal(key) != null;
@@ -593,6 +617,10 @@ namespace Shielded
             return RemoveAndReturn(key, out val);
         }
 
+        /// <summary>
+        /// Try to get any one of the values stored under the given key. There may be multiple items
+        /// under the same key!
+        /// </summary>
         public bool TryGetValue(TKey key, out TValue value)
         {
             bool res = false;
@@ -631,6 +659,13 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Get a collection of the keys in the tree. Works out of transaction.
+        /// The result is a copy, it does not get updated with later changes.
+        /// Count will be equal to the tree count, i.e. if there are multiple
+        /// entries with the same key, that key will be in this collection
+        /// multiple times.
+        /// </summary>
         public ICollection<TKey> Keys
         {
             get
@@ -642,6 +677,10 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Get a collection of the values in the tree. Works out of transaction.
+        /// The result is a copy, it does not get updated with later changes.
+        /// </summary>
         public ICollection<TValue> Values
         {
             get

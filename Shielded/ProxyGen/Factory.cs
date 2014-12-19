@@ -8,6 +8,9 @@ using System.Reflection.Emit;
 
 namespace Shielded.ProxyGen
 {
+    /// <summary>
+    /// Factory for generating Shielded proxy-subclasses for POCO classes.
+    /// </summary>
     public static class Factory
     {
         /// <summary>
