@@ -1,6 +1,8 @@
 Shielded
 ========
 
+Available on [NuGet](https://www.nuget.org/packages/Shielded).
+
 Shielded is a full-featured implementation of Software Transactional Memory
 in .NET. It provides a system (the Shield static class) for running in-memory
 transactions, and data structures which are aware of transactions. It can also
