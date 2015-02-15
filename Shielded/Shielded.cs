@@ -185,7 +185,16 @@ namespace Shielded
         /// after the commute is enlisted, and your handler can easily cause commutes to
         /// degenerate.
         /// </summary>
-        public readonly ShieldedEvent<EventArgs> Changed = new ShieldedEvent<EventArgs>();
+        public ShieldedEvent<EventArgs> Changed
+        {
+            get
+            {
+                if (_changed == null)
+                    Interlocked.CompareExchange(ref _changed, new ShieldedEvent<EventArgs>(), null);
+                return _changed;
+            }
+        }
+        private ShieldedEvent<EventArgs> _changed;
 
         public static implicit operator T(Shielded<T> obj)
         {
