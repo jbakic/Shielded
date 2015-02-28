@@ -98,8 +98,6 @@ suffer from the Write Skew issue.
 red-black tree implementation).
     * It is possible to use this library with the BCL [Immutable Collections]
     (http://msdn.microsoft.com/en-us/library/dn385366%28v=vs.110%29.aspx) package.
-* Support for integrating into the commit process, allowing any kind of
-backing storage or remote service to commit synchronously with Shielded fields.
 * To perform **side-effects** (IO, and most other operations which are not
 shielded) you use the SideEffect method of the Shield class, which takes
 optional onCommit and onRollback lambdas.
@@ -119,6 +117,10 @@ interested in, just before that transaction will commit.
     * Can be used to ensure certain invariants are held, or to implement
     thread prioritization by allowing only some threads which access a field
     to commit into it.
+* **Synchronous commits**: By using Shield.WhenCommitting, you can integrate
+your code into the commit process. This enables you to, e.g., perform the same
+changes in a relational database, or publish commits to other servers...
+    * You can also cause a retry, using Shield.Rollback.
 * **Commutables**: operations which can be performed without conflict, because
 they can be reordered in time and have the same net effect, i.e. they are
 commutable (name borrowed from Clojure). Incrementing an int is an
