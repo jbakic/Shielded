@@ -136,8 +136,19 @@ namespace Shielded.ProxyGen
             var theShieldedField = new CodeMemberField(theShieldedType, "_data") {
                 Attributes = MemberAttributes.Private
             };
-            theShieldedField.InitExpression = new CodeObjectCreateExpression(theShieldedType);
             decl.Members.Add(theShieldedField);
+
+            var constructor = new CodeConstructor() {
+                Attributes = MemberAttributes.Public,
+            };
+            constructor.Statements.Add(new CodeAssignStatement(
+                new CodeFieldReferenceExpression(
+                    new CodeThisReferenceExpression(),
+                    "_data"),
+                new CodeObjectCreateExpression(
+                    theShieldedType,
+                    new CodeThisReferenceExpression())));
+            decl.Members.Add(constructor);
 
             foreach (PropertyInfo pi in t.GetProperties().Where(IsInteresting))
             {

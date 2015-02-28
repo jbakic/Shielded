@@ -44,8 +44,8 @@ namespace Shielded
         /// </summary>
         public ShieldedTree(IComparer<TKey> comparer = null)
         {
-            _head = new Shielded<Shielded<Node>>();
-            _count = new Shielded<int>();
+            _head = new Shielded<Shielded<Node>>(this);
+            _count = new Shielded<int>(this);
             _comparer = comparer != null ? comparer : Comparer<TKey>.Default;
         }
 
@@ -164,7 +164,7 @@ namespace Shielded
                 Parent = parent,
                 Key = key,
                 Value = item
-            });
+            }, this);
             if (parent != null)
             {
                 if (comparison > 0)

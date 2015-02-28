@@ -17,6 +17,12 @@ namespace ConsoleTests
         public virtual void Commute(Action a) { a(); }
     }
 
+    public class SmallEntity
+    {
+        public virtual int Id { get; set; }
+        public virtual int Value { get; set; }
+    }
+
     class MainClass
     {
         private static Stopwatch _timer;
@@ -120,6 +126,54 @@ namespace ConsoleTests
                 var correct = shx.Sum(s => s.Value) == taskCount;
                 Console.WriteLine(" {0} ms with {1} iterations and is {2}.",
                     time, transactionCounter, correct ? "correct" : "incorrect");
+            }
+        }
+
+        static void ParallelAddWithSaving()
+        {
+            var randomizr = new Random();
+            int transactionCounter;
+            int taskCount = 1000;
+            int sleepTime = 1;
+            int commitEventHit = 0;
+            SmallEntity[] shx = null;
+            int[] shxClone = null;
+
+            Shield.WhenCommitting<SmallEntity>(ents => {
+                foreach (var ent in ents)
+                {
+                    Thread.Sleep((ent.Value * Interlocked.Increment(ref commitEventHit) * 33) & 0x7F);
+                    shxClone[ent.Id] = ent.Value;
+                }
+            });
+
+            foreach (var i in Enumerable.Repeat(0, 10))
+            {
+                shxClone = new int[100];
+                shx = Enumerable.Repeat(0, 100)
+                    .Select((n, ind) => {
+                        var ent = Factory.NewShielded<SmallEntity>();
+                        Shield.InTransaction(() => { ent.Id = ind; });
+                        return ent;
+                    }).ToArray();
+                transactionCounter = 0;
+                commitEventHit = 0;
+                var time = mtTest("shielded2 write", taskCount, _ =>
+                    {
+                        var rnd = randomizr.Next(100);
+                        return Task.Factory.StartNew(() => Shield.InTransaction(() =>
+                            {
+                                Interlocked.Increment(ref transactionCounter);
+                                int v = shx[rnd].Value;
+                                if (sleepTime > 0) Thread.Sleep(sleepTime);
+                                shx[rnd].Value = v + 1;
+                            }),
+                            TaskCreationOptions.LongRunning);
+                    });
+                var correct = shx.Sum(s => s.Value) == taskCount &&
+                    shx.All(s => s.Value == 0 || shxClone[s.Id] == s.Value);
+                Console.WriteLine(" {0} ms - {1} reps, {2} commits, {3}.",
+                    time, transactionCounter, commitEventHit, correct ? "correct" : "incorrect");
             }
         }
 
@@ -1114,13 +1168,15 @@ namespace ConsoleTests
         {
             //TimeTests();
 
+            ParallelAddWithSaving();
+
             //OneTransaction();
 
             //ControlledRace();
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
             //BetShopPoolTest();
 

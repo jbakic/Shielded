@@ -166,6 +166,14 @@ namespace Shielded
                 return true;
             }
         }
+
+        object IShielded.Owner
+        {
+            get
+            {
+                return this;
+            }
+        }
         #endregion
     }
 }

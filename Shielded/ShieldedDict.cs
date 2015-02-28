@@ -178,11 +178,33 @@ namespace Shielded
             }
         }
 
+        public IEnumerable<TKey> Changes
+        {
+            get
+            {
+                if (Shield.IsInTransaction && _localDict.HasValue && _localDict.Value.HasChanges)
+                {
+                    return _localDict.Value.Items
+                        .Where(kvp => kvp.Value != null)
+                        .Select(kvp => kvp.Key);
+                }
+                return Enumerable.Empty<TKey>();
+            }
+        }
+
         bool IShielded.HasChanges
         {
             get
             {
                 return _localDict.HasValue && _localDict.Value.HasChanges;
+            }
+        }
+
+        object IShielded.Owner
+        {
+            get
+            {
+                return this;
             }
         }
 

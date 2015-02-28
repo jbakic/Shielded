@@ -10,6 +10,12 @@ namespace Shielded
         bool HasChanges { get; }
 
         /// <summary>
+        /// The logical owner of the shielded field. Used in Committing events, since external
+        /// users cannot access internal fields.
+        /// </summary>
+        object Owner { get; }
+
+        /// <summary>
         /// Returns true if there have been no changes by other threads since this
         /// transaction opened. If so, and if the field has changes in this transaction,
         /// the method will also lock the field until a call to Commit or Rollback is made.

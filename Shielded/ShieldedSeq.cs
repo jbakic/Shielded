@@ -20,7 +20,7 @@ namespace Shielded
             public ItemKeeper(T val, ItemKeeper initialNext)
             {
                 Value = val;
-                Next = new Shielded<ItemKeeper>(initialNext);
+                Next = new Shielded<ItemKeeper>(initialNext, this);
             }
 
             public void ClearNext()
@@ -47,13 +47,13 @@ namespace Shielded
             {
                 item = new ItemKeeper(items[i], item);
                 if (_tail == null)
-                    _tail = new Shielded<ItemKeeper>(item);
+                    _tail = new Shielded<ItemKeeper>(item, this);
             }
-            _head = new Shielded<ItemKeeper>(item);
+            _head = new Shielded<ItemKeeper>(item, this);
             // if this is true, there were no items.
             if (_tail == null)
-                _tail = new Shielded<ItemKeeper>();
-            _count = new Shielded<int>(items.Length);
+                _tail = new Shielded<ItemKeeper>(this);
+            _count = new Shielded<int>(items.Length, this);
         }
 
         /// <summary>
@@ -61,9 +61,9 @@ namespace Shielded
         /// </summary>
         public ShieldedSeq()
         {
-            _head = new Shielded<ItemKeeper>();
-            _tail = new Shielded<ItemKeeper>();
-            _count = new Shielded<int>();
+            _head = new Shielded<ItemKeeper>(this);
+            _tail = new Shielded<ItemKeeper>(this);
+            _count = new Shielded<int>(this);
         }
 
         /// <summary>

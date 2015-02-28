@@ -62,7 +62,15 @@ namespace ShieldedTests
             catch (InvalidOperationException) { }
 
             var id = Guid.NewGuid();
-            Shield.InTransaction(() => test.Id = id);
+            // the proxy object will, when changed, appear in the list of changed
+            // fields in the Shield.WhenCommitting events...
+            bool committingFired = false;
+            using (Shield.WhenCommitting<TestEntity>(ents => committingFired = true))
+            {
+                Shield.InTransaction(() => test.Id = id);
+            }
+
+            Assert.IsTrue(committingFired);
             Assert.AreEqual(id, test.Id);
 
             Shield.InTransaction(() => {

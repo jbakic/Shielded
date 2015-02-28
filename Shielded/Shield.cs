@@ -1,6 +1,6 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Threading;
 using System.Linq;
 
@@ -46,65 +46,12 @@ namespace Shielded
                 throw new InvalidOperationException("Operation needs to be in a transaction.");
         }
 
-        private enum CommuteState
-        {
-            Ok = 0,
-
-            /// <summary>
-            /// Commute must execute due to transaction accessing a field it works on.
-            /// </summary>
-            Broken,
-
-            /// <summary>
-            /// Commute was executed.
-            /// </summary>
-            Executed
-        }
-
-        private class Commute
-        {
-            /// <summary>
-            /// The commutable action.
-            /// </summary>
-            public Action Perform;
-
-            /// <summary>
-            /// The fields which, if enlisted by the main transaction, must cause the commute to
-            /// execute in-transaction.
-            /// </summary>
-            public ICommutableShielded[] Affecting;
-
-            public CommuteState State;
-        }
-
-        private class TransItems
-        {
-#if USE_STD_HASHSET
-            public ISet<IShielded> Enlisted = new HashSet<IShielded>();
-#else
-            public SimpleHashSet Enlisted = new SimpleHashSet();
-#endif
-            public List<SideEffect> Fx;
-            public List<Commute> Commutes;
-
-            /// <summary>
-            /// Unions the other items into this. Does not include commutes!
-            /// </summary>
-            public void UnionWith(TransItems other)
-            {
-                Enlisted.UnionWith(other.Enlisted);
-                if (other.Fx != null && other.Fx.Count > 0)
-                    if (Fx == null)
-                        Fx = new List<SideEffect>(other.Fx);
-                    else
-                        Fx.AddRange(other.Fx);
-            }
-        }
-
         [ThreadStatic]
         private static TransItems _localItems;
         [ThreadStatic]
         private static ICommutableShielded _blockEnlist;
+        [ThreadStatic]
+        private static bool _noNewEnlists;
         [ThreadStatic]
         private static bool _enforceTracking;
         [ThreadStatic]
@@ -127,6 +74,8 @@ namespace Shielded
             AssertInTransaction();
             if (!_localItems.Enlisted.Contains(item))
             {
+                if (_noNewEnlists)
+                    throw new InvalidOperationException("Cannot access new fields.");
                 // must not add into Enlisted before we run commutes, otherwise commutes' calls
                 // to Enlist would return false, and the commutes, although running first, would
                 // not actually check the lock! this also means that CheckCommutes must tolerate
@@ -285,6 +234,48 @@ namespace Shielded
         public static IDisposable PreCommit(Func<bool> test, Action trans)
         {
             return new Subscription(SubscriptionContext.PreCommit, test, trans);
+        }
+
+        /// <summary>
+        /// Execute an action parallel to every commit which changes fields of a type.
+        /// The action will be immediately enlisted, and get called after any commit is
+        /// checked, but before anything is written. The action can then make parallel
+        /// changes in another data store, or it can call <see cref="Shield.Rollback"/>
+        /// to retry the transaction from the beginning. The action may not access any
+        /// fields that the transaction did not already access.
+        /// This method throws when called within a transaction.
+        /// </summary>
+        /// <returns>An IDisposable for unsubscribing.</returns>
+        public static IDisposable WhenCommitting<T>(Action<IEnumerable<T>> act) where T : class
+        {
+            if (IsInTransaction)
+                throw new InvalidOperationException("Operation not allowed in transaction.");
+            return new CommittingSubscription(
+                items => act(items.Enlisted
+                    .Select(i => i.Owner)
+                    .OfType<T>()
+                    .Distinct()));
+        }
+
+        /// <summary>
+        /// Execute an action parallel to every commit with changes.
+        /// The action will be immediately enlisted, and get called after any commit is
+        /// checked, but before anything is written. The action can then make parallel
+        /// changes in another data store, or it can call <see cref="Shield.Rollback"/>
+        /// to retry the transaction from the beginning. The action may not access any
+        /// fields that the transaction did not already access.
+        /// This version receives a full list of enlisted items, even those without changes.
+        /// This method throws when called within a transaction.
+        /// </summary>
+        /// <returns>An IDisposable for unsubscribing.</returns>
+        public static IDisposable WhenCommitting(Action<IEnumerable<TransactionField>> act)
+        {
+            if (IsInTransaction)
+                throw new InvalidOperationException("Operation not allowed in transaction.");
+            return new CommittingSubscription(
+                items => act(items.Enlisted
+                    .GroupBy(i => i.Owner)
+                    .Select(grp => new TransactionField(grp.Key, grp.Any(i => i.HasChanges)))));
         }
 
         /// <summary>
@@ -565,8 +556,7 @@ repeatCommutes: if (brokeInCommutes)
             }
             finally
             {
-                if (_readTicket != oldReadTicket)
-                    _readTicket = oldReadTicket;
+                _readTicket = oldReadTicket;
                 // note that this changes the _localItems.Enlisted hashset to contain the
                 // commute-enlists as well, regardless of the check outcome.
                 if (commutedItems != null)
@@ -635,6 +625,10 @@ repeatCommutes: if (brokeInCommutes)
         private static void CommitWChanges(WriteTicket ticket)
         {
             var items = _localItems;
+
+            if (CommittingSubscription.Any)
+                FireCommitting(items);
+
             List<IShielded> trigger;
             // this must not be interrupted by a Thread.Abort!
             try { }
@@ -657,6 +651,19 @@ repeatCommutes: if (brokeInCommutes)
             (items.Fx != null ? items.Fx.Select(f => f.OnCommit) : null)
                 .SafeConcat(SubscriptionContext.PostCommit.Trigger(trigger))
                 .SafeRun();
+        }
+
+        static void FireCommitting(TransItems items)
+        {
+            try
+            {
+                _noNewEnlists = true;
+                CommittingSubscription.Fire(items);
+            }
+            finally
+            {
+                _noNewEnlists = false;
+            }
         }
 
         private static IEnumerable<T> SafeConcat<T>(this IEnumerable<T> first, IEnumerable<T> second)

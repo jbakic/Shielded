@@ -116,6 +116,24 @@ namespace ShieldedTests
             Assert.AreEqual(3, transactionCount);
         }
 
+        [Test]
+        public void RollbackWhenCommitting()
+        {
+            var x = new Shielded<int>();
+            int commitCount = 0;
+            using (Shield.WhenCommitting<Shielded<int>>(ints =>
+                {
+                    if (commitCount++ == 0)
+                        Shield.Rollback();
+                }))
+            {
+                Shield.InTransaction(() => x.Value = 5);
+            }
+
+            Assert.AreEqual(2, commitCount);
+            Assert.AreEqual(5, x);
+        }
+
         class IgnoreMe : Exception {}
 
         [Test]

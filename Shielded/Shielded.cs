@@ -22,22 +22,25 @@ namespace Shielded
         // once negotiated, kept until commit or rollback
         private volatile WriteStamp _writerStamp;
         private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
+        private readonly object _owner;
 
         /// <summary>
         /// Constructs a new Shielded container, containing default value of type T.
         /// </summary>
-        public Shielded()
+        public Shielded(object owner = null)
         {
             _current = new ValueKeeper();
+            _owner = owner ?? this;
         }
 
         /// <summary>
         /// Constructs a new Shielded container, containing the given initial value.
         /// </summary>
-        public Shielded(T initial)
+        public Shielded(T initial, object owner = null)
         {
             _current = new ValueKeeper();
             _current.Value = initial;
+            _owner = owner ?? this;
         }
 
         /// <summary>
@@ -208,7 +211,15 @@ namespace Shielded
                 return _locals.HasValue;
             }
         }
-        
+
+        object IShielded.Owner
+        {
+            get
+            {
+                return _owner;
+            }
+        }
+
         bool IShielded.CanCommit(WriteStamp writeStamp)
         {
             var res = _writerStamp == null &&
