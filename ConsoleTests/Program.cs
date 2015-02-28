@@ -158,7 +158,7 @@ namespace ConsoleTests
                     }).ToArray();
                 transactionCounter = 0;
                 commitEventHit = 0;
-                var time = mtTest("shielded2 write", taskCount, _ =>
+                var time = mtTest("write with saving", taskCount, _ =>
                     {
                         var rnd = randomizr.Next(100);
                         return Task.Factory.StartNew(() => Shield.InTransaction(() =>
