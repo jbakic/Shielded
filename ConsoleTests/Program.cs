@@ -142,7 +142,7 @@ namespace ConsoleTests
             Shield.WhenCommitting<SmallEntity>(ents => {
                 foreach (var ent in ents)
                 {
-                    Thread.Sleep((ent.Value * Interlocked.Increment(ref commitEventHit) * 33) & 0x7F);
+                    Thread.Sleep((ent.Value * Interlocked.Increment(ref commitEventHit) * 33) & 0x3F);
                     shxClone[ent.Id] = ent.Value;
                 }
             });

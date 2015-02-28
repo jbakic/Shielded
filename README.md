@@ -98,6 +98,8 @@ suffer from the Write Skew issue.
 red-black tree implementation).
     * It is possible to use this library with the BCL [Immutable Collections]
     (http://msdn.microsoft.com/en-us/library/dn385366%28v=vs.110%29.aspx) package.
+* Support for integrating into the commit process, allowing any kind of
+backing storage or remote service to commit synchronously with Shielded fields.
 * To perform **side-effects** (IO, and most other operations which are not
 shielded) you use the SideEffect method of the Shield class, which takes
 optional onCommit and onRollback lambdas.
