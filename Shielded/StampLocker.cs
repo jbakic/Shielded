@@ -5,44 +5,28 @@ namespace Shielded
 {
     class StampLocker
     {
-        SpinWait _sw;
-        int _lockers;
-
         public void WaitUntil(Func<bool> test)
         {
+            if (test())
+                return;
+            SpinWait sw = new SpinWait();
             do
             {
                 if (test())
                     return;
-                _sw.SpinOnce();
-            } while (!_sw.NextSpinWillYield);
-
-            int? effect = null;
-            try
+                sw.SpinOnce();
+            } while (!sw.NextSpinWillYield);
+            lock (this)
             {
-                try {} finally
-                {
-                    effect = Interlocked.Increment(ref _lockers);
-                }
-
-                lock (this)
-                {
-                    while (!test())
-                        Monitor.Wait(this);
-                }
-            }
-            finally
-            {
-                if (effect.HasValue)
-                    Interlocked.Decrement(ref _lockers);
+                while (!test())
+                    Monitor.Wait(this);
             }
         }
 
         public void Release()
         {
-            if (_lockers > 0)
-                lock (this)
-                    Monitor.PulseAll(this);
+            lock (this)
+                Monitor.PulseAll(this);
         }
     }
 }

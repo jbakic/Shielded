@@ -1174,11 +1174,11 @@ namespace ConsoleTests
 
             //ControlledRace();
 
-            DictionaryTest();
+            //DictionaryTest();
 
             //BetShopTest();
 
-            //BetShopPoolTest();
+            BetShopPoolTest();
 
             //TreeTest();
 
