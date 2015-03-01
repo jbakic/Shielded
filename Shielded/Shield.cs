@@ -242,7 +242,8 @@ namespace Shielded
         /// checked, but before anything is written. The action can then make parallel
         /// changes in another data store, or it can call <see cref="Shield.Rollback"/>
         /// to retry the transaction from the beginning. The action may not access any
-        /// fields that the transaction did not already access.
+        /// fields that the transaction did not already access, and it should not
+        /// do any writes into shielded fields!
         /// This method throws when called within a transaction.
         /// </summary>
         /// <returns>An IDisposable for unsubscribing.</returns>
@@ -267,7 +268,8 @@ namespace Shielded
         /// checked, but before anything is written. The action can then make parallel
         /// changes in another data store, or it can call <see cref="Shield.Rollback"/>
         /// to retry the transaction from the beginning. The action may not access any
-        /// fields that the transaction did not already access.
+        /// fields that the transaction did not already access, and it should not
+        /// do any writes into shielded fields!
         /// This version receives a full list of enlisted items, even those without changes.
         /// This method throws when called within a transaction.
         /// </summary>
