@@ -37,6 +37,7 @@ namespace Shielded
         private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps =
             new ConcurrentDictionary<TKey, WriteStamp>();
         private readonly LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
+        private readonly StampLocker _locker = new StampLocker();
 
         /// <summary>
         /// Initializes a new instance with the given initial contents.
@@ -63,22 +64,10 @@ namespace Shielded
             if (!Shield.Enlist(this, _localDict.HasValue) && _localDict.Value.Items.ContainsKey(key))
                 return;
 
-#if SERVER
-            var stamp = Shield.ReadStamp;
-            WriteStamp w;
-            if (_writeStamps.TryGetValue(key, out w) && w.Version != null && w.Version <= stamp)
-                lock (_localDict)
-                {
-                    while (_writeStamps.TryGetValue(key, out w) && w.Version != null && w.Version <= stamp)
-                        Monitor.Wait(_localDict);
-                }
-#else
-            SpinWait.SpinUntil(() =>
-            {
+            _locker.WaitUntil(() => {
                 WriteStamp w;
                 return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
             });
-#endif
         }
 
         private ItemKeeper CurrentTransactionOldValue(TKey key)
@@ -258,18 +247,11 @@ namespace Shielded
                         _dict[kvp.Key] = newCurrent;
 
                     WriteStamp ws;
-#if SERVER
-                    lock (_localDict)
-                    {
-                        _writeStamps.TryRemove(kvp.Key, out ws);
-                        Monitor.PulseAll(_localDict);
-                    }
-#else
                     _writeStamps.TryRemove(kvp.Key, out ws);
-#endif
                 }
                 if (version.HasValue)
                     _copies.Enqueue(Tuple.Create((long)version, copyList));
+                _locker.Release();
             }
             _localDict.Value = null;
         }
@@ -282,21 +264,6 @@ namespace Shielded
             if (locals.HasChanges)
             {
                 WriteStamp ws;
-#if SERVER
-                lock (_localDict)
-                {
-                    foreach (var kvp in locals.Items)
-                    {
-                        if (kvp.Value != null &&
-                            _writeStamps.TryGetValue(kvp.Key, out ws) &&
-                            ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
-                        {
-                            _writeStamps.TryRemove(kvp.Key, out ws);
-                        }
-                    }
-                    Monitor.PulseAll(_localDict);
-                }
-#else
                 foreach (var kvp in locals.Items)
                 {
                     if (kvp.Value != null &&
@@ -306,7 +273,7 @@ namespace Shielded
                         _writeStamps.TryRemove(kvp.Key, out ws);
                     }
                 }
-#endif
+                _locker.Release();
             }
             _localDict.Value = null;
         }

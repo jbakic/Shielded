@@ -45,7 +45,6 @@
     <PlatformTarget>x86</PlatformTarget>
     <Externalconsole>true</Externalconsole>
     <DocumentationFile>bin\Release\Shielded.xml</DocumentationFile>
-    <DefineConstants>SERVER</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -77,6 +76,7 @@
     <Compile Include="Commute.cs" />
     <Compile Include="TransactionField.cs" />
     <Compile Include="CommittingSubscription.cs" />
+    <Compile Include="StampLocker.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

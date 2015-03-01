@@ -1168,13 +1168,13 @@ namespace ConsoleTests
         {
             //TimeTests();
 
-            ParallelAddWithSaving();
+            //ParallelAddWithSaving();
 
             //OneTransaction();
 
             //ControlledRace();
 
-            //DictionaryTest();
+            DictionaryTest();
 
             //BetShopTest();
 

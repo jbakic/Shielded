@@ -22,6 +22,7 @@ namespace Shielded
         // once negotiated, kept until commit or rollback
         private volatile WriteStamp _writerStamp;
         private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
+        private readonly StampLocker _locker = new StampLocker();
         private readonly object _owner;
 
         /// <summary>
@@ -56,22 +57,10 @@ namespace Shielded
             if (!Shield.Enlist(this, _locals.HasValue))
                 return;
 
-#if SERVER
-            var stamp = Shield.ReadStamp;
-            var w = _writerStamp;
-            if (w != null && w.Version != null && w.Version <= stamp)
-                lock (_locals)
-                {
-                    if ((w = _writerStamp) != null && w.Version != null && w.Version <= stamp)
-                        Monitor.Wait(_locals);
-                }
-#else
-            SpinWait.SpinUntil(() =>
-            {
+            _locker.WaitUntil(() => {
                 var w = _writerStamp;
                 return w == null || w.Version == null || w.Version > Shield.ReadStamp;
             });
-#endif
         }
 
         private ValueKeeper CurrentTransactionOldValue()
@@ -238,15 +227,8 @@ namespace Shielded
             newCurrent.Version = _writerStamp.Version.Value;
             _current = newCurrent;
             _locals.Value = null;
-#if SERVER
-            lock (_locals)
-            {
-                _writerStamp = null;
-                Monitor.PulseAll(_locals);
-            }
-#else
             _writerStamp = null;
-#endif
+            _locker.Release();
         }
 
         void IShielded.Rollback()
@@ -257,15 +239,8 @@ namespace Shielded
             var ws = _writerStamp;
             if (ws != null && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
             {
-#if SERVER
-                lock (_locals)
-                {
-                    _writerStamp = null;
-                    Monitor.PulseAll(_locals);
-                }
-#else
                 _writerStamp = null;
-#endif
+                _locker.Release();
             }
         }
         
