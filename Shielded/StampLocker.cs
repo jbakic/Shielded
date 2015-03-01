@@ -7,14 +7,12 @@ namespace Shielded
     {
         public void WaitUntil(Func<bool> test)
         {
-            if (test())
-                return;
             SpinWait sw = new SpinWait();
             do
             {
+                sw.SpinOnce();
                 if (test())
                     return;
-                sw.SpinOnce();
             } while (!sw.NextSpinWillYield);
             lock (this)
             {

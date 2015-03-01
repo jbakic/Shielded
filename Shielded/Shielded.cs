@@ -44,6 +44,12 @@ namespace Shielded
             _owner = owner ?? this;
         }
 
+        bool LockCheck()
+        {
+            var w = _writerStamp;
+            return w == null || w.Version == null || w.Version > Shield.ReadStamp;
+        }
+
         /// <summary>
         /// Enlists the field in the current transaction and, if this is the first
         /// access, checks the write lock. Will spin-wait (or Monitor.Wait if SERVER
@@ -57,10 +63,8 @@ namespace Shielded
             if (!Shield.Enlist(this, _locals.HasValue))
                 return;
 
-            _locker.WaitUntil(() => {
-                var w = _writerStamp;
-                return w == null || w.Version == null || w.Version > Shield.ReadStamp;
-            });
+            if (!LockCheck())
+                _locker.WaitUntil(LockCheck);
         }
 
         private ValueKeeper CurrentTransactionOldValue()

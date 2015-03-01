@@ -59,15 +59,19 @@ namespace Shielded
             _count = new Shielded<int>(0);
         }
 
+        bool LockCheck(TKey key)
+        {
+            WriteStamp w;
+            return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
+        }
+
         private void CheckLockAndEnlist(TKey key)
         {
             if (!Shield.Enlist(this, _localDict.HasValue) && _localDict.Value.Items.ContainsKey(key))
                 return;
 
-            _locker.WaitUntil(() => {
-                WriteStamp w;
-                return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
-            });
+            if (!LockCheck(key))
+                _locker.WaitUntil(() => LockCheck(key));
         }
 
         private ItemKeeper CurrentTransactionOldValue(TKey key)
