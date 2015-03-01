@@ -251,11 +251,15 @@ namespace Shielded
             if (IsInTransaction)
                 throw new InvalidOperationException("Operation not allowed in transaction.");
             return new CommittingSubscription(
-                items => act(items.Enlisted
-                    .Where(i => i.HasChanges)
-                    .Select(i => i.Owner)
-                    .OfType<T>()
-                    .Distinct()));
+                items => {
+                    var ts = items.Enlisted
+                        .Where(i => i.HasChanges)
+                        .Select(i => i.Owner)
+                        .OfType<T>()
+                        .Distinct();
+                    if (ts.Any())
+                        act(ts);
+                });
         }
 
         /// <summary>
