@@ -8,12 +8,13 @@ namespace Shielded
         public void WaitUntil(Func<bool> test)
         {
             SpinWait sw = new SpinWait();
+            int count = 0;
             do
             {
                 sw.SpinOnce();
                 if (test())
                     return;
-            } while (!sw.NextSpinWillYield);
+            } while (!sw.NextSpinWillYield || ++count < 4);
             lock (this)
             {
                 while (!test())
