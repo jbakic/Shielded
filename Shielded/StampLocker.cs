@@ -5,6 +5,8 @@ namespace Shielded
 {
     class StampLocker
     {
+        int _lockers;
+
         public void WaitUntil(Func<bool> test)
         {
             SpinWait sw = new SpinWait();
@@ -15,17 +17,32 @@ namespace Shielded
                 if (test())
                     return;
             } while (!sw.NextSpinWillYield || ++count < 4);
-            lock (this)
+            int? effect = null;
+            try
             {
-                while (!test())
-                    Monitor.Wait(this);
+                try {} finally
+                {
+                    effect = Interlocked.Increment(ref _lockers);
+                }
+                lock (this)
+                {
+                    while (!test())
+                        Monitor.Wait(this);
+                }
+            }
+            finally
+            {
+                if (effect.HasValue)
+                    Interlocked.Decrement(ref _lockers);
             }
         }
 
         public void Release()
         {
-            lock (this)
-                Monitor.PulseAll(this);
+            Thread.MemoryBarrier();
+            if (_lockers > 0)
+                lock (this)
+                    Monitor.PulseAll(this);
         }
     }
 }
