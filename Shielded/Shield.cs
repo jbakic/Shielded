@@ -51,7 +51,7 @@ namespace Shielded
         [ThreadStatic]
         private static ICommutableShielded _blockEnlist;
         [ThreadStatic]
-        private static bool _noNewEnlists;
+        private static bool _noNewEnlistsOrWrites;
         [ThreadStatic]
         private static bool _enforceTracking;
         [ThreadStatic]
@@ -65,8 +65,10 @@ namespace Shielded
         /// have not yet enlisted in the isolated items! So, this param is ignored within
         /// IsolatedRun calls. Outside of them, it allows for a much faster response.
         /// </summary>
-        internal static bool Enlist(IShielded item, bool hasLocals)
+        internal static bool Enlist(IShielded item, bool hasLocals, bool write)
         {
+            if (write && _noNewEnlistsOrWrites && !item.HasChanges)
+                throw new InvalidOperationException("Writes not allowed here.");
             if (_blockEnlist != null && _blockEnlist != item)
                 throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
             if (!_enforceTracking && hasLocals)
@@ -74,7 +76,7 @@ namespace Shielded
             AssertInTransaction();
             if (!_localItems.Enlisted.Contains(item))
             {
-                if (_noNewEnlists)
+                if (_noNewEnlistsOrWrites)
                     throw new InvalidOperationException("Cannot access new fields.");
                 // must not add into Enlisted before we run commutes, otherwise commutes' calls
                 // to Enlist would return false, and the commutes, although running first, would
@@ -217,7 +219,7 @@ namespace Shielded
         /// Dispose on it. Dispose can be called from trans.</returns>
         public static IDisposable Conditional(Func<bool> test, Action trans)
         {
-            return new Subscription(SubscriptionContext.PostCommit, test, trans);
+            return new CommitSubscription(CommitSubscriptionContext.PostCommit, test, trans);
         }
 
         /// <summary>
@@ -233,7 +235,7 @@ namespace Shielded
         /// Dispose on it. Dispose can be called from trans.</returns>
         public static IDisposable PreCommit(Func<bool> test, Action trans)
         {
-            return new Subscription(SubscriptionContext.PreCommit, test, trans);
+            return new CommitSubscription(CommitSubscriptionContext.PreCommit, test, trans);
         }
 
         /// <summary>
@@ -483,14 +485,14 @@ namespace Shielded
             bool commit = false;
             bool brokeInCommutes = items.Commutes != null && items.Commutes.Count > 0;
 
-            if (SubscriptionContext.PreCommit.Count > 0)
+            if (CommitSubscriptionContext.PreCommit.Count > 0)
             {
                 // if any commute would trigger a pre-commit check, this check could, if executed
                 // in the commute sub-transaction, see newer values in fields which
                 // were read (but not written to) by the main transaction. commutes are normally
                 // very isolated to prevent this, but pre-commits we cannot isolate.
                 // so, commutes trigger them now, and they cause the commutes to degenerate.
-                SubscriptionContext.PreCommit
+                CommitSubscriptionContext.PreCommit
                     .Trigger(brokeInCommutes ?
                         items.Enlisted.Where(HasChanges).Concat(
                             items.Commutes.SelectMany(c => c.Affecting)) :
@@ -655,7 +657,7 @@ repeatCommutes: if (brokeInCommutes)
             }
 
             (items.Fx != null ? items.Fx.Select(f => f.OnCommit) : null)
-                .SafeConcat(SubscriptionContext.PostCommit.Trigger(trigger))
+                .SafeConcat(CommitSubscriptionContext.PostCommit.Trigger(trigger))
                 .SafeRun();
         }
 
@@ -663,12 +665,12 @@ repeatCommutes: if (brokeInCommutes)
         {
             try
             {
-                _noNewEnlists = true;
+                _noNewEnlistsOrWrites = true;
                 CommittingSubscription.Fire(items);
             }
             finally
             {
-                _noNewEnlists = false;
+                _noNewEnlistsOrWrites = false;
             }
         }
 

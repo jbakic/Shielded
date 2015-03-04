@@ -57,10 +57,10 @@ namespace Shielded
         /// write lock is released. Since write stamps are increasing, this is
         /// likely to happen only at the beginning of transactions.
         /// </summary>
-        private void CheckLockAndEnlist()
+        private void CheckLockAndEnlist(bool write)
         {
             // if already enlisted, no need to check lock.
-            if (!Shield.Enlist(this, _locals.HasValue))
+            if (!Shield.Enlist(this, _locals.HasValue, write))
                 return;
 
             if (!LockCheck())
@@ -81,13 +81,13 @@ namespace Shielded
         /// </summary>
         public T GetOldValue()
         {
-            CheckLockAndEnlist();
+            CheckLockAndEnlist(false);
             return CurrentTransactionOldValue().Value;
         }
 
         private void PrepareForWriting(bool prepareOld)
         {
-            CheckLockAndEnlist();
+            CheckLockAndEnlist(true);
             if (_current.Version > Shield.ReadStamp)
                 throw new TransException("Write collision.");
             if (!_locals.HasValue)
@@ -110,7 +110,7 @@ namespace Shielded
                 if (!Shield.IsInTransaction)
                     return _current.Value;
 
-                CheckLockAndEnlist();
+                CheckLockAndEnlist(false);
                 if (!_locals.HasValue)
                     return CurrentTransactionOldValue().Value;
                 else if (_current.Version > Shield.ReadStamp)

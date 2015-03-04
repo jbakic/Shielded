@@ -10,14 +10,14 @@ namespace Shielded
     /// Contains information about a commit subscription, used in implementing
     /// <see cref="Shield.Conditional"/> and <see cref="Shield.PreCommit"/>.
     /// </summary>
-    internal class Subscription : IDisposable, IShielded
+    internal class CommitSubscription : IDisposable, IShielded
     {
         private readonly Shielded<ISet<IShielded>> _items = new Shielded<ISet<IShielded>>();
         private readonly Func<bool> Test;
         private readonly Action Trans;
-        private readonly SubscriptionContext Context;
+        private readonly CommitSubscriptionContext Context;
 
-        public Subscription(SubscriptionContext context, Func<bool> test, Action trans)
+        public CommitSubscription(CommitSubscriptionContext context, Func<bool> test, Action trans)
         {
             Context = context;
             Test = test;
@@ -85,7 +85,7 @@ namespace Shielded
         /// </summary>
         void UpdateEntries()
         {
-            Shield.Enlist(this, false);
+            Shield.Enlist(this, false, true);
             var l = new Locals();
 
             var oldItems = _items.GetOldValue();
@@ -106,7 +106,7 @@ namespace Shielded
                             Context.AddOrUpdate(newKey, k => Enumerable.Repeat(this, 1),
                                 (k, existing) => {
                                     var list = existing != null ?
-                                        new List<Subscription>(existing) : new List<Subscription>();
+                                        new List<CommitSubscription>(existing) : new List<CommitSubscription>();
                                     list.Add(this);
                                     return list;
                                 });
@@ -118,14 +118,14 @@ namespace Shielded
         {
             foreach (var remKey in toRemove)
             {
-                IEnumerable<Subscription> oldList;
-                List<Subscription> newList;
+                IEnumerable<CommitSubscription> oldList;
+                List<CommitSubscription> newList;
                 lock (Context)
                 {
                     oldList = Context[remKey];
                     if (oldList.Count() > 1)
                     {
-                        newList = new List<Subscription>(oldList);
+                        newList = new List<CommitSubscription>(oldList);
                         newList.Remove(this);
                         Context[remKey] = newList;
                     }

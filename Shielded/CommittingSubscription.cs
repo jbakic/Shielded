@@ -6,19 +6,19 @@ namespace Shielded
 {
     internal class CommittingSubscription : IDisposable
     {
-        private static List<CommittingSubscription> _whenCommitSubs;
+        private static List<CommittingSubscription> _whenCommitingSubs;
 
         public static bool Any
         {
             get
             {
-                return _whenCommitSubs != null;
+                return _whenCommitingSubs != null;
             }
         }
 
         public static void Fire(TransItems items)
         {
-            var theList = _whenCommitSubs;
+            var theList = _whenCommitingSubs;
             if (theList == null)
                 return;
 
@@ -35,11 +35,11 @@ namespace Shielded
             List<CommittingSubscription> oldList, newList;
             do
             {
-                oldList = _whenCommitSubs;
+                oldList = _whenCommitingSubs;
                 newList = oldList != null ? new List<CommittingSubscription>(oldList) :
                     new List<CommittingSubscription>();
                 newList.Add(this);
-            } while (Interlocked.CompareExchange(ref _whenCommitSubs, newList, oldList) != oldList);
+            } while (Interlocked.CompareExchange(ref _whenCommitingSubs, newList, oldList) != oldList);
         }
 
         public void Dispose()
@@ -47,7 +47,7 @@ namespace Shielded
             List<CommittingSubscription> oldList, newList;
             do
             {
-                oldList = _whenCommitSubs;
+                oldList = _whenCommitingSubs;
                 if (oldList.Count == 1)
                     newList = null;
                 else
@@ -55,7 +55,7 @@ namespace Shielded
                     newList = new List<CommittingSubscription>(oldList);
                     newList.Remove(this);
                 }
-            } while (Interlocked.CompareExchange(ref _whenCommitSubs, newList, oldList) != oldList);
+            } while (Interlocked.CompareExchange(ref _whenCommitingSubs, newList, oldList) != oldList);
         }
     }
 }

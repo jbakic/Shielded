@@ -63,8 +63,6 @@
     <Compile Include="LocalStorage.cs" />
     <Compile Include="ShieldedEvent.cs" />
     <Compile Include="Actions.cs" />
-    <Compile Include="SubscriptionContext.cs" />
-    <Compile Include="Subscription.cs" />
     <Compile Include="SimpleHashSet.cs" />
     <Compile Include="WriteStamp.cs" />
     <Compile Include="VersionList.cs" />
@@ -77,6 +75,8 @@
     <Compile Include="TransactionField.cs" />
     <Compile Include="CommittingSubscription.cs" />
     <Compile Include="StampLocker.cs" />
+    <Compile Include="CommitSubscription.cs" />
+    <Compile Include="CommitSubscriptionContext.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

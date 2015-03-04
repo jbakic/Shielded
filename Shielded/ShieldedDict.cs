@@ -65,9 +65,9 @@ namespace Shielded
             return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
         }
 
-        private void CheckLockAndEnlist(TKey key)
+        private void CheckLockAndEnlist(TKey key, bool write)
         {
-            if (!Shield.Enlist(this, _localDict.HasValue) && _localDict.Value.Items.ContainsKey(key))
+            if (!Shield.Enlist(this, _localDict.HasValue, write) && _localDict.Value.Items.ContainsKey(key))
                 return;
 
             if (!LockCheck(key))
@@ -98,7 +98,7 @@ namespace Shielded
         /// </summary>
         private ItemKeeper PrepareWrite(TKey key)
         {
-            CheckLockAndEnlist(key);
+            CheckLockAndEnlist(key, true);
             var locals = PrepareLocals();
             ItemKeeper existing;
             if (locals.Items.TryGetValue(key, out existing))
@@ -108,7 +108,7 @@ namespace Shielded
 
         private ItemKeeper Read(TKey key)
         {
-            CheckLockAndEnlist(key);
+            CheckLockAndEnlist(key, false);
             ItemKeeper v, curr;
             var locals = PrepareLocals();
             bool hasLocal;

@@ -5,10 +5,10 @@ using System.Linq;
 
 namespace Shielded
 {
-    internal class SubscriptionContext : ConcurrentDictionary<IShielded, IEnumerable<Subscription>>
+    internal class CommitSubscriptionContext : ConcurrentDictionary<IShielded, IEnumerable<CommitSubscription>>
     {
-        public static readonly SubscriptionContext PreCommit = new SubscriptionContext();
-        public static readonly SubscriptionContext PostCommit = new SubscriptionContext();
+        public static readonly CommitSubscriptionContext PreCommit = new CommitSubscriptionContext();
+        public static readonly CommitSubscriptionContext PostCommit = new CommitSubscriptionContext();
 
         /// <summary>
         /// Prepares subscriptions for execution based on the items that were committed.
@@ -18,12 +18,12 @@ namespace Shielded
             if (Count == 0)
                 return null;
 
-            HashSet<Subscription> result = null;
+            HashSet<CommitSubscription> result = null;
             foreach (var item in changes)
             {
-                IEnumerable<Subscription> list;
+                IEnumerable<CommitSubscription> list;
                 if (!TryGetValue(item, out list) || list == null) continue;
-                if (result == null) result = new HashSet<Subscription>();
+                if (result == null) result = new HashSet<CommitSubscription>();
                 result.UnionWith(list);
             }
 
