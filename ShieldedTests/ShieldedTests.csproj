@@ -42,6 +42,7 @@
     <Compile Include="PreCommitTests.cs" />
     <Compile Include="ProxyTestEntities.cs" />
     <Compile Include="WhenCommittingTests.cs" />
+    <Compile Include="CommuteTests.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

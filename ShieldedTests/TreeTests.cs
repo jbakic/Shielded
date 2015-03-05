@@ -27,18 +27,13 @@ namespace ShieldedTests
             Assert.AreEqual(objectB, tree["key b"]);
             Assert.AreEqual(objectC, tree["key c"]);
 
-            try
-            {
+            Assert.Throws<KeyNotFoundException>(() => {
                 var x = tree["not me"];
-            }
-            catch (KeyNotFoundException) {}
-            Shield.InTransaction(() => {
-                try
-                {
-                    var x = tree["not me"];
-                }
-                catch (KeyNotFoundException) {}
             });
+            Shield.InTransaction(() =>
+                Assert.Throws<KeyNotFoundException>(() => {
+                    var x = tree["not me"];
+                }));
 
             Shield.InTransaction(() => {
                 tree["key a"] = objectC;
@@ -113,13 +108,10 @@ namespace ShieldedTests
                 };
             });
 
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() => {
                 foreach (var kvp in tree.Range(1, 5))
                     Assert.Fail();
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            });
 
             Shield.InTransaction(() => {
                 Assert.IsFalse(tree.Range(5, 1).Any());
@@ -135,19 +127,11 @@ namespace ShieldedTests
         {
             var tree = new ShieldedTree<int, object>();
 
-            try
-            {
-                tree.Add(1, new object());
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() =>
+                tree.Add(1, new object()));
+            Assert.Throws<InvalidOperationException>(() =>
                 ((ICollection<KeyValuePair<int, object>>)tree).Add(
-                    new KeyValuePair<int, object>(1, new object()));
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+                    new KeyValuePair<int, object>(1, new object())));
 
             var objectA = new object();
             var objectB = new object();
@@ -188,12 +172,7 @@ namespace ShieldedTests
                 };
             });
 
-            try
-            {
-                tree.Clear();
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            Assert.Throws<InvalidOperationException>(tree.Clear);
 
             Shield.InTransaction(() => {
                 tree.Clear();
@@ -260,18 +239,10 @@ namespace ShieldedTests
                 };
             });
 
-            try
-            {
-                tree.Remove("key a");
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
-            try
-            {
-                tree.Remove(new KeyValuePair<string, object>("key a", null));
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            Assert.Throws<InvalidOperationException>(() =>
+                tree.Remove("key a"));
+            Assert.Throws<InvalidOperationException>(() =>
+                tree.Remove(new KeyValuePair<string, object>("key a", null)));
 
             Shield.InTransaction(() => {
                 tree.Remove("key a");

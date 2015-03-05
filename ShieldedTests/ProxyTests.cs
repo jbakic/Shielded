@@ -54,12 +54,8 @@ namespace ShieldedTests
         {
             var test = Factory.NewShielded<TestEntity>();
 
-            try
-            {
-                test.Id = Guid.NewGuid();
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) { }
+            Assert.Throws<InvalidOperationException>(() =>
+                test.Id = Guid.NewGuid());
 
             var id = Guid.NewGuid();
             // the proxy object will, when changed, appear in the list of changed
@@ -119,22 +115,22 @@ namespace ShieldedTests
             var test = Factory.NewShielded<TestEntity>();
 
             int transactionCount = 0, commuteCount = 0;
-            Task.WaitAll(Enumerable.Range(1, 500).Select(i => Task.Factory.StartNew(() => {
+            Task.WaitAll(Enumerable.Range(1, 100).Select(i => Task.Factory.StartNew(() => {
                 Shield.InTransaction(() => {
                     Interlocked.Increment(ref transactionCount);
                     test.Commute(() => {
                         Interlocked.Increment(ref commuteCount);
                         test.Counter = test.Counter + i;
+                        Thread.Sleep(1);
                     });
                 });
             }, TaskCreationOptions.LongRunning)).ToArray());
-            Assert.AreEqual(125250, test.Counter);
+            Assert.AreEqual(5050, test.Counter);
             // commutes never conflict (!)
-            Assert.AreEqual(500, transactionCount);
-            Assert.Greater(commuteCount, 500);
+            Assert.AreEqual(100, transactionCount);
+            Assert.Greater(commuteCount, 100);
 
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() =>
                 Shield.InTransaction(() => {
                     test.Commute(() => {
                         // this will throw, because it tries to run a commute on NameChanges, which
@@ -144,9 +140,7 @@ namespace ShieldedTests
                         test.Name = "something";
                         Assert.Fail();
                     });
-                });
-            }
-            catch (InvalidOperationException) { }
+                }));
         }
 
         [Test]
@@ -160,12 +154,8 @@ namespace ShieldedTests
 
         private void AssertTransactional<T>(IIdentifiable<T> item)
         {
-            try
-            {
-                item.Id = default(T);
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) { }
+            Assert.Throws<InvalidOperationException>(() =>
+                item.Id = default(T));
 
             Shield.InTransaction(() => {
                 item.Id = default(T);
@@ -183,7 +173,7 @@ namespace ShieldedTests
                 Assembly.GetExecutingAssembly().GetTypes()
                     .Where(t =>
                         t.Namespace != null &&
-                        t.Namespace.StartsWith("ShieldedTests.ProxyTestEntities") &&
+                        t.Namespace.StartsWith("ShieldedTests.ProxyTestEntities", StringComparison.Ordinal) &&
                         t.IsClass)
                     .ToArray());
 

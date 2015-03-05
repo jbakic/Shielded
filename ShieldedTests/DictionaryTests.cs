@@ -16,12 +16,8 @@ namespace ShieldedTests
         {
             var dict = new ShieldedDict<int, object>();
 
-            try
-            {
-                dict[1] = new object();
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            Assert.Throws<InvalidOperationException>(() =>
+                dict[1] = new object());
 
             Shield.InTransaction(() =>
             {
@@ -126,18 +122,13 @@ namespace ShieldedTests
             Assert.AreEqual(objectB, dict["key b"]);
             Assert.AreEqual(objectC, dict["key c"]);
 
-            try
-            {
+            Assert.Throws<KeyNotFoundException>(() => {
                 var x = dict["not me"];
-            }
-            catch (KeyNotFoundException) {}
-            Shield.InTransaction(() => {
-                try
-                {
-                    var x = dict["not me"];
-                }
-                catch (KeyNotFoundException) {}
             });
+            Shield.InTransaction(() =>
+                Assert.Throws<KeyNotFoundException>(() => {
+                    var x = dict["not me"];
+                }));
 
             Shield.InTransaction(() => {
                 dict["key a"] = objectC;
@@ -212,19 +203,11 @@ namespace ShieldedTests
         {
             var dict = new ShieldedDict<int, object>();
 
-            try
-            {
-                dict.Add(1, new object());
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() =>
+                dict.Add(1, new object()));
+            Assert.Throws<InvalidOperationException>(() =>
                 ((ICollection<KeyValuePair<int, object>>)dict).Add(
-                    new KeyValuePair<int, object>(1, new object()));
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+                    new KeyValuePair<int, object>(1, new object())));
 
             var objectA = new object();
             var objectB = new object();
@@ -250,12 +233,7 @@ namespace ShieldedTests
                 new KeyValuePair<string, object>("key c", null),
             });
 
-            try
-            {
-                dict.Clear();
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            Assert.Throws<InvalidOperationException>(dict.Clear);
 
             Shield.InTransaction(() => {
                 dict.Clear();
@@ -328,19 +306,11 @@ namespace ShieldedTests
                 new KeyValuePair<string, object>("key c", null),
             });
 
-            try
-            {
-                dict.Remove("key a");
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() =>
+                dict.Remove("key a"));
+            Assert.Throws<InvalidOperationException>(() =>
                 ((ICollection<KeyValuePair<string, object>>)dict).Remove(
-                    new KeyValuePair<string, object>("key a", null));
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+                    new KeyValuePair<string, object>("key a", null)));
 
             Shield.InTransaction(() => {
                 dict.Remove("key a");

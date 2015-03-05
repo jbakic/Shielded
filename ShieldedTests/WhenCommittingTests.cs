@@ -9,6 +9,24 @@ namespace ShieldedTests
     public class WhenCommittingTests
     {
         [Test]
+        public void RollbackWhenCommitting()
+        {
+            var x = new Shielded<int>();
+            int commitCount = 0;
+            using (Shield.WhenCommitting<Shielded<int>>(ints =>
+                {
+                    if (commitCount++ == 0)
+                        Shield.Rollback();
+                }))
+            {
+                Shield.InTransaction(() => x.Value = 5);
+            }
+
+            Assert.AreEqual(2, commitCount);
+            Assert.AreEqual(5, x);
+        }
+
+        [Test]
         public void NoExpandingOfTransaction()
         {
             var a = new Shielded<int>();
@@ -28,20 +46,11 @@ namespace ShieldedTests
                     written.Value = written + 1;
 
                     Assert.IsFalse(fieldList.Contains(b));
-                    try
-                    {
-                        // this one was not even read
-                        x = b;
-                        Assert.Fail("WhenCommitting subscription managed to read a new field.");
-                    }
-                    catch (InvalidOperationException) { }
-                    try
-                    {
-                        // and this one was just read, and cannot be made writeable
-                        a.Value = a + 1;
-                        Assert.Fail("WhenCommitting subscription managed to write in a read-only field.");
-                    }
-                    catch (InvalidOperationException) { }
+                    // this one was not even read
+                    Assert.Throws<InvalidOperationException>(() => x = b);
+
+                    // and this one was just read, and cannot be made writeable
+                    Assert.Throws<InvalidOperationException>(() => a.Value = a + 1);
                 }))
             {
                 Shield.InTransaction(() => {
