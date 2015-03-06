@@ -60,7 +60,7 @@ namespace Shielded
         static VersionList()
         {
             // base version, has 0 stamp, and no changes
-            _oldestRead = _current = new VersionEntry() { Changes = new List<IShielded>() };
+            _oldestRead = _current = new VersionEntry() { Changes = Enumerable.Empty<IShielded>() };
         }
 
         /// <summary>
@@ -107,14 +107,9 @@ namespace Shielded
         }
         
         private static int _trimFlag = 0;
-        private static int _trimClock = 0;
 
         public static void TrimCopies()
         {
-            // trimming won't start every time..
-            if ((Interlocked.Increment(ref _trimClock) & 0xF) != 0)
-                return;
-
             bool tookFlag = false;
             try
             {
@@ -131,7 +126,7 @@ namespace Shielded
 #else
                 SimpleHashSet toTrim = null;
 #endif
-                while (old != _current && old.ReaderCount == 0 && old.Changes != null)
+                while (old.ReaderCount == 0 && old.Changes != null)
                 {
                     if (toTrim == null)
 #if USE_STD_HASHSET
@@ -140,11 +135,16 @@ namespace Shielded
                         toTrim = new SimpleHashSet();
 #endif
                     toTrim.UnionWith(old.Changes);
+
+                    if (old == _current)
+                        break;
                     old = old.Later;
                 }
                 if (toTrim == null)
                     return;
 
+                if (_current == old)
+                    old.Changes = Enumerable.Empty<IShielded>();
                 _oldestRead = old;
                 var version = old.Stamp;
                 foreach (var sh in toTrim)

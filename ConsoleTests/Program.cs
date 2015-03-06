@@ -1176,9 +1176,9 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
-            BetShopPoolTest();
+            //BetShopPoolTest();
 
             //TreeTest();
 
