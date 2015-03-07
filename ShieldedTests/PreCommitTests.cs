@@ -103,7 +103,7 @@ namespace ShieldedTests
             slowThread1.Start();
 
             IDisposable conditional = null;
-            conditional = Shield.Conditional(() => { int i = x.Value; return true; },
+            conditional = Shield.Conditional(() => { int i = x; return true; },
                 () => {
                     barrier.SignalAndWait();
                     conditional.Dispose();
@@ -141,11 +141,12 @@ namespace ShieldedTests
             var slowThread2 = new Thread(() => {
                 try
                 {
+                    barrier.SignalAndWait();
                     Interlocked.Exchange(ref ownerThreadId, Thread.CurrentThread.ManagedThreadId);
                     Shield.InTransaction(() => {
                         Interlocked.Increment(ref slowThread2Repeats);
                         int a = x;
-                        Thread.Sleep(500);
+                        Thread.Sleep(100);
                         x.Value = a - 1;
                     });
                 }
@@ -155,6 +156,12 @@ namespace ShieldedTests
                 }
             });
             slowThread2.Start();
+
+            conditional = Shield.Conditional(() => { int i = x; return true; },
+                () => {
+                    barrier.SignalAndWait();
+                    conditional.Dispose();
+                });
 
             foreach (int i in Enumerable.Range(1, 1000))
             {
