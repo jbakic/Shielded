@@ -54,7 +54,7 @@ namespace Shielded
             }
         }
 
-        private static VersionEntry _current;
+        private static volatile VersionEntry _current;
         private static VersionEntry _oldestRead;
 
         static VersionList()
