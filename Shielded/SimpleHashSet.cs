@@ -276,13 +276,22 @@ namespace Shielded
         public void UnionWith(IEnumerable<IShielded> other)
         {
             var otherAsSet = other as SimpleHashSet;
-            if (otherAsSet == null)
-                foreach (var item in other)
-                    AddInternal(item);
-            else
+            if (otherAsSet != null)
+            {
                 for (int i = 0; i < otherAsSet._array.Length; i++)
                     if (otherAsSet._array[i] != null)
                         AddInternal(otherAsSet._array[i]);
+                return;
+            }
+            var otherAsList = other as List<IShielded>;
+            if (otherAsList != null)
+            {
+                for (int i = 0; i < otherAsList.Count; i++)
+                    AddInternal(otherAsList[i]);
+                return;
+            }
+            foreach (var item in other)
+                AddInternal(item);
         }
         #endregion
 

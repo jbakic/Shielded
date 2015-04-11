@@ -290,7 +290,7 @@ namespace ConsoleTests
         {
             ShieldedDict<int, Shielded<int>> dict = new ShieldedDict<int, Shielded<int>>();
             var randomizr = new Random();
-            foreach (var _ in Enumerable.Repeat(0, 10))
+            while (true)
             {
                 var transactionCounter = 0;
                 var time = mtTest("dictionary", 10000, i =>

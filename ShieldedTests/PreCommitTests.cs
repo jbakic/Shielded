@@ -106,6 +106,7 @@ namespace ShieldedTests
             conditional = Shield.Conditional(() => { int i = x; return true; },
                 () => {
                     barrier.SignalAndWait();
+                    Thread.Yield();
                     conditional.Dispose();
                 });
 

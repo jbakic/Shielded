@@ -74,16 +74,13 @@ namespace Shielded
                 while (true)
                 {
                     var curr = _current;
-                    Interlocked.Increment(ref curr.ReaderCount);
-                    // if the curr changed before we incremented, it could have theoretically
-                    // been trimmed away. so, if the _current changed, drop the old, and take the new.
-                    if (curr == _current)
+                    // trimming sets this to int.MinValue, so unless 2 billion threads are doing this
+                    // simultaneously, we're safe.
+                    if (Interlocked.Increment(ref curr.ReaderCount) > 0)
                     {
                         ticket = curr;
                         break;
                     }
-                    else
-                        Interlocked.Decrement(ref curr.ReaderCount);
                 }
             }
         }
@@ -126,8 +123,15 @@ namespace Shielded
 #else
                 SimpleHashSet toTrim = null;
 #endif
-                while (old.ReaderCount == 0 && old.Changes != null)
+                while (old != _current && Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
                 {
+                    // NB the _oldestRead was trimmed in the previous trimming run. also note that
+                    // the Changes in each entry can be trimmed, and that version is still readable,
+                    // because trimming removes _old_ entries, not the ones with that version.
+                    old = old.Later;
+                    if (old.Changes == null)
+                        break;
+
                     if (toTrim == null)
 #if USE_STD_HASHSET
                         toTrim = new HashSet<IShielded>();
@@ -135,16 +139,11 @@ namespace Shielded
                         toTrim = new SimpleHashSet();
 #endif
                     toTrim.UnionWith(old.Changes);
-
-                    if (old == _current)
-                        break;
-                    old = old.Later;
                 }
                 if (toTrim == null)
                     return;
 
-                if (_current == old)
-                    old.Changes = Enumerable.Empty<IShielded>();
+                old.Changes = Enumerable.Empty<IShielded>();
                 _oldestRead = old;
                 var version = old.Stamp;
                 foreach (var sh in toTrim)
