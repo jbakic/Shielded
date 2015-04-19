@@ -126,6 +126,16 @@ namespace Shielded
                     _array[i].Rollback();
         }
 
+        /// <summary>
+        /// Helper for trimming.
+        /// </summary>
+        public void TrimCopies(long minOpenTransaction)
+        {
+            for (int i = 0; i < _array.Length; i++)
+                if (_array[i] != null)
+                    _array[i].TrimCopies(minOpenTransaction);
+        }
+
         #region IEnumerable implementation
         IEnumerator IEnumerable.GetEnumerator()
         {

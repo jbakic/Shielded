@@ -146,8 +146,12 @@ namespace Shielded
                 old.Changes = Enumerable.Empty<IShielded>();
                 _oldestRead = old;
                 var version = old.Stamp;
+#if USE_STD_HASHSET
                 foreach (var sh in toTrim)
                     sh.TrimCopies(version);
+#else
+                toTrim.TrimCopies(version);
+#endif
             }
             finally
             {
