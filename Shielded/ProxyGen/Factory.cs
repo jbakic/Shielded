@@ -49,7 +49,7 @@ namespace Shielded.ProxyGen
         /// </summary>
         public static T NewShielded<T>() where T : class, new()
         {
-            return _activators.GetOrAdd(ShieldedType(typeof(T)), CreateActivator)() as T;
+            return (T)_activators.GetOrAdd(ShieldedType(typeof(T)), CreateActivator)();
         }
 
         /// <summary>

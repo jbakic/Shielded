@@ -13,7 +13,8 @@ namespace Shielded
     /// <summary>
     /// Thread-local storage - multiple threads can share a ref to this, each sees only
     /// what it put inside. It is very simple, using direct local fields when one thread
-    /// is using it, and resorting to a ThreadStatic dictionary otherwise.
+    /// is using it, and resorting to a ThreadStatic dictionary otherwise. It is important
+    /// to call <see cref="Release"/> to eventually release the storage used by a thread.
     /// </summary>
     public class LocalStorage<T> where T : class
     {
@@ -23,7 +24,7 @@ namespace Shielded
         private T _heldValue;
 
         /// <summary>
-        /// Returns <c>true</c> if current thread has something (non-null!) inside this storage.
+        /// Returns <c>true</c> if current thread has something inside this storage.
         /// </summary>
         public bool HasValue
         {
@@ -35,9 +36,8 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Gets or sets the value for the current thread. Setting it to null releases
-        /// the storage used by the current thread. Getter throws if there is no value
-        /// for this thread.
+        /// Gets or sets the value for the current thread. Use <see cref="Release"/>
+        /// to eventually release the local storage.
         /// </summary>
         public T Value
         {
@@ -49,36 +49,40 @@ namespace Shielded
             set
             {
                 var threadId = Thread.CurrentThread.ManagedThreadId;
-                if (value != null)
+                var holder = Interlocked.CompareExchange(ref _holderThreadId, threadId, 0);
+                if (holder == threadId || holder == 0)
                 {
-                    var holder = Interlocked.CompareExchange(ref _holderThreadId, threadId, 0);
-                    if (holder == threadId || holder == 0)
-                    {
-                        _heldValue = value;
-                        // A bugfix for a bug that never was. -- If we're just now taking over
-                        // local fields, then what if we already had something in the dictionary?
-                        // Let's remove it then. The bug, however, never happened, because no user
-                        // of this class makes two consecutive writes. They put something in,
-                        // then null, and only then something else. But it's best to be safe.
-                        if (holder == 0 && LocalStorageHold.Storage != null)
-                            LocalStorageHold.Storage.Remove(this);
-                    }
-                    else
-                    {
-                        if (LocalStorageHold.Storage == null)
-                            LocalStorageHold.Storage = new Dictionary<object, object>();
-                        LocalStorageHold.Storage[this] = value;
-                    }
+                    _heldValue = value;
+                    // A bugfix for a bug that never was. -- If we're just now taking over
+                    // local fields, then what if we already had something in the dictionary?
+                    // Let's remove it then. The bug, however, never happened, because no user
+                    // of this class makes two consecutive writes. They put something in,
+                    // then null, and only then something else. But it's best to be safe.
+                    if (holder == 0 && LocalStorageHold.Storage != null)
+                        LocalStorageHold.Storage.Remove(this);
                 }
-                else if (_holderThreadId == threadId)
+                else
                 {
-                    _heldValue = null;
-                    _holderThreadId = 0;
+                    if (LocalStorageHold.Storage == null)
+                        LocalStorageHold.Storage = new Dictionary<object, object>();
+                    LocalStorageHold.Storage[this] = value;
                 }
-                else if (LocalStorageHold.Storage != null)
-                {
-                    LocalStorageHold.Storage.Remove(this);
-                }
+            }
+        }
+
+        /// <summary>
+        /// Release the storage of the current thread.
+        /// </summary>
+        public void Release()
+        {
+            if (_holderThreadId == Thread.CurrentThread.ManagedThreadId)
+            {
+                _heldValue = null;
+                _holderThreadId = 0;
+            }
+            else if (LocalStorageHold.Storage != null)
+            {
+                LocalStorageHold.Storage.Remove(this);
             }
         }
     }

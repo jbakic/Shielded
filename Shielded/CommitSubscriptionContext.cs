@@ -28,7 +28,7 @@ namespace Shielded
             }
 
             return result != null ?
-                result.Select(cs => (Action)( () => cs.Run(changes) ) ) : null;
+                result.Select(cs => (Action)( () => cs.Run(changes) )) : null;
         }
     }
 }

@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Linq;
 
 namespace Shielded
 {
     internal class CommittingSubscription : IDisposable
     {
-        private static List<CommittingSubscription> _whenCommitingSubs;
+        private static CommittingSubscription[] _whenCommitingSubs;
 
         public static bool Any
         {
@@ -22,39 +23,38 @@ namespace Shielded
             if (theList == null)
                 return;
 
-            for (int i = 0; i < theList.Count; i++)
-                theList[i].Act(items);
+            var fields = items.Enlisted
+                .GroupBy(i => i.Owner)
+                .Select(grp => new TransactionField(grp.Key, grp.Any(i => i.HasChanges)))
+                .ToArray();
+            for (int i = 0; i < theList.Length; i++)
+                theList[i].Act(fields);
         }
 
-        public readonly Action<TransItems> Act;
+        public readonly Action<TransactionField[]> Act;
 
-        public CommittingSubscription(Action<TransItems> act)
+        public CommittingSubscription(Action<TransactionField[]> act)
         {
             Act = act;
 
-            List<CommittingSubscription> oldList, newList;
+            CommittingSubscription[] oldList, newList;
+            var newItem = new[] { this };
             do
             {
                 oldList = _whenCommitingSubs;
-                newList = oldList != null ? new List<CommittingSubscription>(oldList) :
-                    new List<CommittingSubscription>();
-                newList.Add(this);
+                newList = oldList == null ? newItem : oldList.Concat(newItem).ToArray();
             } while (Interlocked.CompareExchange(ref _whenCommitingSubs, newList, oldList) != oldList);
         }
 
         public void Dispose()
         {
-            List<CommittingSubscription> oldList, newList;
+            CommittingSubscription[] oldList, newList;
             do
             {
                 oldList = _whenCommitingSubs;
-                if (oldList.Count == 1)
+                newList = oldList.Where(i => i != this).ToArray();
+                if (newList.Length == 0)
                     newList = null;
-                else
-                {
-                    newList = new List<CommittingSubscription>(oldList);
-                    newList.Remove(this);
-                }
             } while (Interlocked.CompareExchange(ref _whenCommitingSubs, newList, oldList) != oldList);
         }
     }

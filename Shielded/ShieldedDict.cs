@@ -262,7 +262,7 @@ namespace Shielded
                     _copies.Enqueue(Tuple.Create((long)version, copyList));
                 _locker.Release();
             }
-            _localDict.Value = null;
+            _localDict.Release();
         }
 
         void IShielded.Rollback()
@@ -284,7 +284,7 @@ namespace Shielded
                 }
                 _locker.Release();
             }
-            _localDict.Value = null;
+            _localDict.Release();
         }
 
         void IShielded.TrimCopies(long smallestOpenTransactionId)

@@ -98,18 +98,15 @@ namespace Shielded
             finally
             {
                 _locals.Value = l;
+                var newArray = new[] { this };
                 // early adding
                 if (l.PreAdd != null)
                     foreach (var newKey in l.PreAdd)
                     {
                         lock (Context)
-                            Context.AddOrUpdate(newKey, k => Enumerable.Repeat(this, 1),
-                                (k, existing) => {
-                                    var list = existing != null ?
-                                        new List<CommitSubscription>(existing) : new List<CommitSubscription>();
-                                    list.Add(this);
-                                    return list;
-                                });
+                            Context.AddOrUpdate(newKey,
+                                k => newArray,
+                                (k, existing) => existing.Concat(newArray).ToArray());
                     }
             }
         }
@@ -118,17 +115,14 @@ namespace Shielded
         {
             foreach (var remKey in toRemove)
             {
-                IEnumerable<CommitSubscription> oldList;
-                List<CommitSubscription> newList;
                 lock (Context)
                 {
-                    oldList = Context[remKey];
-                    if (oldList.Count() > 1)
-                    {
-                        newList = new List<CommitSubscription>(oldList);
-                        newList.Remove(this);
+                    IEnumerable<CommitSubscription> oldList;
+                    if (!Context.TryGetValue(remKey, out oldList))
+                        continue;
+                    var newList = oldList.Where(i => i != this).ToArray();
+                    if (newList.Length > 0)
                         Context[remKey] = newList;
-                    }
                     else
                         Context.TryRemove(remKey, out oldList);
                 }
@@ -145,7 +139,7 @@ namespace Shielded
         {
             if (_locals.Value.CommitRemove != null)
                 Remover(_locals.Value.CommitRemove);
-            _locals.Value = null;
+            _locals.Release();
         }
 
         void IShielded.Rollback()
@@ -154,7 +148,7 @@ namespace Shielded
                 return;
             if (_locals.Value.PreAdd != null)
                 Remover(_locals.Value.PreAdd);
-            _locals.Value = null;
+            _locals.Release();
         }
 
         void IShielded.TrimCopies(long smallestOpenTransactionId) { }

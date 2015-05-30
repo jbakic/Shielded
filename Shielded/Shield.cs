@@ -244,8 +244,8 @@ namespace Shielded
         /// checked, but before anything is written. The action can then make parallel
         /// changes in another data store, or it can call <see cref="Shield.Rollback"/>
         /// to retry the transaction from the beginning. The action may not access any
-        /// fields that the transaction did not already access, and it should not
-        /// do any writes into shielded fields!
+        /// fields that the transaction did not already access, and it may only write
+        /// into fields which were already written to by the transaction.
         /// This method throws when called within a transaction.
         /// </summary>
         /// <returns>An IDisposable for unsubscribing.</returns>
@@ -254,13 +254,21 @@ namespace Shielded
             if (IsInTransaction)
                 throw new InvalidOperationException("Operation not allowed in transaction.");
             return new CommittingSubscription(
-                items => {
-                    if (items.Enlisted.Any(i => i.HasChanges && i.Owner is T))
-                        act(items.Enlisted
-                            .Where(i => i.HasChanges)
-                            .Select(i => i.Owner)
-                            .OfType<T>()
-                            .Distinct());
+                fields => {
+                    List<T> interesting = null;
+                    for (int i = 0; i < fields.Length; i++)
+                    {
+                        var field = fields[i];
+                        T obj;
+                        if (field.HasChanges && (obj = field.Field as T) != null)
+                        {
+                            if (interesting == null)
+                                interesting = new List<T>();
+                            interesting.Add(obj);
+                        }
+                    }
+                    if (interesting != null)
+                        act(interesting);
                 });
         }
 
@@ -270,8 +278,8 @@ namespace Shielded
         /// checked, but before anything is written. The action can then make parallel
         /// changes in another data store, or it can call <see cref="Shield.Rollback"/>
         /// to retry the transaction from the beginning. The action may not access any
-        /// fields that the transaction did not already access, and it should not
-        /// do any writes into shielded fields!
+        /// fields that the transaction did not already access, and it may only write
+        /// into fields which were already written to by the transaction.
         /// This version receives a full list of enlisted items, even those without changes.
         /// This method throws when called within a transaction.
         /// </summary>
@@ -280,10 +288,7 @@ namespace Shielded
         {
             if (IsInTransaction)
                 throw new InvalidOperationException("Operation not allowed in transaction.");
-            return new CommittingSubscription(
-                items => act(items.Enlisted
-                    .GroupBy(i => i.Owner)
-                    .Select(grp => new TransactionField(grp.Key, grp.Any(i => i.HasChanges)))));
+            return new CommittingSubscription(act);
         }
 
         /// <summary>

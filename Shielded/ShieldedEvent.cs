@@ -31,7 +31,8 @@ namespace Shielded
         /// </summary>
         public void Unsubscribe(EventHandler<T> handler)
         {
-            _handlers.Remove(handler);
+            if (_handlers != null)
+                _handlers.Remove(handler);
         }
 
         /// <summary>

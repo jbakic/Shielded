@@ -220,7 +220,7 @@ namespace Shielded
             newCurrent.Older = _current;
             newCurrent.Version = _writerStamp.Version.Value;
             _current = newCurrent;
-            _locals.Value = null;
+            _locals.Release();
             _writerStamp = null;
             _locker.Release();
         }
@@ -229,7 +229,7 @@ namespace Shielded
         {
             if (!_locals.HasValue)
                 return;
-            _locals.Value = null;
+            _locals.Release();
             var ws = _writerStamp;
             if (ws != null && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
             {

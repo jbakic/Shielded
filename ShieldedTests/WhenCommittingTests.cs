@@ -35,17 +35,15 @@ namespace ShieldedTests
 
             using (Shield.WhenCommitting<Shielded<int>>(ints =>
                 {
-                    var fieldList = ints.ToList();
-
                     // reading what is read or written is ok.
-                    Assert.IsFalse(fieldList.Contains(a));
+                    Assert.IsFalse(ints.Contains(a));
                     int x = a + written;
 
                     // in written fields, you can write.
-                    Assert.IsTrue(fieldList.Contains(written));
+                    Assert.IsTrue(ints.Contains(written));
                     written.Value = written + 1;
 
-                    Assert.IsFalse(fieldList.Contains(b));
+                    Assert.IsFalse(ints.Contains(b));
                     // this one was not even read
                     Assert.Throws<InvalidOperationException>(() => x = b);
 
