@@ -28,6 +28,7 @@ namespace Shielded
         {
             public Dictionary<TKey, ItemKeeper> Items = new Dictionary<TKey, ItemKeeper>();
             public bool HasChanges;
+            public bool Locked;
         }
 
         private readonly ConcurrentDictionary<TKey, ItemKeeper> _dict;
@@ -67,11 +68,31 @@ namespace Shielded
 
         private void CheckLockAndEnlist(TKey key, bool write)
         {
-            if (!Shield.Enlist(this, _localDict.HasValue, write) && _localDict.Value.Items.ContainsKey(key))
+            var locals = _localDict.HasValue ? _localDict.Value : null;
+            if (locals != null && locals.Locked)
+            {
+                CheckLockedAccess(key, write);
+                return; // because the check above is much stricter than anything
+            }
+            if (!Shield.Enlist(this, locals != null, write) && locals.Items.ContainsKey(key))
                 return;
 
             if (!LockCheck(key))
                 _locker.WaitUntil(() => LockCheck(key));
+        }
+
+        /// <summary>
+        /// Since the dictionary is just one field to the Shield class, we internally check, if
+        /// the access is happening while locked, whether the access is safe.
+        /// </summary>
+        void CheckLockedAccess(TKey key, bool write)
+        {
+            var locals = _localDict.Value;
+            ItemKeeper item;
+            if (!locals.Items.TryGetValue(key, out item))
+                throw new InvalidOperationException("No new reads in this context.");
+            if (item == null && write)
+                throw new InvalidOperationException("No new writes in this context.");
         }
 
         private ItemKeeper CurrentTransactionOldValue(TKey key)
@@ -209,6 +230,7 @@ namespace Shielded
         bool IShielded.CanCommit(WriteStamp writeStamp)
         {
             var locals = _localDict.Value;
+            locals.Locked = true;
             // locals were prepared when we enlisted.
             if (locals.Items.Any(kvp =>
                     {

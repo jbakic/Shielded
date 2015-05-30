@@ -59,17 +59,85 @@ namespace ShieldedTests
         }
 
         [Test]
-        public void DictionaryExpandingProblem()
+        public void DictionaryAccessExpandingTest()
         {
             var d = new ShieldedDict<int, object>();
 
-            using (Shield.WhenCommitting<ShieldedDict<int, object>>(ds =>
+            // various combinations - one key is either written or just read, and the
+            // WhenCommitting sub tries to mess with another key, or to promote the
+            // read key.
+
+            Shield.InTransaction(() => {
+                d[1] = new object();
+                d[2] = new object();
+            });
+
+            // WhenCommitting does not fire unless at least something changed, so we need this
+            Shielded<int> x = new Shielded<int>();
+
+            // reader promotion to writer not allowed
+            using (Shield.WhenCommitting(fs => d[2] = new object()))
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                    Shield.InTransaction(() => {
+                        x.Value = 1;
+                        var obj = d[2];
+                    }));
+            }
+            // new read not allowed
+            using (Shield.WhenCommitting(fs => { var obj = d[2]; }))
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                    Shield.InTransaction(() => {
+                        x.Value = 1;
+                        var obj = d[1];
+                    }));
+            }
+            // new write not allowed
+            using (Shield.WhenCommitting(fs => d[2] = new object()))
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                    Shield.InTransaction(() => {
+                        x.Value = 1;
+                        var obj = d[1];
+                    }));
+            }
+            // same checks, but in situations when we did a write in the dict
+            using (Shield.WhenCommitting(fs => d[2] = new object()))
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                    Shield.InTransaction(() => {
+                        d[1] = new object();
+                        var obj = d[2];
+                    }));
+            }
+            using (Shield.WhenCommitting(fs => { var obj = d[2]; }))
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                    Shield.InTransaction(() => {
+                        d[1] = new object();
+                    }));
+            }
+            using (Shield.WhenCommitting(fs => d[2] = new object()))
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                    Shield.InTransaction(() => {
+                        d[1] = new object();
+                    }));
+            }
+
+            // finally, something allowed - reading from read or written, and writing into written
+            using (Shield.WhenCommitting(fs =>
                 {
-                    // this should not be allowed
+                    var obj = d[1];
+                    var obj2 = d[2];
                     d[2] = new object();
                 }))
             {
-                Shield.InTransaction(() => d[1] = new object());
+                Shield.InTransaction(() => {
+                    var obj = d[1];
+                    d[2] = new object();
+                });
             }
         }
     }
