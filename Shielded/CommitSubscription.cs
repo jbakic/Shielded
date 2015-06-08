@@ -117,15 +117,29 @@ namespace Shielded
             {
                 lock (Context)
                 {
-                    IEnumerable<CommitSubscription> oldList;
-                    if (!Context.TryGetValue(remKey, out oldList))
-                        continue;
-                    var newList = oldList.Where(i => i != this).ToArray();
+                    var newList = WithoutMeOnce(Context[remKey]).ToArray();
                     if (newList.Length > 0)
                         Context[remKey] = newList;
                     else
+                    {
+                        IEnumerable<CommitSubscription> oldList;
                         Context.TryRemove(remKey, out oldList);
+                    }
                 }
+            }
+        }
+
+        IEnumerable<CommitSubscription> WithoutMeOnce(IEnumerable<CommitSubscription> source)
+        {
+            bool notSkipped = true;
+            foreach (var item in source)
+            {
+                if (notSkipped && item == this)
+                {
+                    notSkipped = false;
+                    continue;
+                }
+                yield return item;
             }
         }
 
