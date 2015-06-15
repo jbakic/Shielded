@@ -500,7 +500,7 @@ namespace ConsoleTests
 
         public static void TreePoolTest()
         {
-            int numThreads = Environment.ProcessorCount - 1;
+            int numThreads = Environment.ProcessorCount;
             int numItems = 200000;
             var tree = new ShieldedDict<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);

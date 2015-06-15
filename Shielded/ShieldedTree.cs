@@ -71,7 +71,10 @@ namespace Shielded
             return ((IEnumerable<KeyValuePair<TKey, TValue>>)this).GetEnumerator();
         }
 
-        IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
+        /// <summary>
+        /// Gets an enumerator for all the key-value pairs in the tree.
+        /// </summary>
+        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
         {
             Shield.AssertInTransaction();
             Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
@@ -96,9 +99,42 @@ namespace Shielded
         }
 
         /// <summary>
+        /// Gets an enuerable which enumerates the tree in descending key order. (Does not
+        /// involve any copying, just as efficient as <see cref="GetEnumerator"/>.)
+        /// </summary>
+        public IEnumerable<KeyValuePair<TKey, TValue>> Descending
+        {
+            get
+            {
+                Shield.AssertInTransaction();
+                Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
+                var curr = _head.Value;
+                while (curr != null)
+                {
+                    while (curr.Value.Right != null)
+                    {
+                        centerStack.Push(curr);
+                        curr = curr.Value.Right;
+                    }
+
+                    yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
+
+                    while (curr.Value.Left == null && centerStack.Count > 0)
+                    {
+                        curr = centerStack.Pop();
+                        yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
+                    }
+                    curr = curr.Value.Left;
+                }
+            }
+        }
+
+        /// <summary>
         /// Enumerate all key-value pairs, whose keys are in the given range. The range
         /// is inclusive, both from and to are included in the result (if the tree contains
-        /// those keys). The items are returned sorted.
+        /// those keys). The items are returned sorted. If from is greater than to, the
+        /// enumerable will not return anything. For backwards enumeration you must explicitly
+        /// use <see cref="RangeDescending"/>.
         /// </summary>
         public IEnumerable<KeyValuePair<TKey, TValue>> Range(TKey from, TKey to)
         {
@@ -107,7 +143,7 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Enumerates only over the nodes in the range. borders included.
+        /// Enumerates only over the nodes in the range. Borders included.
         /// </summary>
         private IEnumerable<Shielded<Node>> RangeInternal(TKey from, TKey to)
         {
@@ -141,6 +177,56 @@ namespace Shielded
                         yield break;
                 }
                 curr = curr.Value.Right;
+            }
+        }
+
+        /// <summary>
+        /// Enumerate all key-value pairs, whose keys are in the given range, but in descending
+        /// key order. The range is inclusive, both from and to are included in the result (if
+        /// the tree contains those keys). If from is smaller than to, the enumerable will not
+        /// return anything. For forward enumeration you must explicitly use <see cref="Range"/>.
+        /// </summary>
+        public IEnumerable<KeyValuePair<TKey, TValue>> RangeDescending(TKey from, TKey to)
+        {
+            foreach (var n in RangeDescendingInternal(from, to))
+                yield return new KeyValuePair<TKey, TValue>(n.Value.Key, n.Value.Value);
+        }
+
+        /// <summary>
+        /// Enumerates only over the nodes in the range, but backwards. Borders included.
+        /// </summary>
+        private IEnumerable<Shielded<Node>> RangeDescendingInternal(TKey from, TKey to)
+        {
+            if (_comparer.Compare(from, to) < 0)
+                yield break;
+            Shield.AssertInTransaction();
+            Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
+            var curr = _head.Value;
+            while (curr != null)
+            {
+                while (curr.Value.Right != null &&
+                    _comparer.Compare(curr.Value.Key, from) <= 0)
+                {
+                    centerStack.Push(curr);
+                    curr = curr.Value.Right;
+                }
+
+                if (_comparer.Compare(curr.Value.Key, to) < 0)
+                    yield break;
+
+                if (_comparer.Compare(curr.Value.Key, from) <= 0)
+                    yield return curr;
+
+                while (curr.Value.Left == null &&
+                    centerStack.Count > 0)
+                {
+                    curr = centerStack.Pop();
+                    if (_comparer.Compare(curr.Value.Key, to) >= 0)
+                        yield return curr;
+                    else
+                        yield break;
+                }
+                curr = curr.Value.Left;
             }
         }
 
