@@ -125,12 +125,12 @@ namespace Shielded
 #endif
                 while (old != _current && Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
                 {
-                    // NB the _oldestRead was trimmed in the previous trimming run. also note that
-                    // the Changes in each entry can be trimmed, and that version is still readable,
-                    // because trimming removes _old_ entries, not the ones with that version.
-                    old = old.Later;
-                    if (old.Changes == null)
+                    // we do not want to move "old" to an element which still has not finished writing, since
+                    // we must maintain the invariant that says _oldestRead.Changes have already been trimmed.
+                    if (old.Later.Changes == null)
                         break;
+                    // likewise, thanks to that same invariant, we first move forward, then take Changes...
+                    old = old.Later;
 
                     if (toTrim == null)
 #if USE_STD_HASHSET
