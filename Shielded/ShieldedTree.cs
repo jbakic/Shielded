@@ -188,15 +188,6 @@ namespace Shielded
         /// </summary>
         public IEnumerable<KeyValuePair<TKey, TValue>> RangeDescending(TKey from, TKey to)
         {
-            foreach (var n in RangeDescendingInternal(from, to))
-                yield return new KeyValuePair<TKey, TValue>(n.Value.Key, n.Value.Value);
-        }
-
-        /// <summary>
-        /// Enumerates only over the nodes in the range, but backwards. Borders included.
-        /// </summary>
-        private IEnumerable<Shielded<Node>> RangeDescendingInternal(TKey from, TKey to)
-        {
             if (_comparer.Compare(from, to) < 0)
                 yield break;
             Shield.AssertInTransaction();
@@ -215,14 +206,14 @@ namespace Shielded
                     yield break;
 
                 if (_comparer.Compare(curr.Value.Key, from) <= 0)
-                    yield return curr;
+                    yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
 
                 while (curr.Value.Left == null &&
                     centerStack.Count > 0)
                 {
                     curr = centerStack.Pop();
                     if (_comparer.Compare(curr.Value.Key, to) >= 0)
-                        yield return curr;
+                        yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
                     else
                         yield break;
                 }
