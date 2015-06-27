@@ -139,41 +139,42 @@ namespace ConsoleTests
             SmallEntity[] shx = null;
             int[] shxClone = null;
 
-            Shield.WhenCommitting<SmallEntity>(ents => {
+            using (Shield.WhenCommitting<SmallEntity>(ents => {
                 foreach (var ent in ents)
                 {
                     Thread.Sleep((ent.Value * Interlocked.Increment(ref commitEventHit) * 31) & 0x3F);
                     shxClone[ent.Id] = ent.Value;
                 }
-            });
-
-            foreach (var i in Enumerable.Repeat(0, 10))
+            }))
             {
-                shxClone = new int[100];
-                shx = Enumerable.Repeat(0, 100)
-                    .Select((n, ind) => {
+                foreach (var i in Enumerable.Repeat(0, 10))
+                {
+                    shxClone = new int[100];
+                    shx = Enumerable.Repeat(0, 100)
+                        .Select((n, ind) => {
                         var ent = Factory.NewShielded<SmallEntity>();
-                        Shield.InTransaction(() => { ent.Id = ind; });
+                        Shield.InTransaction(() => {
+                            ent.Id = ind;
+                        });
                         return ent;
                     }).ToArray();
-                transactionCounter = 0;
-                commitEventHit = 0;
-                var time = mtTest("write with saving", taskCount, _ =>
-                    {
+                    transactionCounter = 0;
+                    commitEventHit = 0;
+                    var time = mtTest("write with saving", taskCount, _ => {
                         var rnd = randomizr.Next(100);
-                        return Task.Factory.StartNew(() => Shield.InTransaction(() =>
-                            {
-                                Interlocked.Increment(ref transactionCounter);
-                                int v = shx[rnd].Value;
-                                if (sleepTime > 0) Thread.Sleep(sleepTime);
-                                shx[rnd].Value = v + 1;
-                            }),
-                            TaskCreationOptions.LongRunning);
+                        return Task.Factory.StartNew(() => Shield.InTransaction(() => {
+                            Interlocked.Increment(ref transactionCounter);
+                            int v = shx[rnd].Value;
+                            if (sleepTime > 0)
+                                Thread.Sleep(sleepTime);
+                            shx[rnd].Value = v + 1;
+                        }), TaskCreationOptions.LongRunning);
                     });
-                var correct = shx.Sum(s => s.Value) == taskCount &&
-                    shx.All(s => s.Value == 0 || shxClone[s.Id] == s.Value);
-                Console.WriteLine(" {0} ms - {1} reps, {2} commits, {3}.",
-                    time, transactionCounter, commitEventHit, correct ? "correct" : "incorrect");
+                    var correct = shx.Sum(s => s.Value) == taskCount &&
+                                  shx.All(s => s.Value == 0 || shxClone[s.Id] == s.Value);
+                    Console.WriteLine(" {0} ms - {1} reps, {2} commits, {3}.",
+                        time, transactionCounter, commitEventHit, correct ? "correct" : "incorrect");
+                }
             }
         }
 
@@ -358,7 +359,7 @@ namespace ConsoleTests
             int reportEvery = 1000;
             //Shielded<int> nextReport = new Shielded<int>(reportEvery);
 
-            //Shield.Conditional(() => betShop.TicketCount >= nextReport, () =>
+            //using (Shield.Conditional(() => betShop.TicketCount >= nextReport, () =>
             //{
             //    nextReport.Modify((ref int n) => n += reportEvery);
             //    Shield.SideEffect(() =>
@@ -366,43 +367,43 @@ namespace ConsoleTests
             //        Console.Write(" {0}..", betShop.TicketCount);
             //    });
             //    return true;
-            //});
+            //}))
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
+            long time;
 
-            var reportingCond = Shield.Conditional(() => betShop.Tickets.Count >= lastReport + reportEvery, () =>
-            {
-                DateTime newNow = DateTime.UtcNow;
-                int count = betShop.Tickets.Count;
-                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Value = newNow;
-                lastReport.Modify((ref int n) => n += reportEvery);
-                Shield.SideEffect(() =>
+            using (var reportingCond = Shield.Conditional(() => betShop.Tickets.Count >= lastReport + reportEvery, () =>
                 {
-                    Console.Write("\n{0} at {1} item/s", count, speed);
+                    DateTime newNow = DateTime.UtcNow;
+                    int count = betShop.Tickets.Count;
+                    int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
+                    lastTime.Value = newNow;
+                    lastReport.Modify((ref int n) => n += reportEvery);
+                    Shield.SideEffect(() =>
+                    {
+                        Console.Write("\n{0} at {1} item/s", count, speed);
+                    });
+                }))
+            {
+                time = mtTest("bet shop w/ " + numEvents, 50000, i =>
+                {
+                    decimal payIn = (randomizr.Next(10) + 1m) * 1;
+                    int event1Id = randomizr.Next(numEvents) + 1;
+                    int event2Id = randomizr.Next(numEvents) + 1;
+                    int event3Id = randomizr.Next(numEvents) + 1;
+                    int offer1Ind = randomizr.Next(3);
+                    int offer2Ind = randomizr.Next(3);
+                    int offer3Ind = randomizr.Next(3);
+                    return Task.Factory.StartNew(() => Shield.InTransaction(() =>
+                    {
+                        var offer1 = betShop.Events[event1Id].BetOffers[offer1Ind];
+                        var offer2 = betShop.Events[event2Id].BetOffers[offer2Ind];
+                        var offer3 = betShop.Events[event3Id].BetOffers[offer3Ind];
+                        betShop.BuyTicket(payIn, offer1, offer2, offer3);
+                    }));
                 });
-            });
-
-
-            var time = mtTest("bet shop w/ " + numEvents, 50000, i =>
-            {
-                decimal payIn = (randomizr.Next(10) + 1m) * 1;
-                int event1Id = randomizr.Next(numEvents) + 1;
-                int event2Id = randomizr.Next(numEvents) + 1;
-                int event3Id = randomizr.Next(numEvents) + 1;
-                int offer1Ind = randomizr.Next(3);
-                int offer2Ind = randomizr.Next(3);
-                int offer3Ind = randomizr.Next(3);
-                return Task.Factory.StartNew(() => Shield.InTransaction(() =>
-                {
-                    var offer1 = betShop.Events[event1Id].BetOffers[offer1Ind];
-                    var offer2 = betShop.Events[event2Id].BetOffers[offer2Ind];
-                    var offer3 = betShop.Events[event3Id].BetOffers[offer3Ind];
-                    betShop.BuyTicket(payIn, offer1, offer2, offer3);
-                }));
-            });
-
-            reportingCond.Dispose();
+            }
+            //}
 
             var totalCorrect = betShop.VerifyTickets();
             Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
@@ -432,61 +433,58 @@ namespace ConsoleTests
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
 
-            Shield.Conditional(() => betShop.Tickets.Count >= lastReport + reportEvery, () =>
-            {
-                DateTime newNow = DateTime.UtcNow;
-                int count = betShop.Tickets.Count;
-                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Value = newNow;
-                lastReport.Modify((ref int n) => n += reportEvery);
-                Shield.SideEffect(() =>
+            using (Shield.Conditional(() => betShop.Tickets.Count >= lastReport + reportEvery, () =>
                 {
-                    Console.Write("\n{0} at {1} item/s", count, speed);
-                });
-            });
-
-
-            var bags = new List<Action>[numThreads];
-            var threads = new Thread[numThreads];
-            for (int i = 0; i < numThreads; i++)
+                    DateTime newNow = DateTime.UtcNow;
+                    int count = betShop.Tickets.Count;
+                    int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
+                    lastTime.Value = newNow;
+                    lastReport.Modify((ref int n) => n += reportEvery);
+                    Shield.SideEffect(() =>
+                        Console.Write("\n{0} at {1} item/s", count, speed));
+                }))
             {
-                var bag = bags[i] = new List<Action>();
-                threads[i] = new Thread(() => {
-                    foreach (var a in bag)
-                        a();
-                });
-            }
+                var bags = new List<Action>[numThreads];
+                var threads = new Thread[numThreads];
+                for (int i = 0; i < numThreads; i++)
+                {
+                    var bag = bags[i] = new List<Action>();
+                    threads[i] = new Thread(() => {
+                        foreach (var a in bag)
+                            a();
+                    });
+                }
 
-            var complete = new Shielded<int>();
-            IDisposable completeCond = null;
-            completeCond = Shield.Conditional(() => complete == numTickets, () => {
+                var complete = new Shielded<int>();
+                IDisposable completeCond = null;
+                completeCond = Shield.Conditional(() => complete == numTickets, () => {
+                    barrier.SignalAndWait();
+                    completeCond.Dispose();
+                });
+                foreach (var i in Enumerable.Range(0, numTickets))
+                {
+                    decimal payIn = (randomizr.Next(10) + 1m) * 1;
+                    int event1Id = randomizr.Next(numEvents) + 1;
+                    int event2Id = randomizr.Next(numEvents) + 1;
+                    int event3Id = randomizr.Next(numEvents) + 1;
+                    int offer1Ind = randomizr.Next(3);
+                    int offer2Ind = randomizr.Next(3);
+                    int offer3Ind = randomizr.Next(3);
+                    bags[i % numThreads].Add(() => Shield.InTransaction(() => {
+                        var offer1 = betShop.Events[event1Id].BetOffers[offer1Ind];
+                        var offer2 = betShop.Events[event2Id].BetOffers[offer2Ind];
+                        var offer3 = betShop.Events[event3Id].BetOffers[offer3Ind];
+                        betShop.BuyTicket(payIn, offer1, offer2, offer3);
+                        complete.Commute((ref int n) => n++);
+                    }));
+                }
+                _timer = new Stopwatch();
+                _timer.Start();
+                for (int i = 0; i < numThreads; i++)
+                    threads[i].Start();
+
                 barrier.SignalAndWait();
-                completeCond.Dispose();
-            });
-            foreach (var i in Enumerable.Range(0, numTickets))
-            {
-                decimal payIn = (randomizr.Next(10) + 1m) * 1;
-                int event1Id = randomizr.Next(numEvents) + 1;
-                int event2Id = randomizr.Next(numEvents) + 1;
-                int event3Id = randomizr.Next(numEvents) + 1;
-                int offer1Ind = randomizr.Next(3);
-                int offer2Ind = randomizr.Next(3);
-                int offer3Ind = randomizr.Next(3);
-                bags[i % numThreads].Add(() => Shield.InTransaction(() =>
-                {
-                    var offer1 = betShop.Events[event1Id].BetOffers[offer1Ind];
-                    var offer2 = betShop.Events[event2Id].BetOffers[offer2Ind];
-                    var offer3 = betShop.Events[event3Id].BetOffers[offer3Ind];
-                    betShop.BuyTicket(payIn, offer1, offer2, offer3);
-                    complete.Commute((ref int n) => n++);
-                }));
             }
-            _timer = new Stopwatch();
-            _timer.Start();
-            for (int i = 0; i < numThreads; i++)
-                threads[i].Start();
-
-            barrier.SignalAndWait();
             var time = _timer.ElapsedMilliseconds;
             var totalCorrect = betShop.VerifyTickets();
             Console.WriteLine(" {0} ms with {1} tickets paid in and is {2}.",
@@ -501,70 +499,71 @@ namespace ConsoleTests
         public static void TreePoolTest()
         {
             int numThreads = Environment.ProcessorCount;
-            int numItems = 200000;
+            int numItems = 1000000;
             var tree = new ShieldedDict<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);
             int reportEvery = 10000;
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
-
-            Shield.Conditional(() => tree.Count >= lastReport + reportEvery, () =>
-            {
-                DateTime newNow = DateTime.UtcNow;
-                int count = tree.Count;
-                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Value = newNow;
-                lastReport.Modify((ref int n) => n += reportEvery);
-                Shield.SideEffect(() =>
-                {
-                    Console.Write("\n{0} at {1} item/s", count, speed);
-                });
-            });
-
+            long time;
 
             TreeItem x = new TreeItem();
 
-            _timer = new Stopwatch();
-            _timer.Start();
-            var time = _timer.ElapsedMilliseconds;
-            foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => { var a = x.Id; });
-            time = _timer.ElapsedMilliseconds - time;
-            Console.WriteLine("Empty transactions in {0} ms.", time);
-
-            var bags = new List<Action>[numThreads];
-            var threads = new Thread[numThreads];
-            for (int i = 0; i < numThreads; i++)
-            {
-                var bag = bags[i] = new List<Action>();
-                threads[i] = new Thread(() => {
-                    foreach (var a in bag)
-                    {
-                        try
-                        {
-                            a();
-                        }
-                        catch
-                        {
-                            Console.Write(" * ");
-                        }
-                    }
-                    barrier.SignalAndWait();
-                });
-            }
-
-            foreach (var i in Enumerable.Range(0, numItems))
-            {
-                var item1 = new TreeItem();
-                bags[i % numThreads].Add(() => Shield.InTransaction(() =>
+            using (Shield.Conditional(() => tree.Count >= lastReport + reportEvery, () =>
                 {
-                    tree.Add(item1.Id, item1);
-                }));
-            }
-            for (int i = 0; i < numThreads; i++)
-                threads[i].Start();
+                    DateTime newNow = DateTime.UtcNow;
+                    int count = tree.Count;
+                    int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
+                    lastTime.Value = newNow;
+                    lastReport.Modify((ref int n) => n += reportEvery);
+                    Shield.SideEffect(() => {
+                        Console.Write("\n{0} at {1} item/s", count, speed);
+                    });
+                }))
+            {
+                _timer = new Stopwatch();
+                _timer.Start();
+                time = _timer.ElapsedMilliseconds;
+                foreach (var k in Enumerable.Repeat(1, numItems))
+                    Shield.InTransaction(() => {
+                        var a = x.Id;
+                    });
+                time = _timer.ElapsedMilliseconds - time;
+                Console.WriteLine("Empty transactions in {0} ms.", time);
 
-            barrier.SignalAndWait();
+                var bags = new List<Action>[numThreads];
+                var threads = new Thread[numThreads];
+                for (int i = 0; i < numThreads; i++)
+                {
+                    var bag = bags[i] = new List<Action>();
+                    threads[i] = new Thread(() => {
+                        foreach (var a in bag)
+                        {
+                            try
+                            {
+                                a();
+                            }
+                            catch
+                            {
+                                Console.Write(" * ");
+                            }
+                        }
+                        barrier.SignalAndWait();
+                    });
+                }
+
+                foreach (var i in Enumerable.Range(0, numItems))
+                {
+                    var item1 = new TreeItem();
+                    bags[i % numThreads].Add(() => Shield.InTransaction(() => {
+                        tree.Add(item1.Id, item1);
+                    }));
+                }
+                for (int i = 0; i < numThreads; i++)
+                    threads[i].Start();
+
+                barrier.SignalAndWait();
+            }
             time = _timer.ElapsedMilliseconds;
             Console.WriteLine(" {0} ms.", time);
 
@@ -581,6 +580,14 @@ namespace ConsoleTests
             });
             time = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("Items read by enumerator in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            Shield.InTransaction(() => {
+                foreach (var kvp in tree.OrderBy(kvp => kvp.Key))
+                    x = kvp.Value;
+            });
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("Items read by sorted enumerator in {0} ms.", time);
 
             time = _timer.ElapsedMilliseconds;
             Shield.InTransaction(() => {
@@ -1175,7 +1182,7 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
             //BetShopPoolTest();
 
@@ -1183,7 +1190,7 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            SimpleOps();
+            //SimpleOps();
 
             //MultiFieldOps();
 

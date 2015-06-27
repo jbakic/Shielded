@@ -50,7 +50,7 @@ namespace Shielded
 
         void Increase()
         {
-            var oldCount = _array.Length;
+            var oldCount = _mask + 1;
             var newCount = oldCount << 1;
             var oldArray = _array;
             _array = new IShielded[newCount];
