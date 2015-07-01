@@ -63,20 +63,6 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Checks if any enlisted item has changes.
-        /// </summary>
-        public bool HasChanges
-        {
-            get
-            {
-                for (int i = 0; i < _array.Length; i++)
-                    if (_array[i] != null && _array[i].HasChanges)
-                        return true;
-                return false;
-            }
-        }
-
-        /// <summary>
         /// Performs the commit check on the enlisted items.
         /// </summary>
         public bool CanCommit(WriteStamp ws)

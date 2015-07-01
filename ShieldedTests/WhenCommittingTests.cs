@@ -126,6 +126,22 @@ namespace ShieldedTests
                     }));
             }
 
+            // removing should likewise be restricted
+            using (Shield.WhenCommitting(fs =>
+                {
+                    d.Remove(1);
+                    Assert.Throws<InvalidOperationException>(
+                        () => d.Remove(2));
+                }))
+            {
+                Shield.InTransaction(() => {
+                    d[1] = new object();
+                });
+            }
+            // the exception was caught, and the WhenCommiting delegate committed
+            Assert.IsFalse(d.ContainsKey(1));
+            Shield.InTransaction(() => d[1] = new object());
+
             // finally, something allowed - reading from read or written, and writing into written
             using (Shield.WhenCommitting(fs =>
                 {

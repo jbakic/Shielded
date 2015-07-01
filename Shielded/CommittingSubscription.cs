@@ -7,7 +7,7 @@ namespace Shielded
 {
     internal class CommittingSubscription : IDisposable
     {
-        private static CommittingSubscription[] _whenCommitingSubs;
+        private static volatile CommittingSubscription[] _whenCommitingSubs;
 
         public static bool Any
         {

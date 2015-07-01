@@ -54,15 +54,8 @@ namespace ConsoleTests
 
         static string GetOfferHash(Ticket newTicket)
         {
-            return newTicket.Bets.Select(b => b.Offer.Id)
-                .OrderBy(id => id)
-                .Aggregate(new StringBuilder(), (sb, next) => 
-                {
-                    if (sb.Length > 0)
-                        sb.Append(",");
-                    sb.Append(next);
-                    return sb;
-                }, sb => sb.ToString());
+            return string.Join(",", newTicket.Bets
+                .Select(b => b.Offer.Id).OrderBy(id => id));
         }
 
         public Ticket BuyTicket(decimal payIn, params BetOffer[] bets)

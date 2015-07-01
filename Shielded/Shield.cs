@@ -62,8 +62,8 @@ namespace Shielded
         /// first time in this transaction that this item is enlisted. hasLocals indicates
         /// if this item already has local storage prepared. If true, it means it must have
         /// enlisted already. However, in IsolatedRun you may have locals, even though you
-        /// have not yet enlisted in the isolated items! So, this param is ignored within
-        /// IsolatedRun calls. Outside of them, it allows for a much faster response.
+        /// have not yet enlisted in the isolated items! This param dictates the response
+        /// if it is set to true, adding to the isolated items is not revealed by the retval.
         /// </summary>
         internal static bool Enlist(IShielded item, bool hasLocals, bool write)
         {
@@ -71,10 +71,19 @@ namespace Shielded
                 throw new InvalidOperationException("Writes not allowed here.");
             if (_blockEnlist != null && _blockEnlist != item)
                 throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
-            if (!_enforceTracking && hasLocals)
+            var items = _localItems;
+
+            if (hasLocals)
+            {
+                if (_enforceTracking)
+                    items.Enlisted.Add(item);
+                items.HasChanges = items.HasChanges || write;
                 return false;
+            }
+
             AssertInTransaction();
-            if (!_localItems.Enlisted.Contains(item))
+            items.HasChanges = items.HasChanges || write;
+            if (!items.Enlisted.Contains(item))
             {
                 if (_noNewEnlistsOrWrites)
                     throw new InvalidOperationException("Cannot access new fields.");
@@ -83,7 +92,7 @@ namespace Shielded
                 // not actually check the lock! this also means that CheckCommutes must tolerate
                 // being reentered with the same item.
                 CheckCommutes(item);
-                return _localItems.Enlisted.Add(item);
+                return items.Enlisted.Add(item);
             }
             return false;
         }
@@ -191,13 +200,15 @@ namespace Shielded
                 throw new InvalidOperationException("No shielded field access is allowed in this context.");
             AssertInTransaction();
 
-            if (_blockCommute || _localItems.Enlisted.Overlaps(affecting))
+            var items = _localItems;
+            if (_blockCommute || items.Enlisted.Overlaps(affecting))
                 perform(); // immediate degeneration. should be some warning.
             else
             {
-                if (_localItems.Commutes == null)
-                    _localItems.Commutes = new List<Commute>();
-                _localItems.Commutes.Add(new Commute()
+                items.HasChanges = true;
+                if (items.Commutes == null)
+                    items.Commutes = new List<Commute>();
+                items.Commutes.Add(new Commute()
                 {
                     Perform = perform,
                     Affecting = affecting
@@ -580,14 +591,7 @@ repeatCommutes: if (brokeInCommutes)
         private static bool DoCommit()
         {
             var items = _localItems;
-            bool hasChanges = (items.Commutes != null && items.Commutes.Count > 0) ||
-#if USE_STD_HASHSET
-                items.Enlisted.Any(HasChanges);
-#else
-                items.Enlisted.HasChanges;
-#endif
-
-            if (!hasChanges)
+            if (!items.HasChanges)
             {
                 CommitWoChanges();
                 return true;

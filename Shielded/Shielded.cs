@@ -27,6 +27,8 @@ namespace Shielded
         /// <summary>
         /// Constructs a new Shielded container, containing default value of type T.
         /// </summary>
+        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
+        /// this shielded will report its owner instead of itself.</param>
         public Shielded(object owner = null)
         {
             _current = new ValueKeeper();
@@ -36,6 +38,9 @@ namespace Shielded
         /// <summary>
         /// Constructs a new Shielded container, containing the given initial value.
         /// </summary>
+        /// <param name="initial">Initial value to contain.</param>
+        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
+        /// this shielded will report its owner instead of itself.</param>
         public Shielded(T initial, object owner = null)
         {
             _current = new ValueKeeper();
@@ -84,18 +89,19 @@ namespace Shielded
             return CurrentTransactionOldValue().Value;
         }
 
-        private void PrepareForWriting(bool prepareOld)
+        private ValueKeeper PrepareForWriting(bool prepareOld)
         {
             CheckLockAndEnlist(true);
             if (_current.Version > Shield.ReadStamp)
                 throw new TransException("Write collision.");
-            if (!_locals.HasValue)
-            {
-                var v = new ValueKeeper();
-                if (prepareOld)
-                    v.Value = CurrentTransactionOldValue().Value;
-                _locals.Value = v;
-            }
+            if (_locals.HasValue)
+                return _locals.Value;
+
+            var v = new ValueKeeper();
+            if (prepareOld)
+                v.Value = CurrentTransactionOldValue().Value;
+            _locals.Value = v;
+            return v;
         }
 
         /// <summary>
@@ -118,8 +124,7 @@ namespace Shielded
             }
             set
             {
-                PrepareForWriting(false);
-                _locals.Value.Value = value;
+                PrepareForWriting(false).Value = value;
                 Changed.Raise(this, EventArgs.Empty);
             }
         }
@@ -140,8 +145,7 @@ namespace Shielded
         /// </summary>
         public void Modify(ModificationDelegate d)
         {
-            PrepareForWriting(true);
-            d(ref _locals.Value.Value);
+            d(ref PrepareForWriting(true).Value);
             Changed.Raise(this, EventArgs.Empty);
         }
 
@@ -155,10 +159,8 @@ namespace Shielded
         /// </summary>
         public void Commute(ModificationDelegate perform)
         {
-            Shield.EnlistStrictCommute(() => {
-                PrepareForWriting(true);
-                perform(ref _locals.Value.Value);
-            }, this);
+            Shield.EnlistStrictCommute(
+                () => perform(ref PrepareForWriting(true).Value), this);
             Changed.Raise(this, EventArgs.Empty);
         }
 

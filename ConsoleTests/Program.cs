@@ -716,6 +716,15 @@ namespace ConsoleTests
                     });
             });
 
+            var accessTest2 = new Shielded<int>();
+            var modifyModifyTime = Timed("modify-modify transactions", numItems, () => {
+                foreach (var k in Enumerable.Repeat(1, numItems))
+                    Shield.InTransaction(() => {
+                        accessTest.Modify((ref int n) => n = 1);
+                        accessTest2.Modify((ref int n) => n = 2);
+                    });
+            });
+
             // here Modify is the first call, making all Reads as fast as can be,
             // reading direct from local storage.
             var oneModifyNReadTime = Timed("1-modify-N-reads tr.", numItems, () => {
@@ -772,6 +781,8 @@ namespace ConsoleTests
                               (oneModifyTime - emptyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of an additional Modify = {0:0.000} us",
                               (nModifyTime - oneModifyTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
+            Console.WriteLine("cost of a second, different Modify = {0:0.000} us",
+                              (modifyModifyTime - oneModifyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of a Value after Modify = {0:0.000} us",
                               (oneModifyNReadTime - oneModifyTime) / (repeatsPerTrans * numItems / 1000.0));
             Console.WriteLine("cost of the first Assign = {0:0.000} us",
@@ -1182,7 +1193,7 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            BetShopTest();
+            //BetShopTest();
 
             //BetShopPoolTest();
 
@@ -1190,7 +1201,7 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            //SimpleOps();
+            SimpleOps();
 
             //MultiFieldOps();
 

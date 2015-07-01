@@ -90,7 +90,7 @@ namespace Shielded
             var locals = _localDict.Value;
             ItemKeeper item;
             if (!locals.Items.TryGetValue(key, out item))
-                throw new InvalidOperationException("No new reads in this context.");
+                throw new InvalidOperationException("No new key access in this context.");
             if (item == null && write)
                 throw new InvalidOperationException("No new writes in this context.");
         }
@@ -475,13 +475,21 @@ namespace Shielded
         public bool Remove(TKey key)
         {
             Shield.AssertInTransaction();
-            if (!ContainsKey(key))
+            var keeper = PrepareWrite(key);
+            if (keeper != null)
+            {
+                if (keeper.Empty)
+                    return false;
+                keeper.Empty = true;
+                _count.Commute((ref int n) => n--);
+                return true;
+            }
+            var old = CurrentTransactionOldValue(key);
+            if (old == null || old.Empty)
                 return false;
-
             var locals = _localDict.Value;
+            locals.Items[key] = new ItemKeeper { Empty = true };
             locals.HasChanges = true;
-            locals.Items[key] = new ItemKeeper() { Empty = true };
-
             _count.Commute((ref int n) => n--);
             return true;
         }
