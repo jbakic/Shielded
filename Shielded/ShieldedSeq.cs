@@ -14,12 +14,13 @@ namespace Shielded
     {
         private class ItemKeeper
         {
-            public T Value;
+            public readonly T Value;
             public readonly Shielded<ItemKeeper> Next;
 
-            public ItemKeeper(ItemKeeper initialNext)
+            public ItemKeeper(T val, ItemKeeper initialNext)
             {
-                Next = new Shielded<ItemKeeper>(initialNext);
+                Value = val;
+                Next = new Shielded<ItemKeeper>(initialNext, this);
             }
 
             public void ClearNext()
@@ -36,34 +37,38 @@ namespace Shielded
 
         private readonly Shielded<int> _count;
 
+        /// <summary>
+        /// Initialize a new sequence with the given initial contents.
+        /// </summary>
         public ShieldedSeq(params T[] items)
         {
             ItemKeeper item = null;
             for (int i = items.Length - 1; i >= 0; i--)
             {
-                item = new ItemKeeper(item)
-                {
-                    Value = items[i]
-                };
+                item = new ItemKeeper(items[i], item);
                 if (_tail == null)
-                    _tail = new Shielded<ItemKeeper>(item);
+                    _tail = new Shielded<ItemKeeper>(item, this);
             }
-            _head = new Shielded<ItemKeeper>(item);
+            _head = new Shielded<ItemKeeper>(item, this);
             // if this is true, there were no items.
             if (_tail == null)
-                _tail = new Shielded<ItemKeeper>();
-            _count = new Shielded<int>(items.Length);
-        }
-
-        public ShieldedSeq()
-        {
-            _head = new Shielded<ItemKeeper>();
-            _tail = new Shielded<ItemKeeper>();
-            _count = new Shielded<int>();
+                _tail = new Shielded<ItemKeeper>(this);
+            _count = new Shielded<int>(items.Length, this);
         }
 
         /// <summary>
-        /// Smaller footprint than Count (reads the head only), useful in Conditionals.
+        /// Initialize a new empty sequence.
+        /// </summary>
+        public ShieldedSeq()
+        {
+            _head = new Shielded<ItemKeeper>(this);
+            _tail = new Shielded<ItemKeeper>(this);
+            _count = new Shielded<int>(this);
+        }
+
+        /// <summary>
+        /// Check if the sequence is non-empty. Smaller footprint than Count
+        /// (reads the head only), useful in Conditionals.
         /// </summary>
         public bool HasAny
         {
@@ -73,18 +78,22 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Prepend an item, i.e. insert at index 0.
+        /// </summary>
         public void Prepend(T val)
         {
-            var keeper = new ItemKeeper(_head)
-            {
-                Value = val
-            };
+            var keeper = new ItemKeeper(val, _head);
             if (_head.Value == null)
                 _tail.Value = keeper;
             _head.Value = keeper;
             _count.Commute((ref int c) => c++);
         }
 
+        /// <summary>
+        /// Peek at the first element. Throws <see cref="InvalidOperationException"/> if
+        /// there is none.
+        /// </summary>
         public T Head
         {
             get
@@ -96,6 +105,9 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Remove the first element of the sequence, and return it.
+        /// </summary>
         public T TakeHead()
         {
             var item = _head.Value;
@@ -110,15 +122,15 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Appends the specified val, commutatively - if you don't / haven't read the
-        /// seq in this transaction, this will not cause conflicts.
+        /// Append the specified value, commutatively - if you don't / haven't touched the
+        /// sequence in this transaction (using other methods/properties), this will not cause
+        /// conflicts! Effectively, the value is simply appended to whatever the sequence
+        /// is at commit time. Multiple calls to Append made in one transaction will
+        /// append the items in that order - they commute with other transactions only.
         /// </summary>
         public void Append(T val)
         {
-            var newItem = new ItemKeeper(null)
-            {
-                Value = val
-            };
+            var newItem = new ItemKeeper(val, null);
             Shield.EnlistCommute(() => {
                 if (_head.Value == null)
                 {
@@ -132,8 +144,8 @@ namespace Shielded
                         t = newItem;
                     });
                 }
-            }, _head, _tail); // the commute degenerates if you read from the seq..
-            _count.Commute((ref int c) => c++);
+                _count.Modify((ref int c) => c++);
+            }, _head, _tail, _count); // the commute degenerates if you read from the seq..
         }
 
         private Shielded<ItemKeeper> RefToIndex(int index)
@@ -148,6 +160,10 @@ namespace Shielded
             });
         }
 
+        /// <summary>
+        /// Get or set the item at the specified index. This iterates through the internal
+        /// linked list, so it is not efficient for large sequences.
+        /// </summary>
         public T this [int index]
         {
             get
@@ -160,10 +176,7 @@ namespace Shielded
                 // to make this op transactional, we must create a new ItemKeeper and
                 // insert him in the list.
                 var refInd = RefToIndex(index);
-                var newItem = new ItemKeeper(refInd.Value.Next)
-                {
-                    Value = value
-                };
+                var newItem = new ItemKeeper(value, refInd.Value.Next);
                 if (_tail.Value == refInd.Value)
                     _tail.Value = newItem;
                 refInd.Modify((ref ItemKeeper r) => {
@@ -173,6 +186,9 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Get the number of items in this sequence.
+        /// </summary>
         public int Count
         {
             get
@@ -190,36 +206,49 @@ namespace Shielded
             });
         }
 
+        /// <summary>
+        /// Remove from the sequence all items that satisfy the given predicate.
+        /// </summary>
         public void RemoveAll(Func<T, bool> condition)
         {
             Shield.AssertInTransaction();
             var curr = _head;
+            var tail = _tail.Value;
             ItemKeeper previous = null;
             int removed = 0;
-            while (curr.Value != null)
+            try
             {
-                if (condition(curr.Value.Value))
+                while (curr.Value != null)
                 {
-                    removed++;
-                    if (_tail.Value == curr.Value)
+                    if (condition(curr.Value.Value))
                     {
-                        _tail.Value = previous;
-                        if (curr == _head)
-                            _head.Value = null;
-                        break;
+                        removed++;
+                        if (tail == curr.Value)
+                        {
+                            _tail.Value = previous;
+                            if (previous == null)
+                                _head.Value = null;
+                            break;
+                        }
+                        Skip(curr);
                     }
-                    Skip(curr);
-                }
-                else
-                {
-                    previous = curr;
-                    curr = curr.Value.Next;
+                    else
+                    {
+                        previous = curr;
+                        curr = curr.Value.Next;
+                    }
                 }
             }
-            if (removed > 0)
-                _count.Commute((ref int c) => c -= removed);
+            finally
+            {
+                if (removed > 0)
+                    _count.Commute((ref int c) => c -= removed);
+            }
         }
 
+        /// <summary>
+        /// Clear the sequence.
+        /// </summary>
         public void Clear()
         {
             _head.Value = null;
@@ -227,6 +256,9 @@ namespace Shielded
             _count.Value = 0;
         }
 
+        /// <summary>
+        /// Remove the item at the given index.
+        /// </summary>
         public void RemoveAt(int index)
         {
             Shield.AssertInTransaction();
@@ -249,6 +281,9 @@ namespace Shielded
             _count.Commute((ref int c) => c--);
         }
 
+        /// <summary>
+        /// Remove the specified item from the sequence.
+        /// </summary>
         public bool Remove(T item, IEqualityComparer<T> comp = null)
         {
             Shield.AssertInTransaction();
@@ -275,6 +310,10 @@ namespace Shielded
             return false;
         }
 
+        /// <summary>
+        /// Search the sequence for the given item.
+        /// </summary>
+        /// <returns>The index of the item in the sequence.</returns>
         public int IndexOf(T item, IEqualityComparer<T> comp = null)
         {
             if (comp == null)
@@ -291,12 +330,20 @@ namespace Shielded
             });
         }
 
+        /// <summary>
+        /// Search the sequence for the given item.
+        /// </summary>
+        /// <returns>The index of the item in the sequence.</returns>
         public int IndexOf(T item)
         {
             return IndexOf(item, null);
         }
 
-        IEnumerator<T> IEnumerable<T>.GetEnumerator()
+        /// <summary>
+        /// Get an enumerator for the sequence. Although it is just a read, it must be
+        /// done in a transaction since concurrent changes would make the result unstable.
+        /// </summary>
+        public IEnumerator<T> GetEnumerator()
         {
             Shield.AssertInTransaction();
             var curr = _head;
@@ -312,16 +359,28 @@ namespace Shielded
             return ((IEnumerable<T>)this).GetEnumerator();
         }
 
+        /// <summary>
+        /// Add the specified item to the end of the sequence. Same as <see cref="Append"/>,
+        /// so, it's commutable.
+        /// </summary>
         public void Add(T item)
         {
             Append(item);
         }
 
+        /// <summary>
+        /// Check if the sequence contains a given item.
+        /// </summary>
         public bool Contains(T item)
         {
             return IndexOf(item) >= 0;
         }
 
+        /// <summary>
+        /// Copy the sequence to an array.
+        /// </summary>
+        /// <param name="array">The array to copy to.</param>
+        /// <param name="arrayIndex">Index in the array where to begin the copy.</param>
         public void CopyTo(T[] array, int arrayIndex)
         {
             Shield.InTransaction(() => {
@@ -332,12 +391,15 @@ namespace Shielded
             });
         }
 
+        /// <summary>
+        /// Remove the specified item from the sequence.
+        /// </summary>
         public bool Remove(T item)
         {
             return Remove(item, null);
         }
 
-        public bool IsReadOnly
+        bool ICollection<T>.IsReadOnly
         {
             get
             {
@@ -345,6 +407,9 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Insert an item at the specified index.
+        /// </summary>
         public void Insert(int index, T item)
         {
             if (index == _count)
@@ -354,10 +419,7 @@ namespace Shielded
             }
 
             RefToIndex(index).Modify((ref ItemKeeper r) => {
-                var newItem = new ItemKeeper(r)
-                {
-                    Value = item
-                };
+                var newItem = new ItemKeeper(item, r);
                 if (r == null)
                     _tail.Value = newItem;
                 r = newItem;

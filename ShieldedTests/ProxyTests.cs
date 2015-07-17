@@ -5,6 +5,9 @@ using Shielded.ProxyGen;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
+using ShieldedTests.ProxyTestEntities;
+using System.Reflection;
+using ShieldedTests.ProxyTestEntities2;
 
 namespace ShieldedTests
 {
@@ -51,15 +54,19 @@ namespace ShieldedTests
         {
             var test = Factory.NewShielded<TestEntity>();
 
-            try
-            {
-                test.Id = Guid.NewGuid();
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) { }
+            Assert.Throws<InvalidOperationException>(() =>
+                test.Id = Guid.NewGuid());
 
             var id = Guid.NewGuid();
-            Shield.InTransaction(() => test.Id = id);
+            // the proxy object will, when changed, appear in the list of changed
+            // fields in the Shield.WhenCommitting events...
+            bool committingFired = false;
+            using (Shield.WhenCommitting<TestEntity>(ents => committingFired = true))
+            {
+                Shield.InTransaction(() => test.Id = id);
+            }
+
+            Assert.IsTrue(committingFired);
             Assert.AreEqual(id, test.Id);
 
             Shield.InTransaction(() => {
@@ -108,22 +115,22 @@ namespace ShieldedTests
             var test = Factory.NewShielded<TestEntity>();
 
             int transactionCount = 0, commuteCount = 0;
-            Task.WaitAll(Enumerable.Range(1, 500).Select(i => Task.Factory.StartNew(() => {
+            Task.WaitAll(Enumerable.Range(1, 100).Select(i => Task.Factory.StartNew(() => {
                 Shield.InTransaction(() => {
                     Interlocked.Increment(ref transactionCount);
                     test.Commute(() => {
                         Interlocked.Increment(ref commuteCount);
                         test.Counter = test.Counter + i;
+                        Thread.Sleep(1);
                     });
                 });
             }, TaskCreationOptions.LongRunning)).ToArray());
-            Assert.AreEqual(125250, test.Counter);
+            Assert.AreEqual(5050, test.Counter);
             // commutes never conflict (!)
-            Assert.AreEqual(500, transactionCount);
-            Assert.Greater(commuteCount, 500);
+            Assert.AreEqual(100, transactionCount);
+            Assert.Greater(commuteCount, 100);
 
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() =>
                 Shield.InTransaction(() => {
                     test.Commute(() => {
                         // this will throw, because it tries to run a commute on NameChanges, which
@@ -133,9 +140,7 @@ namespace ShieldedTests
                         test.Name = "something";
                         Assert.Fail();
                     });
-                });
-            }
-            catch (InvalidOperationException) { }
+                }));
         }
 
         [Test]
@@ -145,6 +150,39 @@ namespace ShieldedTests
 
             // just confirms that the ProtectedSetter field is not transactional.
             t.SetProtectedField(1);
+        }
+
+        private void AssertTransactional<T>(IIdentifiable<T> item)
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                item.Id = default(T));
+
+            Shield.InTransaction(() => {
+                item.Id = default(T);
+            });
+        }
+
+        [Test]
+        public void PreparationTest()
+        {
+            // first, let's get one before the preparation
+            var e1 = Factory.NewShielded<Entity1>();
+            AssertTransactional(e1);
+
+            Factory.PrepareTypes(
+                Assembly.GetExecutingAssembly().GetTypes()
+                    .Where(t =>
+                        t.Namespace != null &&
+                        t.Namespace.StartsWith("ShieldedTests.ProxyTestEntities", StringComparison.Ordinal) &&
+                        t.IsClass)
+                    .ToArray());
+
+            var e2 = Factory.NewShielded<Entity2>();
+            AssertTransactional(e2);
+            var e3 = Factory.NewShielded<Entity3>();
+            AssertTransactional(e3);
+            var e4 = Factory.NewShielded<Entity4>();
+            AssertTransactional(e4);
         }
     }
 }

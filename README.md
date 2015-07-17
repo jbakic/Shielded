@@ -1,6 +1,8 @@
 Shielded
 ========
 
+Available on [NuGet](https://www.nuget.org/packages/Shielded).
+
 Shielded is a full-featured implementation of Software Transactional Memory
 in .NET. It provides a system (the Shield static class) for running in-memory
 transactions, and data structures which are aware of transactions. It can also
@@ -115,6 +117,10 @@ interested in, just before that transaction will commit.
     * Can be used to ensure certain invariants are held, or to implement
     thread prioritization by allowing only some threads which access a field
     to commit into it.
+* **Synchronous commits**: By using Shield.WhenCommitting, you can integrate
+your code into the commit process. This enables you to, e.g., perform the same
+changes in a relational database, or publish commits to other servers...
+    * You can also cause a retry, using Shield.Rollback.
 * **Commutables**: operations which can be performed without conflict, because
 they can be reordered in time and have the same net effect, i.e. they are
 commutable (name borrowed from Clojure). Incrementing an int is an

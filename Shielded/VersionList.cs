@@ -54,13 +54,13 @@ namespace Shielded
             }
         }
 
-        private static VersionEntry _current;
+        private static volatile VersionEntry _current;
         private static VersionEntry _oldestRead;
 
         static VersionList()
         {
             // base version, has 0 stamp, and no changes
-            _oldestRead = _current = new VersionEntry() { Changes = new List<IShielded>() };
+            _oldestRead = _current = new VersionEntry() { Changes = Enumerable.Empty<IShielded>() };
         }
 
         /// <summary>
@@ -74,16 +74,13 @@ namespace Shielded
                 while (true)
                 {
                     var curr = _current;
-                    Interlocked.Increment(ref curr.ReaderCount);
-                    // if the curr changed before we incremented, it could have theoretically
-                    // been trimmed away. so, if the _current changed, drop the old, and take the new.
-                    if (curr == _current)
+                    // trimming sets this to int.MinValue, so unless 2 billion threads are doing this
+                    // simultaneously, we're safe.
+                    if (Interlocked.Increment(ref curr.ReaderCount) > 0)
                     {
                         ticket = curr;
                         break;
                     }
-                    else
-                        Interlocked.Decrement(ref curr.ReaderCount);
                 }
             }
         }
@@ -107,14 +104,9 @@ namespace Shielded
         }
         
         private static int _trimFlag = 0;
-        private static int _trimClock = 0;
 
         public static void TrimCopies()
         {
-            // trimming won't start every time..
-            if ((Interlocked.Increment(ref _trimClock) & 0xF) != 0)
-                return;
-
             bool tookFlag = false;
             try
             {
@@ -131,8 +123,15 @@ namespace Shielded
 #else
                 SimpleHashSet toTrim = null;
 #endif
-                while (old != _current && old.ReaderCount == 0 && old.Changes != null)
+                while (old != _current && Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
                 {
+                    // we do not want to move "old" to an element which still has not finished writing, since
+                    // we must maintain the invariant that says _oldestRead.Changes have already been trimmed.
+                    if (old.Later.Changes == null)
+                        break;
+                    // likewise, thanks to that same invariant, we first move forward, then take Changes...
+                    old = old.Later;
+
                     if (toTrim == null)
 #if USE_STD_HASHSET
                         toTrim = new HashSet<IShielded>();
@@ -140,15 +139,19 @@ namespace Shielded
                         toTrim = new SimpleHashSet();
 #endif
                     toTrim.UnionWith(old.Changes);
-                    old = old.Later;
                 }
                 if (toTrim == null)
                     return;
 
+                old.Changes = Enumerable.Empty<IShielded>();
                 _oldestRead = old;
                 var version = old.Stamp;
+#if USE_STD_HASHSET
                 foreach (var sh in toTrim)
                     sh.TrimCopies(version);
+#else
+                toTrim.TrimCopies(version);
+#endif
             }
             finally
             {

@@ -9,21 +9,17 @@ using Shielded;
 
 namespace ShieldedTests
 {
-    [TestFixture()]
+    [TestFixture]
     public class BasicTests
     {
-        [Test()]
+        [Test]
         public void TransactionSafetyTest()
         {
             Shielded<int> a = new Shielded<int>(5);
             Assert.AreEqual(5, a);
 
-            try
-            {
-                a.Modify((ref int n) => n = 10);
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            Assert.Throws<InvalidOperationException>(() =>
+                a.Modify((ref int n) => n = 10));
 
             Assert.IsFalse(Shield.IsInTransaction);
             Shield.InTransaction(() =>
@@ -194,13 +190,9 @@ namespace ShieldedTests
 
 
             // a conditional which does not depend on any Shielded is not allowed!
-            try
-            {
-                int a = 5;
-                Shield.Conditional(() => a > 10, () => { });
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) { }
+            int a = 5;
+            Assert.Throws<InvalidOperationException>(() =>
+                Shield.Conditional(() => a > 10, () => { }));
 
             bool firstTime = true;
             var x2 = new Shielded<int>();
@@ -501,32 +493,22 @@ namespace ShieldedTests
             EventHandler<EventArgs> ev =
                 (sender, arg) => eventCount.Commute((ref int e) => e++);
 
-            try
-            {
-                a.Changed.Subscribe(ev);
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            Assert.Throws<InvalidOperationException>(() =>
+                a.Changed.Subscribe(ev));
 
             Shield.InTransaction(() =>
             {
                 a.Changed.Subscribe(ev);
 
                 var t = new Thread(() =>
-                {
-                    Shield.InTransaction(() => {
-                        a.Modify((ref int x) => x++);
-                    });
-                });
+                    Shield.InTransaction(() =>
+                        a.Modify((ref int x) => x++)));
                 t.Start();
                 t.Join();
 
                 var t2 = new Thread(() =>
-                {
-                    Shield.InTransaction(() => {
-                        a.Modify((ref int x) => x++);
-                    });
-                });
+                    Shield.InTransaction(() =>
+                        a.Modify((ref int x) => x++)));
                 t2.Start();
                 t2.Join();
             });

@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using Shielded;
 using Shielded.ProxyGen;
+using System.Diagnostics;
 
 namespace ConsoleTests
 {
@@ -53,15 +54,8 @@ namespace ConsoleTests
 
         static string GetOfferHash(Ticket newTicket)
         {
-            return newTicket.Bets.Select(b => b.Offer.Id)
-                .OrderBy(id => id)
-                .Aggregate(new StringBuilder(), (sb, next) => 
-                {
-                    if (sb.Length > 0)
-                        sb.Append(",");
-                    sb.Append(next);
-                    return sb;
-                }, sb => sb.ToString());
+            return string.Join(",", newTicket.Bets
+                .Select(b => b.Offer.Id).OrderBy(id => id));
         }
 
         public Ticket BuyTicket(decimal payIn, params BetOffer[] bets)
@@ -93,12 +87,27 @@ namespace ConsoleTests
             });
         }
 
+        private void PrepareFactory()
+        {
+            Stopwatch sw = Stopwatch.StartNew();
+            Factory.PrepareTypes(new [] {
+                typeof(Event),
+                typeof(BetOffer),
+                typeof(Ticket),
+                typeof(Bet)
+            });
+            sw.Stop();
+            Console.WriteLine("Factory prepared proxies in {0} ms.", sw.ElapsedMilliseconds);
+        }
+
         /// <summary>
         /// Creates n events, with three typical offers (1,X,2) for each.
         /// The events get IDs 1-n.
         /// </summary>
         public BetShop(int n)
         {
+            PrepareFactory();
+
             List<Event> initialEvents = new List<Event>();
 
             Shield.InTransaction(() =>

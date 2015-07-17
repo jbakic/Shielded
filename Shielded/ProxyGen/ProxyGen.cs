@@ -17,8 +17,38 @@ namespace Shielded.ProxyGen
     static class ProxyGen
     {
         static ConcurrentDictionary<Type, Type> proxies = new ConcurrentDictionary<Type, Type>();
-        private const string ShieldedFieldName = "_data";
-        private const string ShieldedValueProperty = "Value";
+        const string ShieldedFieldName = "_data";
+        const string ShieldedValueProperty = "Value";
+        const string CommuteMethodName = "Commute";
+        const string ShieldedDllFileName = "Shielded.dll";
+
+        /// <summary>
+        /// Prepare the specified types.
+        /// </summary>
+        public static void Prepare(Type[] types)
+        {
+            if (!types.Any())
+                return;
+            if (types.Any(NothingToDo.With))
+                throw new InvalidOperationException(
+                    "Unable to make proxies for types: " +
+                    string.Join(", ", types.Where(NothingToDo.With)));
+
+            var unpreparedTypes = types
+                .Where(t => !proxies.ContainsKey(t))
+                .ToArray();
+            var compiledAssembly = MakeAssembly(cu => {
+                cu.ReferencedAssemblies.Add(ShieldedDllFileName);
+                foreach (var loc in unpreparedTypes.Select(t => t.Assembly.Location).Distinct())
+                    cu.ReferencedAssemblies.Add(loc);
+
+                foreach (var t in unpreparedTypes)
+                    PrepareType(t, cu);
+            });
+            foreach (var t in unpreparedTypes)
+                proxies.TryAdd(t, compiledAssembly.GetType(
+                    t.Namespace + "." + GetNameForDerivedClass(t)));
+        }
 
         public static Type GetFor(Type t)
         {
@@ -27,12 +57,32 @@ namespace Shielded.ProxyGen
 
         private static Type CreateFor(Type t)
         {
+            if (NothingToDo.With(t))
+                throw new InvalidOperationException(
+                    "Unable to create proxy type - base type must be public and have virtual properties.");
+
+            var compiledAssembly = MakeAssembly(cu => {
+                cu.ReferencedAssemblies.Add(t.Assembly.Location);
+                cu.ReferencedAssemblies.Add(ShieldedDllFileName);
+                PrepareType(t, cu);
+            });
+            return compiledAssembly.GetTypes()[0];
+        }
+
+        static void PrepareType(Type t, CodeCompileUnit cu)
+        {
+            var ns = CreateNamespace(t);
+            CreateType(t, ns);
+            cu.Namespaces.Add(ns);
+        }
+
+        private static Assembly MakeAssembly(Action<CodeCompileUnit> contentGenerator)
+        {
             var provider = new CSharpCodeProvider();
             CompilerParameters cp = new CompilerParameters();
             cp.GenerateInMemory = true;
             CodeCompileUnit cu = new CodeCompileUnit();
-            AddAssemblyReference(cu, t);
-            cu.Namespaces.Add(CreateNamespace(t));
+            contentGenerator(cu);
 
 #if DEBUG
             StringWriter sw = new StringWriter();
@@ -43,31 +93,25 @@ namespace Shielded.ProxyGen
 
             CompilerResults cr = provider.CompileAssemblyFromDom(cp,cu);
             if (cr.Errors.Count > 0)
-            {
                 ThrowErrors(cr.Errors);
-            }
-            return cr.CompiledAssembly.GetTypes()[0];
-        }
-
-        private static void AddAssemblyReference(CodeCompileUnit cu, Type t)
-        {
-            cu.ReferencedAssemblies.Add(t.Assembly.Location);
-            cu.ReferencedAssemblies.Add("Shielded.dll");
+            return cr.CompiledAssembly;
         }
 
         private static void ThrowErrors(CompilerErrorCollection compilerErrorCollection)
         {
             StringBuilder sb = new StringBuilder();
-            foreach( CompilerError  e in compilerErrorCollection)
-            {
+            foreach (CompilerError  e in compilerErrorCollection)
                 sb.AppendLine(e.ErrorText);
-            }
             throw new ProxyGenerationException("Compiler errors:\n" + sb.ToString());
         }
 
         private static CodeNamespace CreateNamespace(Type t)
         {
-            var nsp = new CodeNamespace(t.Namespace);
+            return new CodeNamespace(t.Namespace);
+        }
+
+        private static void CreateType(Type t, CodeNamespace nsp)
+        {
             var decl = new CodeTypeDeclaration();
             decl.Name = GetNameForDerivedClass(t);
             decl.TypeAttributes = TypeAttributes.NotPublic;
@@ -82,11 +126,22 @@ namespace Shielded.ProxyGen
 
             var theShieldedType = new CodeTypeReference("Shielded.Shielded",
                 new CodeTypeReference(theStruct.Name));
-            var theShieldedField = new CodeMemberField(theShieldedType, "_data") {
+            var theShieldedField = new CodeMemberField(theShieldedType, ShieldedFieldName) {
                 Attributes = MemberAttributes.Private
             };
-            theShieldedField.InitExpression = new CodeObjectCreateExpression(theShieldedType);
             decl.Members.Add(theShieldedField);
+
+            var constructor = new CodeConstructor() {
+                Attributes = MemberAttributes.Public,
+            };
+            constructor.Statements.Add(new CodeAssignStatement(
+                new CodeFieldReferenceExpression(
+                    new CodeThisReferenceExpression(),
+                    ShieldedFieldName),
+                new CodeObjectCreateExpression(
+                    theShieldedType,
+                    new CodeThisReferenceExpression())));
+            decl.Members.Add(constructor);
 
             foreach (PropertyInfo pi in t.GetProperties().Where(IsInteresting))
             {
@@ -94,13 +149,11 @@ namespace Shielded.ProxyGen
                 decl.Members.Add(CreatePropertyOverride(theStruct.Name, pi));
             }
 
-            MethodInfo commMethod;
-            if ((commMethod = t.GetMethod("Commute")) != null &&
-                commMethod.IsVirtual)
+            if (HasCommute(t))
             {
                 var commOverride = new CodeMemberMethod() {
                     Attributes = MemberAttributes.Override | MemberAttributes.Public,
-                    Name = "Commute",
+                    Name = CommuteMethodName,
                 };
                 commOverride.Parameters.Add(new CodeParameterDeclarationExpression(
                     new CodeTypeReference(typeof(Action)),
@@ -109,23 +162,31 @@ namespace Shielded.ProxyGen
                 commOverride.Statements.Add(new CodeMethodInvokeExpression(
                     new CodeFieldReferenceExpression(
                         new CodeThisReferenceExpression(),
-                        "_data"),
-                    "Commute",
+                        ShieldedFieldName),
+                    CommuteMethodName,
                     new CodeArgumentReferenceExpression("a")));
                 decl.Members.Add(commOverride);
             }
 
             decl.Members.Add(theStruct);
-
             nsp.Types.Add(decl);
-            return nsp;
+        }
+
+        internal static bool HasCommute(Type t)
+        {
+            var commMethod = t.GetMethod(CommuteMethodName);
+            if (commMethod == null || !commMethod.IsVirtual)
+                return false;
+            var commParameters = commMethod.GetParameters();
+            return commParameters.Length == 1 && commParameters[0].ParameterType == typeof(Action);
         }
 
         internal static bool IsInteresting(PropertyInfo pi)
         {
             MethodInfo getter, setter;
-            return pi.CanRead && (getter = pi.GetGetMethod()) != null && getter.IsVirtual &&
-                pi.CanWrite && (setter = pi.GetSetMethod()) != null && setter.IsVirtual;
+            return pi.CanRead && pi.CanWrite &&
+                (getter = pi.GetGetMethod()) != null && getter.IsVirtual &&
+                (setter = pi.GetSetMethod()) != null && setter.IsVirtual;
         }
 
         private static CodeTypeMember CreateStructField(PropertyInfo pi)

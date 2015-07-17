@@ -7,8 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleTests", "ConsoleTest
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShieldedTests", "ShieldedTests\ShieldedTests.csproj", "{7BBF29FE-3683-4290-B39D-485E7DEE5388}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shielded.ProxyGen", "Shielded.ProxyGen\Shielded.ProxyGen.csproj", "{FA5D7038-DDDC-4E0F-B40A-488ECC566F42}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -27,10 +25,6 @@ Global
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Debug|x86.Build.0 = Debug|x86
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Release|x86.ActiveCfg = Release|x86
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Release|x86.Build.0 = Release|x86
-		{FA5D7038-DDDC-4E0F-B40A-488ECC566F42}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{FA5D7038-DDDC-4E0F-B40A-488ECC566F42}.Debug|x86.Build.0 = Debug|Any CPU
-		{FA5D7038-DDDC-4E0F-B40A-488ECC566F42}.Release|x86.ActiveCfg = Release|Any CPU
-		{FA5D7038-DDDC-4E0F-B40A-488ECC566F42}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(MonoDevelopProperties) = preSolution
 		StartupItem = ConsoleTests\ConsoleTests.csproj

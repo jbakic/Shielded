@@ -7,8 +7,9 @@ using System.Collections.Generic;
 namespace Shielded
 {
     /// <summary>
-    /// A shielded red-black tree. Each node is a Shielded struct, so parallel
-    /// operations are possible. Multiple items may be added with the same key.
+    /// A shielded red-black tree, for keeping sorted data. Each node is a
+    /// Shielded struct, so parallel operations are possible. Multiple items
+    /// may be added under the same key.
     /// </summary>
     public class ShieldedTree<TKey, TValue> : IDictionary<TKey, TValue> where TValue : class
     {
@@ -37,10 +38,14 @@ namespace Shielded
         private readonly Shielded<int> _count;
         private readonly IComparer<TKey> _comparer;
 
+        /// <summary>
+        /// Initializes a new tree, which will use a given comparer, or using the .NET default
+        /// comparer if none is specified.
+        /// </summary>
         public ShieldedTree(IComparer<TKey> comparer = null)
         {
-            _head = new Shielded<Shielded<Node>>();
-            _count = new Shielded<int>();
+            _head = new Shielded<Shielded<Node>>(this);
+            _count = new Shielded<int>(this);
             _comparer = comparer != null ? comparer : Comparer<TKey>.Default;
         }
 
@@ -66,7 +71,10 @@ namespace Shielded
             return ((IEnumerable<KeyValuePair<TKey, TValue>>)this).GetEnumerator();
         }
 
-        IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
+        /// <summary>
+        /// Gets an enumerator for all the key-value pairs in the tree.
+        /// </summary>
+        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
         {
             Shield.AssertInTransaction();
             Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
@@ -90,6 +98,44 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Gets an enuerable which enumerates the tree in descending key order. (Does not
+        /// involve any copying, just as efficient as <see cref="GetEnumerator"/>.)
+        /// </summary>
+        public IEnumerable<KeyValuePair<TKey, TValue>> Descending
+        {
+            get
+            {
+                Shield.AssertInTransaction();
+                Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
+                var curr = _head.Value;
+                while (curr != null)
+                {
+                    while (curr.Value.Right != null)
+                    {
+                        centerStack.Push(curr);
+                        curr = curr.Value.Right;
+                    }
+
+                    yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
+
+                    while (curr.Value.Left == null && centerStack.Count > 0)
+                    {
+                        curr = centerStack.Pop();
+                        yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
+                    }
+                    curr = curr.Value.Left;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Enumerate all key-value pairs, whose keys are in the given range. The range
+        /// is inclusive, both from and to are included in the result (if the tree contains
+        /// those keys). The items are returned sorted. If from is greater than to, the
+        /// enumerable will not return anything. For backwards enumeration you must explicitly
+        /// use <see cref="RangeDescending"/>.
+        /// </summary>
         public IEnumerable<KeyValuePair<TKey, TValue>> Range(TKey from, TKey to)
         {
             foreach (var n in RangeInternal(from, to))
@@ -97,7 +143,7 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Enumerates only over the nodes in the range. borders included.
+        /// Enumerates only over the nodes in the range. Borders included.
         /// </summary>
         private IEnumerable<Shielded<Node>> RangeInternal(TKey from, TKey to)
         {
@@ -134,6 +180,47 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Enumerate all key-value pairs, whose keys are in the given range, but in descending
+        /// key order. The range is inclusive, both from and to are included in the result (if
+        /// the tree contains those keys). If from is smaller than to, the enumerable will not
+        /// return anything. For forward enumeration you must explicitly use <see cref="Range"/>.
+        /// </summary>
+        public IEnumerable<KeyValuePair<TKey, TValue>> RangeDescending(TKey from, TKey to)
+        {
+            if (_comparer.Compare(from, to) < 0)
+                yield break;
+            Shield.AssertInTransaction();
+            Stack<Shielded<Node>> centerStack = new Stack<Shielded<Node>>();
+            var curr = _head.Value;
+            while (curr != null)
+            {
+                while (curr.Value.Right != null &&
+                    _comparer.Compare(curr.Value.Key, from) <= 0)
+                {
+                    centerStack.Push(curr);
+                    curr = curr.Value.Right;
+                }
+
+                if (_comparer.Compare(curr.Value.Key, to) < 0)
+                    yield break;
+
+                if (_comparer.Compare(curr.Value.Key, from) <= 0)
+                    yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
+
+                while (curr.Value.Left == null &&
+                    centerStack.Count > 0)
+                {
+                    curr = centerStack.Pop();
+                    if (_comparer.Compare(curr.Value.Key, to) >= 0)
+                        yield return new KeyValuePair<TKey, TValue>(curr.Value.Key, curr.Value.Value);
+                    else
+                        yield break;
+                }
+                curr = curr.Value.Left;
+            }
+        }
+
         private void InsertInternal(TKey key, TValue item)
         {
             Shield.AssertInTransaction();
@@ -154,7 +241,7 @@ namespace Shielded
                 Parent = parent,
                 Key = key,
                 Value = item
-            });
+            }, this);
             if (parent != null)
             {
                 if (comparison > 0)
@@ -513,6 +600,9 @@ namespace Shielded
             InsertInternal(item.Key, item.Value);
         }
 
+        /// <summary>
+        /// Clear this instance. Efficient, O(1).
+        /// </summary>
         public void Clear()
         {
             // ridiculously simple :)
@@ -541,8 +631,9 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Checks both the key and value, which may be useful due to the tree supporting multiple
-        /// entries with the same key.
+        /// Remove the given key-value pair from the tree. Checks both the key and
+        /// value, which may be useful due to the tree supporting multiple entries
+        /// with the same key.
         /// </summary>
         public bool Remove(KeyValuePair<TKey, TValue> item)
         {
@@ -553,6 +644,9 @@ namespace Shielded
             return true;
         }
 
+        /// <summary>
+        /// Get the number of items in the tree.
+        /// </summary>
         public int Count
         {
             get
@@ -573,11 +667,18 @@ namespace Shielded
 
         #region IDictionary implementation
 
+        /// <summary>
+        /// Add the given key and value to the tree. Same key can be added multiple times
+        /// into the tree!
+        /// </summary>
         public void Add(TKey key, TValue value)
         {
             InsertInternal(key, value);
         }
 
+        /// <summary>
+        /// Check if the key is present in the tree.
+        /// </summary>
         public bool ContainsKey(TKey key)
         {
             return FindInternal(key) != null;
@@ -593,6 +694,10 @@ namespace Shielded
             return RemoveAndReturn(key, out val);
         }
 
+        /// <summary>
+        /// Try to get any one of the values stored under the given key. There may be multiple items
+        /// under the same key!
+        /// </summary>
         public bool TryGetValue(TKey key, out TValue value)
         {
             bool res = false;
@@ -631,6 +736,13 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Get a collection of the keys in the tree. Works out of transaction.
+        /// The result is a copy, it does not get updated with later changes.
+        /// Count will be equal to the tree count, i.e. if there are multiple
+        /// entries with the same key, that key will be in this collection
+        /// multiple times.
+        /// </summary>
         public ICollection<TKey> Keys
         {
             get
@@ -642,6 +754,10 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Get a collection of the values in the tree. Works out of transaction.
+        /// The result is a copy, it does not get updated with later changes.
+        /// </summary>
         public ICollection<TValue> Values
         {
             get

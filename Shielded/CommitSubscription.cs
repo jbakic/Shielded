@@ -10,14 +10,14 @@ namespace Shielded
     /// Contains information about a commit subscription, used in implementing
     /// <see cref="Shield.Conditional"/> and <see cref="Shield.PreCommit"/>.
     /// </summary>
-    internal class Subscription : IDisposable, IShielded
+    internal class CommitSubscription : IDisposable, IShielded
     {
         private readonly Shielded<ISet<IShielded>> _items = new Shielded<ISet<IShielded>>();
         private readonly Func<bool> Test;
         private readonly Action Trans;
-        private readonly SubscriptionContext Context;
+        private readonly CommitSubscriptionContext Context;
 
-        public Subscription(SubscriptionContext context, Func<bool> test, Action trans)
+        public CommitSubscription(CommitSubscriptionContext context, Func<bool> test, Action trans)
         {
             Context = context;
             Test = test;
@@ -85,7 +85,7 @@ namespace Shielded
         /// </summary>
         void UpdateEntries()
         {
-            Shield.Enlist(this, false);
+            Shield.Enlist(this, false, true);
             var l = new Locals();
 
             var oldItems = _items.GetOldValue();
@@ -98,18 +98,15 @@ namespace Shielded
             finally
             {
                 _locals.Value = l;
+                var newArray = new[] { this };
                 // early adding
                 if (l.PreAdd != null)
                     foreach (var newKey in l.PreAdd)
                     {
                         lock (Context)
-                            Context.AddOrUpdate(newKey, k => Enumerable.Repeat(this, 1),
-                                (k, existing) => {
-                                    var list = existing != null ?
-                                        new List<Subscription>(existing) : new List<Subscription>();
-                                    list.Add(this);
-                                    return list;
-                                });
+                            Context.AddOrUpdate(newKey,
+                                k => newArray,
+                                (k, existing) => existing.Concat(newArray).ToArray());
                     }
             }
         }
@@ -118,20 +115,31 @@ namespace Shielded
         {
             foreach (var remKey in toRemove)
             {
-                IEnumerable<Subscription> oldList;
-                List<Subscription> newList;
                 lock (Context)
                 {
-                    oldList = Context[remKey];
-                    if (oldList.Count() > 1)
-                    {
-                        newList = new List<Subscription>(oldList);
-                        newList.Remove(this);
+                    var newList = WithoutMeOnce(Context[remKey]).ToArray();
+                    if (newList.Length > 0)
                         Context[remKey] = newList;
-                    }
                     else
+                    {
+                        IEnumerable<CommitSubscription> oldList;
                         Context.TryRemove(remKey, out oldList);
+                    }
                 }
+            }
+        }
+
+        IEnumerable<CommitSubscription> WithoutMeOnce(IEnumerable<CommitSubscription> source)
+        {
+            bool notSkipped = true;
+            foreach (var item in source)
+            {
+                if (notSkipped && item == this)
+                {
+                    notSkipped = false;
+                    continue;
+                }
+                yield return item;
             }
         }
 
@@ -145,7 +153,7 @@ namespace Shielded
         {
             if (_locals.Value.CommitRemove != null)
                 Remover(_locals.Value.CommitRemove);
-            _locals.Value = null;
+            _locals.Release();
         }
 
         void IShielded.Rollback()
@@ -154,7 +162,7 @@ namespace Shielded
                 return;
             if (_locals.Value.PreAdd != null)
                 Remover(_locals.Value.PreAdd);
-            _locals.Value = null;
+            _locals.Release();
         }
 
         void IShielded.TrimCopies(long smallestOpenTransactionId) { }
@@ -164,6 +172,14 @@ namespace Shielded
             get
             {
                 return true;
+            }
+        }
+
+        object IShielded.Owner
+        {
+            get
+            {
+                return this;
             }
         }
         #endregion

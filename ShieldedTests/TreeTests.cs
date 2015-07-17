@@ -27,18 +27,13 @@ namespace ShieldedTests
             Assert.AreEqual(objectB, tree["key b"]);
             Assert.AreEqual(objectC, tree["key c"]);
 
-            try
-            {
+            Assert.Throws<KeyNotFoundException>(() => {
                 var x = tree["not me"];
-            }
-            catch (KeyNotFoundException) {}
-            Shield.InTransaction(() => {
-                try
-                {
-                    var x = tree["not me"];
-                }
-                catch (KeyNotFoundException) {}
             });
+            Shield.InTransaction(() =>
+                Assert.Throws<KeyNotFoundException>(() => {
+                    var x = tree["not me"];
+                }));
 
             Shield.InTransaction(() => {
                 tree["key a"] = objectC;
@@ -73,7 +68,13 @@ namespace ShieldedTests
         {
             var ordinaryDict = new Dictionary<int, object>() {
                 { 1, new object() },
+                { 2, new object() },
+                { 3, new object() },
                 { 101, new object() },
+                { 154, new object() },
+                { 230, new object() },
+                { 456, new object() },
+                { 2055, new object() },
                 { 666999, new object() }
             };
             var tree = new ShieldedTree<int, object>();
@@ -95,6 +96,44 @@ namespace ShieldedTests
                     lastSeen = kvp.Key;
                     count++;
                 }
+                Assert.AreEqual(ordinaryDict.Count, count);
+            });
+        }
+
+        [Test]
+        public void DescendingEnumerationTest()
+        {
+            var ordinaryDict = new Dictionary<int, object>() {
+                { 1, new object() },
+                { 2, new object() },
+                { 3, new object() },
+                { 101, new object() },
+                { 154, new object() },
+                { 230, new object() },
+                { 456, new object() },
+                { 2055, new object() },
+                { 666999, new object() }
+            };
+            var tree = new ShieldedTree<int, object>();
+            Shield.InTransaction(() => {
+                foreach (var kvp in ordinaryDict)
+                    tree.Add(kvp.Key, kvp.Value);
+            });
+
+            Shield.InTransaction(() => {
+                int lastSeen = int.MaxValue;
+                int count = 0;
+                var checkSet = new HashSet<int>();
+                foreach (var kvp in tree.Descending)
+                {
+                    Assert.IsTrue(checkSet.Add(kvp.Key));
+                    Assert.IsTrue(ordinaryDict.ContainsKey(kvp.Key));
+                    Assert.AreEqual(ordinaryDict[kvp.Key], kvp.Value);
+                    Assert.Less(kvp.Key, lastSeen);
+                    lastSeen = kvp.Key;
+                    count++;
+                }
+                Assert.AreEqual(ordinaryDict.Count, count);
             });
         }
 
@@ -110,23 +149,59 @@ namespace ShieldedTests
                     { 2, null },
                     { 4, null },
                     { 5, null },
+                    { 7, null },
+                    { 9, null },
+                    { 15, null },
+                    { 19, null },
+                    { 22, null },
                 };
             });
 
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() => {
                 foreach (var kvp in tree.Range(1, 5))
                     Assert.Fail();
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            });
 
             Shield.InTransaction(() => {
                 Assert.IsFalse(tree.Range(5, 1).Any());
                 Assert.IsTrue(tree.Range(1, 1).Select(kvp => kvp.Key).SequenceEqual(new int[] { 1, 1 }));
                 Assert.IsTrue(tree.Range(2, 3).Select(kvp => kvp.Key).SequenceEqual(new int[] { 2 }));
                 Assert.IsTrue(tree.Range(2, 5).Select(kvp => kvp.Key).SequenceEqual(new int[] { 2, 4, 5 }));
-                Assert.IsTrue(tree.Range(2, 100).Select(kvp => kvp.Key).SequenceEqual(new int[] { 2, 4, 5 }));
+                Assert.IsTrue(tree.Range(5, 100).Select(kvp => kvp.Key).SequenceEqual(new int[] { 5, 7, 9, 15, 19, 22 }));
+            });
+        }
+
+        [Test]
+        public void RangeDescendingTest()
+        {
+            ShieldedTree<int, object> tree = null;
+            Shield.InTransaction(() => {
+                // initializer syntax calls Add, so is allowed only in transaction.
+                tree = new ShieldedTree<int, object>() {
+                    { 1, null },
+                    { 1, null },
+                    { 2, null },
+                    { 4, null },
+                    { 5, null },
+                    { 7, null },
+                    { 9, null },
+                    { 15, null },
+                    { 19, null },
+                    { 22, null },
+                };
+            });
+
+            Assert.Throws<InvalidOperationException>(() => {
+                foreach (var kvp in tree.RangeDescending(5, 1))
+                    Assert.Fail();
+            });
+
+            Shield.InTransaction(() => {
+                Assert.IsFalse(tree.RangeDescending(1, 5).Any());
+                Assert.IsTrue(tree.RangeDescending(1, 1).Select(kvp => kvp.Key).SequenceEqual(new int[] { 1, 1 }));
+                Assert.IsTrue(tree.RangeDescending(3, 2).Select(kvp => kvp.Key).SequenceEqual(new int[] { 2 }));
+                Assert.IsTrue(tree.RangeDescending(5, 2).Select(kvp => kvp.Key).SequenceEqual(new int[] { 5, 4, 2 }));
+                Assert.IsTrue(tree.RangeDescending(100, 5).Select(kvp => kvp.Key).SequenceEqual(new int[] { 22, 19, 15, 9, 7, 5 }));
             });
         }
 
@@ -135,19 +210,11 @@ namespace ShieldedTests
         {
             var tree = new ShieldedTree<int, object>();
 
-            try
-            {
-                tree.Add(1, new object());
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() =>
+                tree.Add(1, new object()));
+            Assert.Throws<InvalidOperationException>(() =>
                 ((ICollection<KeyValuePair<int, object>>)tree).Add(
-                    new KeyValuePair<int, object>(1, new object()));
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+                    new KeyValuePair<int, object>(1, new object())));
 
             var objectA = new object();
             var objectB = new object();
@@ -188,12 +255,7 @@ namespace ShieldedTests
                 };
             });
 
-            try
-            {
-                tree.Clear();
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            Assert.Throws<InvalidOperationException>(tree.Clear);
 
             Shield.InTransaction(() => {
                 tree.Clear();
@@ -260,18 +322,10 @@ namespace ShieldedTests
                 };
             });
 
-            try
-            {
-                tree.Remove("key a");
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
-            try
-            {
-                tree.Remove(new KeyValuePair<string, object>("key a", null));
-                Assert.Fail();
-            }
-            catch (InvalidOperationException) {}
+            Assert.Throws<InvalidOperationException>(() =>
+                tree.Remove("key a"));
+            Assert.Throws<InvalidOperationException>(() =>
+                tree.Remove(new KeyValuePair<string, object>("key a", null)));
 
             Shield.InTransaction(() => {
                 tree.Remove("key a");

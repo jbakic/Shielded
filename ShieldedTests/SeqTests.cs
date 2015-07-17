@@ -117,16 +117,13 @@ namespace ShieldedTests
                 Assert.AreEqual(i + 1, Shield.InTransaction(() => seq4.TakeHead()));
             }
 
-            try
-            {
-                Shield.InTransaction(() => { seq4.TakeHead(); });
-                Assert.Fail();
-            } catch (InvalidOperationException) { }
-            try
-            {
+            Assert.Throws<InvalidOperationException>(() =>
+                Shield.InTransaction(() => {
+                    seq4.TakeHead();
+                }));
+            Assert.Throws<InvalidOperationException>(() => {
                 var x = seq4.Head;
-                Assert.Fail();
-            } catch (InvalidOperationException) { }
+            });
 
             Assert.IsFalse(seq4.HasAny);
             Assert.AreEqual(0, seq4.Count);

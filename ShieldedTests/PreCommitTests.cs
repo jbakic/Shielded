@@ -88,16 +88,27 @@ namespace ShieldedTests
         {
             var x = new Shielded<int>();
 
+            var barrier = new Barrier(2);
+
             int slowThread1Repeats = 0;
             var slowThread1 = new Thread(() => {
+                barrier.SignalAndWait();
                 Shield.InTransaction(() => {
                     Interlocked.Increment(ref slowThread1Repeats);
                     int a = x;
-                    Thread.Sleep(500);
+                    Thread.Sleep(100);
                     x.Value = a - 1;
                 });
             });
             slowThread1.Start();
+
+            IDisposable conditional = null;
+            conditional = Shield.Conditional(() => { int i = x; return true; },
+                () => {
+                    barrier.SignalAndWait();
+                    Thread.Yield();
+                    conditional.Dispose();
+                });
 
             foreach (int i in Enumerable.Range(1, 1000))
             {
@@ -131,11 +142,12 @@ namespace ShieldedTests
             var slowThread2 = new Thread(() => {
                 try
                 {
+                    barrier.SignalAndWait();
                     Interlocked.Exchange(ref ownerThreadId, Thread.CurrentThread.ManagedThreadId);
                     Shield.InTransaction(() => {
                         Interlocked.Increment(ref slowThread2Repeats);
                         int a = x;
-                        Thread.Sleep(500);
+                        Thread.Sleep(100);
                         x.Value = a - 1;
                     });
                 }
@@ -145,6 +157,12 @@ namespace ShieldedTests
                 }
             });
             slowThread2.Start();
+
+            conditional = Shield.Conditional(() => { int i = x; return true; },
+                () => {
+                    barrier.SignalAndWait();
+                    conditional.Dispose();
+                });
 
             foreach (int i in Enumerable.Range(1, 1000))
             {

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <ProductVersion>10.0.0</ProductVersion>
+    <ProductVersion>8.0.30703</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}</ProjectGuid>
     <OutputType>Library</OutputType>
@@ -44,6 +44,7 @@
     <WarningLevel>4</WarningLevel>
     <PlatformTarget>x86</PlatformTarget>
     <Externalconsole>true</Externalconsole>
+    <DocumentationFile>bin\Release\Shielded.xml</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -62,12 +63,27 @@
     <Compile Include="LocalStorage.cs" />
     <Compile Include="ShieldedEvent.cs" />
     <Compile Include="Actions.cs" />
-    <Compile Include="SubscriptionContext.cs" />
-    <Compile Include="Subscription.cs" />
     <Compile Include="SimpleHashSet.cs" />
     <Compile Include="WriteStamp.cs" />
-    <Compile Include="CommitLocker.cs" />
     <Compile Include="VersionList.cs" />
+    <Compile Include="ProxyGen\Factory.cs" />
+    <Compile Include="ProxyGen\NothingToDo.cs" />
+    <Compile Include="ProxyGen\ProxyGen.cs" />
+    <Compile Include="ProxyGen\ProxyGenerationException.cs" />
+    <Compile Include="TransactionItems.cs" />
+    <Compile Include="Commute.cs" />
+    <Compile Include="TransactionField.cs" />
+    <Compile Include="CommittingSubscription.cs" />
+    <Compile Include="StampLocker.cs" />
+    <Compile Include="CommitSubscription.cs" />
+    <Compile Include="CommitSubscriptionContext.cs" />
+    <Compile Include="CommitLocker.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <ItemGroup>
+    <Folder Include="ProxyGen\" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ProxyGen\README.txt" />
+  </ItemGroup>
 </Project>

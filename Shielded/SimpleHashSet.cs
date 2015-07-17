@@ -58,7 +58,7 @@ namespace Shielded
 
         void Increase()
         {
-            var oldCount = _array.Length;
+            var oldCount = _mask + 1;
             var newCount = oldCount << 1;
             var oldArray = _array;
             _array = new IShielded[newCount];
@@ -83,20 +83,6 @@ namespace Shielded
         public SimpleHashSet SharingClone()
         {
             return new SimpleHashSet(this);
-        }
-
-        /// <summary>
-        /// Checks if any enlisted item has changes.
-        /// </summary>
-        public bool HasChanges
-        {
-            get
-            {
-                for (int i = 0; i < _array.Length; i++)
-                    if (_array[i] != null && _array[i].HasChanges)
-                        return true;
-                return false;
-            }
         }
 
         /// <summary>
@@ -147,6 +133,16 @@ namespace Shielded
             for (int i = 0; i < _array.Length; i++)
                 if (_array[i] != null)
                     _array[i].Rollback();
+        }
+
+        /// <summary>
+        /// Helper for trimming.
+        /// </summary>
+        public void TrimCopies(long minOpenTransaction)
+        {
+            for (int i = 0; i < _array.Length; i++)
+                if (_array[i] != null)
+                    _array[i].TrimCopies(minOpenTransaction);
         }
 
         #region IEnumerable implementation
@@ -299,13 +295,22 @@ namespace Shielded
         public void UnionWith(IEnumerable<IShielded> other)
         {
             var otherAsSet = other as SimpleHashSet;
-            if (otherAsSet == null)
-                foreach (var item in other)
-                    AddInternal(item);
-            else
+            if (otherAsSet != null)
+            {
                 for (int i = 0; i < otherAsSet._array.Length; i++)
                     if (otherAsSet._array[i] != null)
                         AddInternal(otherAsSet._array[i]);
+                return;
+            }
+            var otherAsList = other as List<IShielded>;
+            if (otherAsList != null)
+            {
+                for (int i = 0; i < otherAsList.Count; i++)
+                    AddInternal(otherAsList[i]);
+                return;
+            }
+            foreach (var item in other)
+                AddInternal(item);
         }
         #endregion
 

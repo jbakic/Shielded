@@ -28,6 +28,7 @@ namespace Shielded
         {
             public Dictionary<TKey, ItemKeeper> Items = new Dictionary<TKey, ItemKeeper>();
             public bool HasChanges;
+            public bool Locked;
         }
 
         private readonly ConcurrentDictionary<TKey, ItemKeeper> _dict;
@@ -37,7 +38,11 @@ namespace Shielded
         private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps =
             new ConcurrentDictionary<TKey, WriteStamp>();
         private readonly LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
+        private readonly StampLocker _locker = new StampLocker();
 
+        /// <summary>
+        /// Initializes a new instance with the given initial contents.
+        /// </summary>
         public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items)
         {
             _dict = new ConcurrentDictionary<TKey, ItemKeeper>(items
@@ -46,33 +51,48 @@ namespace Shielded
             _count = new Shielded<int>(_dict.Count);
         }
 
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
         public ShieldedDict()
         {
             _dict = new ConcurrentDictionary<TKey, ItemKeeper>();
             _count = new Shielded<int>(0);
         }
 
-        private void CheckLockAndEnlist(TKey key)
+        bool LockCheck(TKey key)
         {
-            if (!Shield.Enlist(this, _localDict.HasValue) && _localDict.Value.Items.ContainsKey(key))
+            WriteStamp w;
+            return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
+        }
+
+        private void CheckLockAndEnlist(TKey key, bool write)
+        {
+            var locals = _localDict.HasValue ? _localDict.Value : null;
+            if (locals != null && locals.Locked)
+            {
+                CheckLockedAccess(key, write);
+                return; // because the check above is much stricter than anything
+            }
+            if (!Shield.Enlist(this, locals != null, write) && locals.Items.ContainsKey(key))
                 return;
 
-#if SERVER
-            var stamp = Shield.ReadStamp;
-            WriteStamp w;
-            if (_writeStamps.TryGetValue(key, out w) && w.Version != null && w.Version <= stamp)
-                lock (_localDict)
-                {
-                    while (_writeStamps.TryGetValue(key, out w) && w.Version != null && w.Version <= stamp)
-                        Monitor.Wait(_localDict);
-                }
-#else
-            SpinWait.SpinUntil(() =>
-            {
-                WriteStamp w;
-                return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
-            });
-#endif
+            if (!LockCheck(key))
+                _locker.WaitUntil(() => LockCheck(key));
+        }
+
+        /// <summary>
+        /// Since the dictionary is just one field to the Shield class, we internally check, if
+        /// the access is happening while locked, whether the access is safe.
+        /// </summary>
+        void CheckLockedAccess(TKey key, bool write)
+        {
+            var locals = _localDict.Value;
+            ItemKeeper item;
+            if (!locals.Items.TryGetValue(key, out item))
+                throw new InvalidOperationException("No new key access in this context.");
+            if (item == null && write)
+                throw new InvalidOperationException("No new writes in this context.");
         }
 
         private ItemKeeper CurrentTransactionOldValue(TKey key)
@@ -99,7 +119,7 @@ namespace Shielded
         /// </summary>
         private ItemKeeper PrepareWrite(TKey key)
         {
-            CheckLockAndEnlist(key);
+            CheckLockAndEnlist(key, true);
             var locals = PrepareLocals();
             ItemKeeper existing;
             if (locals.Items.TryGetValue(key, out existing))
@@ -109,7 +129,7 @@ namespace Shielded
 
         private ItemKeeper Read(TKey key)
         {
-            CheckLockAndEnlist(key);
+            CheckLockAndEnlist(key, false);
             ItemKeeper v, curr;
             var locals = PrepareLocals();
             bool hasLocal;
@@ -124,6 +144,9 @@ namespace Shielded
             return v;
         }
 
+        /// <summary>
+        /// Gets or sets the value under the specified key.
+        /// </summary>
         public TItem this [TKey key]
         {
             get
@@ -169,6 +192,25 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// An enumerable of keys for which the current transaction made changes in the dictionary.
+        /// Safely accessible from <see cref="Shield.WhenCommitting"/> subscriptions. NB that
+        /// this also includes keys which were removed from the dictionary.
+        /// </summary>
+        public IEnumerable<TKey> Changes
+        {
+            get
+            {
+                if (Shield.IsInTransaction && _localDict.HasValue && _localDict.Value.HasChanges)
+                {
+                    return _localDict.Value.Items
+                        .Where(kvp => kvp.Value != null)
+                        .Select(kvp => kvp.Key);
+                }
+                return Enumerable.Empty<TKey>();
+            }
+        }
+
         bool IShielded.HasChanges
         {
             get
@@ -177,9 +219,18 @@ namespace Shielded
             }
         }
 
+        object IShielded.Owner
+        {
+            get
+            {
+                return this;
+            }
+        }
+
         bool IShielded.CanCommit(WriteStamp writeStamp)
         {
             var locals = _localDict.Value;
+            locals.Locked = true;
             // locals were prepared when we enlisted.
             if (locals.Items.Any(kvp =>
                     {
@@ -227,20 +278,13 @@ namespace Shielded
                         _dict[kvp.Key] = newCurrent;
 
                     WriteStamp ws;
-#if SERVER
-                    lock (_localDict)
-                    {
-                        _writeStamps.TryRemove(kvp.Key, out ws);
-                        Monitor.PulseAll(_localDict);
-                    }
-#else
                     _writeStamps.TryRemove(kvp.Key, out ws);
-#endif
                 }
                 if (version.HasValue)
                     _copies.Enqueue(Tuple.Create((long)version, copyList));
+                _locker.Release();
             }
-            _localDict.Value = null;
+            _localDict.Release();
         }
 
         void IShielded.Rollback()
@@ -251,21 +295,6 @@ namespace Shielded
             if (locals.HasChanges)
             {
                 WriteStamp ws;
-#if SERVER
-                lock (_localDict)
-                {
-                    foreach (var kvp in locals.Items)
-                    {
-                        if (kvp.Value != null &&
-                            _writeStamps.TryGetValue(kvp.Key, out ws) &&
-                            ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
-                        {
-                            _writeStamps.TryRemove(kvp.Key, out ws);
-                        }
-                    }
-                    Monitor.PulseAll(_localDict);
-                }
-#else
                 foreach (var kvp in locals.Items)
                 {
                     if (kvp.Value != null &&
@@ -275,9 +304,9 @@ namespace Shielded
                         _writeStamps.TryRemove(kvp.Key, out ws);
                     }
                 }
-#endif
+                _locker.Release();
             }
-            _localDict.Value = null;
+            _localDict.Release();
         }
 
         void IShielded.TrimCopies(long smallestOpenTransactionId)
@@ -332,6 +361,11 @@ namespace Shielded
         #endregion
 
         #region IEnumerable implementation
+        /// <summary>
+        /// Get an enumerator for the dictionary contents. Iterating over a dictionary
+        /// conflicts with any concurrent write on the dictionary (of course, not if
+        /// your transaction is read-only).
+        /// </summary>
         public IEnumerator<KeyValuePair<TKey, TItem>> GetEnumerator()
         {
             Shield.AssertInTransaction();
@@ -389,6 +423,9 @@ namespace Shielded
             return Remove(item.Key);
         }
 
+        /// <summary>
+        /// Get the number of keys in the dictionary.
+        /// </summary>
         public int Count
         {
             get
@@ -407,6 +444,10 @@ namespace Shielded
         #endregion
 
         #region IDictionary implementation
+        /// <summary>
+        /// Add the specified key and value to the dictionary.
+        /// </summary>
+        /// <exception cref="ArgumentException">Thrown if the key is already present in the dictionary.</exception>
         public void Add(TKey key, TItem value)
         {
             Shield.AssertInTransaction();
@@ -415,6 +456,9 @@ namespace Shielded
             this[key] = value;
         }
 
+        /// <summary>
+        /// Check if the dictionary contains the given key.
+        /// </summary>
         public bool ContainsKey(TKey key)
         {
             ItemKeeper v;
@@ -425,20 +469,35 @@ namespace Shielded
             return v != null && !v.Empty;
         }
 
+        /// <summary>
+        /// Remove the specified key from the collection.
+        /// </summary>
         public bool Remove(TKey key)
         {
             Shield.AssertInTransaction();
-            if (!ContainsKey(key))
+            var keeper = PrepareWrite(key);
+            if (keeper != null)
+            {
+                if (keeper.Empty)
+                    return false;
+                keeper.Empty = true;
+                _count.Commute((ref int n) => n--);
+                return true;
+            }
+            var old = CurrentTransactionOldValue(key);
+            if (old == null || old.Empty)
                 return false;
-
             var locals = _localDict.Value;
+            locals.Items[key] = new ItemKeeper { Empty = true };
             locals.HasChanges = true;
-            locals.Items[key] = new ItemKeeper() { Empty = true };
-
             _count.Commute((ref int n) => n--);
             return true;
         }
 
+        /// <summary>
+        /// Safe read based on the key - returns true if the key is present, and
+        /// then also returns the value stored under that key through the out parameter.
+        /// </summary>
         public bool TryGetValue(TKey key, out TItem value)
         {
             ItemKeeper v;
@@ -463,6 +522,10 @@ namespace Shielded
             return false;
         }
 
+        /// <summary>
+        /// Get a collection of all the keys in the dictionary. Can be used out of transactions.
+        /// The result is a copy, it will not be updated if the dictionary is later changed.
+        /// </summary>
         public ICollection<TKey> Keys
         {
             get
@@ -474,6 +537,10 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// Get a collection of all the values in the dictionary. Can be used out of transactions.
+        /// The result is a copy, it will not be updated if the dictionary is later changed.
+        /// </summary>
         public ICollection<TItem> Values
         {
             get

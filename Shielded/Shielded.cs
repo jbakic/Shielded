@@ -1,6 +1,5 @@
 using System;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Shielded
 {
@@ -22,16 +21,37 @@ namespace Shielded
         // once negotiated, kept until commit or rollback
         private volatile WriteStamp _writerStamp;
         private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
+        private readonly StampLocker _locker = new StampLocker();
+        private readonly object _owner;
 
-        public Shielded()
+        /// <summary>
+        /// Constructs a new Shielded container, containing default value of type T.
+        /// </summary>
+        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
+        /// this shielded will report its owner instead of itself.</param>
+        public Shielded(object owner = null)
         {
             _current = new ValueKeeper();
+            _owner = owner ?? this;
         }
 
-        public Shielded(T initial)
+        /// <summary>
+        /// Constructs a new Shielded container, containing the given initial value.
+        /// </summary>
+        /// <param name="initial">Initial value to contain.</param>
+        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
+        /// this shielded will report its owner instead of itself.</param>
+        public Shielded(T initial, object owner = null)
         {
             _current = new ValueKeeper();
             _current.Value = initial;
+            _owner = owner ?? this;
+        }
+
+        bool LockCheck()
+        {
+            var w = _writerStamp;
+            return w == null || w.Version == null || w.Version > Shield.ReadStamp;
         }
 
         /// <summary>
@@ -41,28 +61,14 @@ namespace Shielded
         /// write lock is released. Since write stamps are increasing, this is
         /// likely to happen only at the beginning of transactions.
         /// </summary>
-        private void CheckLockAndEnlist()
+        private void CheckLockAndEnlist(bool write)
         {
             // if already enlisted, no need to check lock.
-            if (!Shield.Enlist(this, _locals.HasValue))
+            if (!Shield.Enlist(this, _locals.HasValue, write))
                 return;
 
-#if SERVER
-            var stamp = Shield.ReadStamp;
-            var w = _writerStamp;
-            if (w != null && w.Version != null && w.Version <= stamp)
-                lock (_locals)
-                {
-                    if ((w = _writerStamp) != null && w.Version != null && w.Version <= stamp)
-                        Monitor.Wait(_locals);
-                }
-#else
-            SpinWait.SpinUntil(() =>
-            {
-                var w = _writerStamp;
-                return w == null || w.Version == null || w.Version > Shield.ReadStamp;
-            });
-#endif
+            if (!LockCheck())
+                _locker.WaitUntil(LockCheck);
         }
 
         private ValueKeeper CurrentTransactionOldValue()
@@ -79,22 +85,23 @@ namespace Shielded
         /// </summary>
         public T GetOldValue()
         {
-            CheckLockAndEnlist();
+            CheckLockAndEnlist(false);
             return CurrentTransactionOldValue().Value;
         }
 
-        private void PrepareForWriting(bool prepareOld)
+        private ValueKeeper PrepareForWriting(bool prepareOld)
         {
-            CheckLockAndEnlist();
+            CheckLockAndEnlist(true);
             if (_current.Version > Shield.ReadStamp)
                 throw new TransException("Write collision.");
-            if (!_locals.HasValue)
-            {
-                var v = new ValueKeeper();
-                if (prepareOld)
-                    v.Value = CurrentTransactionOldValue().Value;
-                _locals.Value = v;
-            }
+            if (_locals.HasValue)
+                return _locals.Value;
+
+            var v = new ValueKeeper();
+            if (prepareOld)
+                v.Value = CurrentTransactionOldValue().Value;
+            _locals.Value = v;
+            return v;
         }
 
         /// <summary>
@@ -108,7 +115,7 @@ namespace Shielded
                 if (!Shield.IsInTransaction)
                     return _current.Value;
 
-                CheckLockAndEnlist();
+                CheckLockAndEnlist(false);
                 if (!_locals.HasValue)
                     return CurrentTransactionOldValue().Value;
                 else if (_current.Version > Shield.ReadStamp)
@@ -117,21 +124,28 @@ namespace Shielded
             }
             set
             {
-                PrepareForWriting(false);
-                _locals.Value.Value = value;
+                PrepareForWriting(false).Value = value;
                 Changed.Raise(this, EventArgs.Empty);
             }
         }
 
+        /// <summary>
+        /// Delegate type used for modifications, i.e. read and write operations.
+        /// It has the advantage of working directly on the internal, thread-local
+        /// storage copy, to which it gets a reference. This is more efficient if
+        /// the type T is a big value-type.
+        /// </summary>
         public delegate void ModificationDelegate(ref T value);
 
         /// <summary>
         /// Modifies the content of the field, i.e. read and write operation.
+        /// It has the advantage of working directly on the internal, thread-local
+        /// storage copy, to which it gets a reference. This is more efficient if
+        /// the type T is a big value-type.
         /// </summary>
         public void Modify(ModificationDelegate d)
         {
-            PrepareForWriting(true);
-            d(ref _locals.Value.Value);
+            d(ref PrepareForWriting(true).Value);
             Changed.Raise(this, EventArgs.Empty);
         }
 
@@ -145,10 +159,8 @@ namespace Shielded
         /// </summary>
         public void Commute(ModificationDelegate perform)
         {
-            Shield.EnlistStrictCommute(() => {
-                PrepareForWriting(true);
-                perform(ref _locals.Value.Value);
-            }, this);
+            Shield.EnlistStrictCommute(
+                () => perform(ref PrepareForWriting(true).Value), this);
             Changed.Raise(this, EventArgs.Empty);
         }
 
@@ -184,7 +196,15 @@ namespace Shielded
                 return _locals.HasValue;
             }
         }
-        
+
+        object IShielded.Owner
+        {
+            get
+            {
+                return _owner;
+            }
+        }
+
         bool IShielded.CanCommit(WriteStamp writeStamp)
         {
             var res = _writerStamp == null &&
@@ -202,35 +222,21 @@ namespace Shielded
             newCurrent.Older = _current;
             newCurrent.Version = _writerStamp.Version.Value;
             _current = newCurrent;
-            _locals.Value = null;
-#if SERVER
-            lock (_locals)
-            {
-                _writerStamp = null;
-                Monitor.PulseAll(_locals);
-            }
-#else
+            _locals.Release();
             _writerStamp = null;
-#endif
+            _locker.Release();
         }
 
         void IShielded.Rollback()
         {
             if (!_locals.HasValue)
                 return;
-            _locals.Value = null;
+            _locals.Release();
             var ws = _writerStamp;
             if (ws != null && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
             {
-#if SERVER
-                lock (_locals)
-                {
-                    _writerStamp = null;
-                    Monitor.PulseAll(_locals);
-                }
-#else
                 _writerStamp = null;
-#endif
+                _locker.Release();
             }
         }
         
