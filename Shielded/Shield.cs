@@ -491,9 +491,8 @@ namespace Shielded
         /// It is critical that this ticket be marked when complete (i.e. Changes set to
         /// something non-null), because trimming will not go past it until this happens.
         /// </summary>
-        static bool CommitCheck(out WriteTicket ticket)
+        static bool CommitCheck()
         {
-            ticket = null;
             var items = _localItems;
             TransItems commutedItems = null;
             var oldReadTicket = _readTicket;
@@ -536,15 +535,15 @@ repeatCommutes: if (brokeInCommutes)
                     VersionList.NewVersion(
                         enlistedClone,
                         commutedItems != null ? commutedItems.Enlisted : null,
-                        out ticket);
+                        out _writeTicket);
 
                     if (brokeInCommutes)
 #if USE_STD_HASHSET
                         foreach (var item in commutedItems.Enlisted)
-                            if (!item.CanCommit(ticket))
+                            if (!item.CanCommit(_writeTicket))
                                 goto repeatCommutes;
 #else
-                        if (!commutedItems.Enlisted.CanCommit(ticket))
+                        if (!commutedItems.Enlisted.CanCommit(_writeTicket))
                             goto repeatCommutes;
 #endif
 
@@ -552,10 +551,10 @@ repeatCommutes: if (brokeInCommutes)
                     brokeInCommutes = false;
 #if USE_STD_HASHSET
                     foreach (var item in items.Enlisted)
-                        if (!item.CanCommit(ticket))
+                        if (!item.CanCommit(_writeTicket))
                             return false;
 #else
-                    if (!items.Enlisted.CanCommit(ticket))
+                    if (!items.Enlisted.CanCommit(_writeTicket))
                         return false;
 #endif
 
@@ -568,20 +567,20 @@ repeatCommutes: if (brokeInCommutes)
 #if USE_STD_HASHSET
                         if (commutedItems != null)
                             foreach (var item in commutedItems.Enlisted)
-                                item.Rollback(ticket);
+                            item.Rollback(_writeTicket);
                         if (!brokeInCommutes)
                             foreach (var item in items.Enlisted)
-                                item.Rollback(ticket);
+                            item.Rollback(_writeTicket);
 #else
                         if (commutedItems != null)
-                            commutedItems.Enlisted.Rollback(ticket);
+                            commutedItems.Enlisted.Rollback(_writeTicket);
                         if (!brokeInCommutes)
-                            items.Enlisted.Rollback(ticket);
+                            items.Enlisted.Rollback(_writeTicket);
 #endif
-                        ticket.Rollback();
+                        _writeTicket.Rollback();
                     }
                     else
-                        ticket.Commit();
+                        _writeTicket.Commit();
                 }
                 return true;
             }
@@ -595,6 +594,9 @@ repeatCommutes: if (brokeInCommutes)
             }
         }
 
+        [ThreadStatic]
+        private static WriteTicket _writeTicket;
+
         private static bool DoCommit()
         {
             var items = _localItems;
@@ -605,27 +607,18 @@ repeatCommutes: if (brokeInCommutes)
             }
             else
             {
-                WriteTicket ticket = null;
-                try
+                if (CommitCheck())
                 {
-                    if (CommitCheck(out ticket))
-                    {
-                        CommitWChanges(ticket);
-                        return true;
-                    }
-                    else
-                    {
-                        // items already rolled back, so just this:
-                        CloseTransaction();
-                        if (items.Fx != null)
-                            items.Fx.Select(f => f.OnRollback).SafeRun();
-                        return false;
-                    }
+                    CommitWChanges();
+                    return true;
                 }
-                finally
+                else
                 {
-                    if (ticket != null && ticket.Changes == null)
-                        ticket.Changes = Enumerable.Empty<IShielded>();
+                    // items already rolled back, so just this:
+                    CloseTransaction();
+                    if (items.Fx != null)
+                        items.Fx.Select(f => f.OnRollback).SafeRun();
+                    return false;
                 }
             }
         }
@@ -646,7 +639,7 @@ repeatCommutes: if (brokeInCommutes)
                 items.Fx.Select(f => f.OnCommit).SafeRun();
         }
 
-        private static void CommitWChanges(WriteTicket ticket)
+        private static void CommitWChanges()
         {
             var items = _localItems;
 
@@ -668,7 +661,7 @@ repeatCommutes: if (brokeInCommutes)
 #else
                 trigger = items.Enlisted.Commit();
 #endif
-                ticket.Changes = trigger;
+                _writeTicket.Changes = trigger;
                 CloseTransaction();
             }
 
@@ -703,12 +696,15 @@ repeatCommutes: if (brokeInCommutes)
         private static void DoRollback()
         {
             var items = _localItems;
+            if (_writeTicket == null || _writeTicket.State != VersionState.Rollback)
+            {
 #if USE_STD_HASHSET
-            foreach (var item in items.Enlisted)
-                item.Rollback(null);
+                foreach (var item in items.Enlisted)
+                    item.Rollback(_writeTicket);
 #else
-            items.Enlisted.Rollback(null);
+                items.Enlisted.Rollback(_writeTicket);
 #endif
+            }
             CloseTransaction();
 
             if (items.Fx != null)
@@ -722,6 +718,12 @@ repeatCommutes: if (brokeInCommutes)
             {
                 VersionList.ReleaseReaderTicket(_readTicket);
                 _readTicket = null;
+                if (_writeTicket != null)
+                {
+                    if (_writeTicket.Changes == null)
+                        _writeTicket.Changes = Enumerable.Empty<IShielded>();
+                    _writeTicket = null;
+                }
                 _localItems = null;
             }
         }
