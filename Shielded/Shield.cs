@@ -720,7 +720,7 @@ repeatCommutes: if (brokeInCommutes)
                 _readTicket = null;
                 if (_writeTicket != null)
                 {
-                    if (_writeTicket.Changes == null)
+                    if (_writeTicket.State != VersionState.Rollback && _writeTicket.Changes == null)
                         _writeTicket.Changes = Enumerable.Empty<IShielded>();
                     _writeTicket = null;
                 }

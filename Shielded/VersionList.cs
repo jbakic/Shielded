@@ -26,6 +26,12 @@ namespace Shielded
     internal enum VersionState
     {
         Checking,
+        /// <summary>
+        /// NB that being in this state does not neccessarily imply that this version
+        /// was committed - exceptions during the writing process, or a WhenCommitting
+        /// subscription which calls <see cref="Shield.Rollback"/> may still cause it
+        /// to get rolled back. This just means the version passed its check.
+        /// </summary>
         Commit,
         Rollback
     }
@@ -162,6 +168,11 @@ namespace Shielded
 #endif
                 while (old != _current && Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
                 {
+                    if (old.Later.State == VersionState.Rollback)
+                    {
+                        old = old.Later;
+                        continue;
+                    }
                     // we do not want to move "old" to an element which still has not finished writing, since
                     // we must maintain the invariant that says _oldestRead.Changes have already been trimmed.
                     if (old.Later.Changes == null)
@@ -178,11 +189,11 @@ namespace Shielded
                     if (old.State != VersionState.Rollback)
                         toTrim.UnionWith(old.Changes);
                 }
-                if (toTrim == null)
-                    return;
-
                 old.Changes = null;
                 _oldestRead = old;
+
+                if (toTrim == null)
+                    return;
                 var version = old.Stamp;
 #if USE_STD_HASHSET
                 foreach (var sh in toTrim)
