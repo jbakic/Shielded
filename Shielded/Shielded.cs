@@ -19,7 +19,7 @@ namespace Shielded
         
         private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
-        private volatile WriteStamp _writerStamp;
+        private volatile WriteTicket _writerStamp;
         private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
         private readonly StampLocker _locker = new StampLocker();
         private readonly object _owner;
@@ -51,7 +51,7 @@ namespace Shielded
         bool LockCheck()
         {
             var w = _writerStamp;
-            return w == null || w.Version == null || w.Version > Shield.ReadStamp;
+            return w == null || w.Stamp > Shield.ReadStamp;
         }
 
         /// <summary>
@@ -205,12 +205,12 @@ namespace Shielded
             }
         }
 
-        bool IShielded.CanCommit(WriteStamp writeStamp)
+        bool IShielded.CanCommit(WriteTicket ticket)
         {
             var res = _writerStamp == null &&
                 _current.Version <= Shield.ReadStamp;
             if (res && _locals.HasValue)
-                _writerStamp = writeStamp;
+                _writerStamp = ticket;
             return res;
         }
         
@@ -220,20 +220,19 @@ namespace Shielded
                 return;
             var newCurrent = _locals.Value;
             newCurrent.Older = _current;
-            newCurrent.Version = _writerStamp.Version.Value;
+            newCurrent.Version = _writerStamp.Stamp;
             _current = newCurrent;
             _locals.Release();
             _writerStamp = null;
             _locker.Release();
         }
 
-        void IShielded.Rollback()
+        void IShielded.Rollback(WriteTicket ticket)
         {
             if (!_locals.HasValue)
                 return;
             _locals.Release();
-            var ws = _writerStamp;
-            if (ws != null && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
+            if (ticket != null && _writerStamp == ticket)
             {
                 _writerStamp = null;
                 _locker.Release();

@@ -21,12 +21,27 @@ namespace Shielded
     }
 
     /// <summary>
+    /// State of a <see cref="WriteTicket"/>.
+    /// </summary>
+    internal enum VersionState
+    {
+        Checking,
+        Commit,
+        Rollback
+    }
+
+    /// <summary>
     /// Issued by the <see cref="VersionList"/> static class to writers, telling
     /// them which version number to use when writing, and allwing them to
     /// report changes they make back to the VersionList.
     /// </summary>
     internal abstract class WriteTicket : ReadTicket
     {
+        public VersionState State { get; protected set; }
+
+        public abstract void Commit();
+        public abstract void Rollback();
+
         /// <summary>
         /// After writers complete a write, they must place into this field
         /// an enumerable of the fields they changed. Needed for trimming old
@@ -48,6 +63,29 @@ namespace Shielded
             public int ReaderCount;
             public VersionEntry Later;
 
+            public readonly StampLocker Locker = new StampLocker();
+            // only != null during Committing state
+            public SimpleHashSet Enlisted;
+            public SimpleHashSet CommEnlisted;
+
+            public override void Commit()
+            {
+                State = VersionState.Commit;
+                Enlisted = null;
+                CommEnlisted = null;
+                Locker.Release();
+                VersionList.MoveCurrent();
+            }
+
+            public override void Rollback()
+            {
+                State = VersionState.Rollback;
+                Enlisted = null;
+                CommEnlisted = null;
+                Locker.Release();
+                VersionList.MoveCurrent();
+            }
+
             public void SetStamp(long val)
             {
                 Stamp = val;
@@ -59,7 +97,6 @@ namespace Shielded
 
         static VersionList()
         {
-            // base version, has 0 stamp, and no changes
             _oldestRead = _current = new VersionEntry() { Changes = Enumerable.Empty<IShielded>() };
         }
 
@@ -138,12 +175,13 @@ namespace Shielded
 #else
                         toTrim = new SimpleHashSet();
 #endif
-                    toTrim.UnionWith(old.Changes);
+                    if (old.State != VersionState.Rollback)
+                        toTrim.UnionWith(old.Changes);
                 }
                 if (toTrim == null)
                     return;
 
-                old.Changes = Enumerable.Empty<IShielded>();
+                old.Changes = null;
                 _oldestRead = old;
                 var version = old.Stamp;
 #if USE_STD_HASHSET
@@ -160,31 +198,37 @@ namespace Shielded
             }
         }
 
-        /// <summary>
-        /// Called after a thread checked and can commit. This will assign it a
-        /// unique stamp to use for writing. This method will enter the new stamp
-        /// into the stamp.Version. It must be done here to guarantee that no
-        /// GetReaderTicket will return your stamp number before it has been
-        /// written into your stamp lock! After completing your write, place your
-        /// changes into the ticket, and this class will trim the old versions at
-        /// the correct time. It is critical that this be done, which is why this
-        /// method returns it as an out param - to make sure no exception can
-        /// cause us to lose the ref to the ticket, if it is already in the chain.
-        /// </summary>
-        public static void NewVersion(WriteStamp stamp, out WriteTicket ticket)
+        public static void NewVersion(SimpleHashSet enlisted, SimpleHashSet commEnlisted, out WriteTicket ticket)
         {
-            var newNode = new VersionEntry();
+            var newNode = new VersionEntry { Enlisted = enlisted, CommEnlisted = commEnlisted };
             ticket = newNode;
             var current = _current;
             do
             {
                 while (current.Later != null)
-                    current = current.Later;
+                {
+                    var later = current.Later;
+                    if (IsConflict(newNode, later) && later.State == VersionState.Checking)
+                        later.Locker.WaitUntil(() => later.State != VersionState.Checking);
+                    current = later;
+                }
                 var newStamp = current.Stamp + 1;
                 newNode.SetStamp(newStamp);
-                stamp.Version = newStamp;
             } while (Interlocked.CompareExchange(ref current.Later, newNode, null) != null);
-            MoveCurrent();
+        }
+
+        private static bool IsConflict(VersionEntry newEntry, VersionEntry oldEntry)
+        {
+            var oldEnlisted = oldEntry.Enlisted;
+            var oldCommEnlisted = oldEntry.CommEnlisted;
+            if (oldEntry.State != VersionState.Checking || oldEnlisted == null)
+                return false;
+            return
+                newEntry.Enlisted.Overlaps(oldEnlisted) ||
+                oldCommEnlisted != null && newEntry.Enlisted.Overlaps(oldCommEnlisted) ||
+                (newEntry.CommEnlisted != null &&
+                    (newEntry.CommEnlisted.Overlaps(oldEnlisted) ||
+                        (oldCommEnlisted != null && newEntry.CommEnlisted.Overlaps(oldCommEnlisted))));
         }
 
         private static void MoveCurrent()
@@ -192,9 +236,9 @@ namespace Shielded
             while (true)
             {
                 var current = _current;
-                if (current.Later == null)
+                if (current.Later == null || current.Later.State == VersionState.Checking)
                     break;
-                while (current.Later != null)
+                while (current.Later != null && current.Later.State != VersionState.Checking)
                     current = current.Later;
                 _current = current;
             }

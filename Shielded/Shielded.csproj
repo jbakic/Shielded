@@ -64,7 +64,6 @@
     <Compile Include="ShieldedEvent.cs" />
     <Compile Include="Actions.cs" />
     <Compile Include="SimpleHashSet.cs" />
-    <Compile Include="WriteStamp.cs" />
     <Compile Include="VersionList.cs" />
     <Compile Include="ProxyGen\Factory.cs" />
     <Compile Include="ProxyGen\NothingToDo.cs" />
@@ -77,7 +76,6 @@
     <Compile Include="StampLocker.cs" />
     <Compile Include="CommitSubscription.cs" />
     <Compile Include="CommitSubscriptionContext.cs" />
-    <Compile Include="CommitLocker.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

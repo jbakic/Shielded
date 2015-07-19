@@ -144,7 +144,7 @@ namespace Shielded
         }
 
         #region IShielded implementation
-        bool IShielded.CanCommit(WriteStamp writeStamp)
+        bool IShielded.CanCommit(WriteTicket ticket)
         {
             return true;
         }
@@ -156,7 +156,7 @@ namespace Shielded
             _locals.Release();
         }
 
-        void IShielded.Rollback()
+        void IShielded.Rollback(WriteTicket ticket)
         {
             if (!_locals.HasValue)
                 return;

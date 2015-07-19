@@ -468,9 +468,9 @@ namespace Shielded
                 {
 #if USE_STD_HASHSET
                     foreach (var item in commutedItems.Enlisted)
-                        item.Rollback();
+                        item.Rollback(null);
 #else
-                    commutedItems.Enlisted.Rollback();
+                    commutedItems.Enlisted.Rollback(null);
 #endif
                     commutedItems = null;
                 }
@@ -481,8 +481,6 @@ namespace Shielded
         {
             return item.HasChanges;
         }
-
-        private static object _checkLock = new object();
 
         /// <summary>
         /// Performs the commit check, returning the outcome. Also returns a write ticket.
@@ -533,23 +531,20 @@ repeatCommutes: if (brokeInCommutes)
                         throw new InvalidOperationException("Invalid commute - conflict with transaction.");
                 }
 
-                CommitLock theLock = null;
-                var writeStamp = new WriteStamp(
-                    Thread.CurrentThread.ManagedThreadId);
                 try
                 {
-                    CommitLocker.Enter(
+                    VersionList.NewVersion(
                         enlistedClone,
                         commutedItems != null ? commutedItems.Enlisted : null,
-                        out theLock);
+                        out ticket);
 
                     if (brokeInCommutes)
 #if USE_STD_HASHSET
                         foreach (var item in commutedItems.Enlisted)
-                            if (!item.CanCommit(writeStamp))
+                            if (!item.CanCommit(ticket))
                                 goto repeatCommutes;
 #else
-                        if (!commutedItems.Enlisted.CanCommit(writeStamp))
+                        if (!commutedItems.Enlisted.CanCommit(ticket))
                             goto repeatCommutes;
 #endif
 
@@ -557,10 +552,10 @@ repeatCommutes: if (brokeInCommutes)
                     brokeInCommutes = false;
 #if USE_STD_HASHSET
                     foreach (var item in items.Enlisted)
-                        if (!item.CanCommit(writeStamp))
+                        if (!item.CanCommit(ticket))
                             return false;
 #else
-                    if (!items.Enlisted.CanCommit(writeStamp))
+                    if (!items.Enlisted.CanCommit(ticket))
                         return false;
 #endif
 
@@ -573,22 +568,20 @@ repeatCommutes: if (brokeInCommutes)
 #if USE_STD_HASHSET
                         if (commutedItems != null)
                             foreach (var item in commutedItems.Enlisted)
-                                item.Rollback();
+                                item.Rollback(ticket);
                         if (!brokeInCommutes)
                             foreach (var item in items.Enlisted)
-                                item.Rollback();
+                                item.Rollback(ticket);
 #else
                         if (commutedItems != null)
-                            commutedItems.Enlisted.Rollback();
+                            commutedItems.Enlisted.Rollback(ticket);
                         if (!brokeInCommutes)
-                            items.Enlisted.Rollback();
+                            items.Enlisted.Rollback(ticket);
 #endif
+                        ticket.Rollback();
                     }
                     else
-                        VersionList.NewVersion(writeStamp, out ticket);
-
-                    if (theLock != null)
-                        CommitLocker.Exit(theLock);
+                        ticket.Commit();
                 }
                 return true;
             }
@@ -712,9 +705,9 @@ repeatCommutes: if (brokeInCommutes)
             var items = _localItems;
 #if USE_STD_HASHSET
             foreach (var item in items.Enlisted)
-                item.Rollback();
+                item.Rollback(null);
 #else
-            items.Enlisted.Rollback();
+            items.Enlisted.Rollback(null);
 #endif
             CloseTransaction();
 
@@ -724,7 +717,6 @@ repeatCommutes: if (brokeInCommutes)
 
         private static void CloseTransaction()
         {
-            RuntimeHelpers.PrepareConstrainedRegions();
             try { }
             finally
             {

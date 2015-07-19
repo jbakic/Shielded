@@ -35,8 +35,8 @@ namespace Shielded
         // This is the only protection for iterators - each iterating op will read the count, just
         // to provoke a conflict with any transaction that modifies the Count! Simple as hell.
         private readonly Shielded<int> _count;
-        private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps =
-            new ConcurrentDictionary<TKey, WriteStamp>();
+        private readonly ConcurrentDictionary<TKey, WriteTicket> _writeStamps =
+            new ConcurrentDictionary<TKey, WriteTicket>();
         private readonly LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
         private readonly StampLocker _locker = new StampLocker();
 
@@ -62,8 +62,8 @@ namespace Shielded
 
         bool LockCheck(TKey key)
         {
-            WriteStamp w;
-            return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
+            WriteTicket w;
+            return !_writeStamps.TryGetValue(key, out w) || w.Stamp > Shield.ReadStamp;
         }
 
         private void CheckLockAndEnlist(TKey key, bool write)
@@ -227,7 +227,7 @@ namespace Shielded
             }
         }
 
-        bool IShielded.CanCommit(WriteStamp writeStamp)
+        bool IShielded.CanCommit(WriteTicket ticket)
         {
             var locals = _localDict.Value;
             locals.Locked = true;
@@ -245,7 +245,7 @@ namespace Shielded
                 if (locals.HasChanges)
                     foreach (var kvp in locals.Items)
                         if (kvp.Value != null)
-                            _writeStamps[kvp.Key] = writeStamp;
+                            _writeStamps[kvp.Key] = ticket;
                 return true;
             }
         }
@@ -265,7 +265,7 @@ namespace Shielded
                     if (kvp.Value == null)
                         continue;
                     if (version == null)
-                        version = _writeStamps[kvp.Key].Version;
+                        version = _writeStamps[kvp.Key].Stamp;
 
                     ItemKeeper v = null;
                     if (_dict.TryGetValue(kvp.Key, out v))
@@ -277,7 +277,7 @@ namespace Shielded
                     lock (_dict)
                         _dict[kvp.Key] = newCurrent;
 
-                    WriteStamp ws;
+                    WriteTicket ws;
                     _writeStamps.TryRemove(kvp.Key, out ws);
                 }
                 if (version.HasValue)
@@ -287,19 +287,17 @@ namespace Shielded
             _localDict.Release();
         }
 
-        void IShielded.Rollback()
+        void IShielded.Rollback(WriteTicket ticket)
         {
             if (!_localDict.HasValue)
                 return;
             var locals = _localDict.Value;
-            if (locals.HasChanges)
+            if (ticket != null && locals.HasChanges)
             {
-                WriteStamp ws;
+                WriteTicket ws;
                 foreach (var kvp in locals.Items)
                 {
-                    if (kvp.Value != null &&
-                        _writeStamps.TryGetValue(kvp.Key, out ws) &&
-                        ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
+                    if (kvp.Value != null && _writeStamps.TryGetValue(kvp.Key, out ws) && ws == ticket)
                     {
                         _writeStamps.TryRemove(kvp.Key, out ws);
                     }
