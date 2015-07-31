@@ -29,12 +29,15 @@ namespace ConsoleTests
                 }
             }
 
-            public static void Take()
+            public static int Take(int max)
             {
-                Shield.InTransaction(() => {
-                    if (_count == 0)
-                        throw new InvalidOperationException();
-                    _count.Modify((ref int c) => c--);
+                return Shield.InTransaction(() => {
+                    int res = max;
+                    _count.Modify((ref int c) => {
+                        res = c < res ? c : res;
+                        c = c - res;
+                    });
+                    return res;
                 });
             }
 
@@ -119,14 +122,26 @@ namespace ConsoleTests
         {
             Shield.Conditional(() => ProcessorSlot.Free && _queue.HasAny, () => {
                 Interlocked.Increment(ref _subscribeCount);
-                ProcessorSlot.Take();
-                var first = _queue.TakeHead();
-                Shield.SideEffect(() => Task.Factory.StartNew(() => Process(first)));
+                int slots = ProcessorSlot.Take(_queue.Count);
+                foreach (var item in _queue.Take(slots))
+                {
+                    Shield.SideEffect(() => Task.Factory.StartNew(() => {
+                        try
+                        {
+                            Process(item);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Write(" [{0}] ", ex.GetType().Name);
+                        }
+                    }));
+                }
             });
         }
 
         private void Process(Item item)
         {
+            int yieldCount = 0;
             do
             {
                 Shield.InTransaction(() => {
@@ -135,17 +150,25 @@ namespace ConsoleTests
                     //    Shield.SideEffect(() => Console.WriteLine("-- Item {0}", item.Code));
                     _processed.Commute((ref int n) => n++);
                 });
-            } while ((item = Shield.InTransaction(() => {
-                Interlocked.Increment(ref _processTestCount);
-                if (!_queue.HasAny)
+                while (yieldCount++ < 10)
                 {
-                    ProcessorSlot.Release();
-                    return null;
+                    if ((item = Shield.InTransaction(() =>
+                        {
+                            Interlocked.Increment(ref _processTestCount);
+                            if (!_queue.HasAny)
+                                return null;
+                            return _queue.TakeHead();
+                        })) != null)
+                    {
+                        yieldCount = 0;
+                        break;
+                    }
+                    Thread.Yield();
                 }
-                return _queue.TakeHead();
-            })) != null);
+            } while (item != null);
 
             Shield.InTransaction(() => {
+                ProcessorSlot.Release();
                 if (_processed == ItemCount)
                 {
                     _processed.Modify((ref int p) => p++);

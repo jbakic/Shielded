@@ -122,6 +122,25 @@ namespace Shielded
         }
 
         /// <summary>
+        /// Take elements from the head of the sequence. Optionally specify limit.
+        /// </summary>
+        public IEnumerable<T> Take(int? n = null)
+        {
+            for (int i = n ?? _count; i > 0; i--)
+            {
+                var item = _head.Value;
+                if (item == null)
+                    throw new IndexOutOfRangeException();
+                Skip(_head);
+                // NB we don't read the tail if not needed!
+                if (_head.Value == null)
+                    _tail.Value = null;
+                _count.Commute((ref int c) => c--);
+                yield return item.Value;
+            }
+        }
+
+        /// <summary>
         /// Append the specified value, commutatively - if you don't / haven't touched the
         /// sequence in this transaction (using other methods/properties), this will not cause
         /// conflicts! Effectively, the value is simply appended to whatever the sequence
