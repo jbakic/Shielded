@@ -130,7 +130,7 @@ namespace Shielded
             {
                 var item = _head.Value;
                 if (item == null)
-                    throw new IndexOutOfRangeException();
+                    yield break;
                 Skip(_head);
                 // NB we don't read the tail if not needed!
                 if (_head.Value == null)
