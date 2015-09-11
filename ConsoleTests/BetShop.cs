@@ -47,8 +47,8 @@ namespace ConsoleTests
         private int _ticketIdGenerator = 0;
         public readonly ShieldedDict<int, Ticket> Tickets =
             new ShieldedDict<int, Ticket>();
-        private ShieldedDict<string, decimal> _sameTicketWins =
-            new ShieldedDict<string, decimal>();
+        private ShieldedDictNc<string, decimal> _sameTicketWins =
+            new ShieldedDictNc<string, decimal>();
 
         public decimal SameTicketWinLimit = 1000m;
 
@@ -146,7 +146,7 @@ namespace ConsoleTests
             });
 
             Events = new ShieldedDict<int, Event>(
-                initialEvents.Select(e => new KeyValuePair<int, Event>(e.Id, e)));
+                initialEvents.Select(e => new KeyValuePair<int, Event>(e.Id, e)).ToArray());
         }
 
         /// <summary>

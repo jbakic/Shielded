@@ -184,6 +184,9 @@ namespace Shielded
         /// </summary>
         public readonly ShieldedEvent<EventArgs> Changed = new ShieldedEvent<EventArgs>();
 
+        /// <summary>
+        /// Returns the current <see cref="Value"/>.
+        /// </summary>
         public static implicit operator T(Shielded<T> obj)
         {
             return obj.Value;
