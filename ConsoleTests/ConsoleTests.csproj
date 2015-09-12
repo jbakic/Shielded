@@ -40,6 +40,7 @@
     <Compile Include="BetShop.cs" />
     <Compile Include="Queue.cs" />
     <Compile Include="SequentialTests.cs" />
+    <Compile Include="ShieldedActor.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

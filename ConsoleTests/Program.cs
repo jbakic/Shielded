@@ -1176,9 +1176,11 @@ namespace ConsoleTests
 
             //SimpleCommuteTest();
 
-            new Queue().Run();
+            //new Queue().Run();
 
             //SequentialTests.Run();
+
+            new ActorTestRun().Start();
         }
     }
 }
