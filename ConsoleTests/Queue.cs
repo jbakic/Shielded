@@ -64,11 +64,11 @@ namespace ConsoleTests
                 i => new Item() { Id = Guid.NewGuid(), Code = i, Amount = 100m * i }).ToArray();
             InitTiming();
             stopwatch.Start();
-            for (int i = 0; i < ItemCount / 100; i++)
+            for (int i = 0; i < ItemCount / 1; i++)
             {
                 Shield.InTransaction(() => {
-                    for (int j = 0; j < 100; j++)
-                        _queue.Append(items[i*100 + j]);
+                    for (int j = 0; j < 1; j++)
+                        _queue.Append(items[i*1 + j]);
                 });
             }
 

@@ -83,11 +83,11 @@ namespace ConsoleTests
 
     public class ActorTestRun
     {
-        private const int Total = 10000000;
+        private const int Total = 1000000;
         private int _count;
         private Barrier _barrier = new Barrier(2);
 
-        private const int _reportEvery = 1000000;
+        private const int _reportEvery = 100000;
         private int _lastReport;
         private long _lastTime;
         private Stopwatch _sw;
@@ -131,7 +131,7 @@ namespace ConsoleTests
         public void Start()
         {
             var taskCount = 4;
-            var package = 100;
+            var package = 1;
             InitTiming();
             Task.WaitAll(Enumerable.Range(1, taskCount)
                 .Select(t =>
