@@ -135,7 +135,8 @@ namespace ShieldedTests
         {
             var seq = new ShieldedSeq<int>(
                 Enumerable.Range(1, 20).ToArray());
-            Shield.InTransaction(() => { seq.Remove(5); });
+            Shield.InTransaction(() =>
+                Assert.IsTrue(seq.Remove(5)));
 
             Assert.AreEqual(19, seq.Count);
             Assert.IsTrue(seq.Any());
@@ -147,13 +148,17 @@ namespace ShieldedTests
                 else
                     Assert.AreEqual(i, seq[i > 5 ? i - 2 : i - 1]);
 
-            Shield.InTransaction(() => { seq.Remove(1); });
+            Shield.InTransaction(() =>
+                Assert.IsTrue(seq.Remove(1)));
 
             Assert.AreEqual(18, seq.Count);
             Assert.IsTrue(seq.Any());
             Assert.AreEqual(2, seq.Head);
 
-            Shield.InTransaction(() => { seq.Remove(20); });
+            Shield.InTransaction(() =>
+                Assert.IsTrue(seq.Remove(20)));
+            Shield.InTransaction(() =>
+                Assert.IsFalse(seq.Remove(30)));
 
             Assert.AreEqual(17, seq.Count);
             Assert.IsTrue(seq.Any());
@@ -164,7 +169,6 @@ namespace ShieldedTests
         [Test]
         public void TailPassTest()
         {
-            ///////
             // pass by the tail - potential commute bug
             // - when you append(), and then iterate a seq,
             //   will you find the new last item missing?
@@ -259,6 +263,15 @@ namespace ShieldedTests
         [Test]
         public void InsertTest()
         {
+            var emptySeq = new ShieldedSeqNc<int>();
+
+            Shield.InTransaction(() => emptySeq.Insert(0, 1));
+            Assert.IsTrue(emptySeq.Any());
+            Assert.AreEqual(1, emptySeq[0]);
+            Assert.Throws<InvalidOperationException>(() => emptySeq.Count());
+            Shield.InTransaction(() =>
+                Assert.AreEqual(1, emptySeq.Count()));
+
             var seq = new ShieldedSeq<int>(2, 3, 4, 6, 7);
 
             Shield.InTransaction(() => seq.Insert(0, 1));

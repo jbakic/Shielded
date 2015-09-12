@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace Shielded
 {
@@ -113,14 +114,7 @@ namespace Shielded
         /// </summary>
         public T TakeHead()
         {
-            var item = _head.Value;
-            if (item == null)
-                throw new InvalidOperationException();
-            Skip(_head);
-            // NB we don't read the tail if not needed!
-            if (_head.Value == null)
-                _tail.Value = null;
-            return item.Value;
+            return Take(1).Single();
         }
 
         /// <summary>
@@ -197,14 +191,10 @@ namespace Shielded
             }
             set
             {
-                Shield.AssertInTransaction();
-                // to make this op transactional, we must create a new ItemKeeper and
-                // insert him in the list.
-                var refInd = RefToIndex(index);
-                var newItem = new ItemKeeper(value, refInd.Value.Next, _owner);
-                if (_tail.Value == refInd.Value)
-                    _tail.Value = newItem;
-                refInd.Modify((ref ItemKeeper r) => {
+                RefToIndex(index).Modify((ref ItemKeeper r) => { 
+                    var newItem = new ItemKeeper(value, r.Next, _owner);
+                    if (r.Next.Value == null)
+                        _tail.Value = newItem;
                     r.ClearNext();
                     r = newItem;
                 });
@@ -301,7 +291,7 @@ namespace Shielded
             {
                 if (comp.Equals(item, curr.Value.Value))
                 {
-                    if (_tail.Value == curr.Value)
+                    if (curr.Value.Next.Value == null)
                         _tail.Value = previous;
                     Skip(curr);
                     return true;
