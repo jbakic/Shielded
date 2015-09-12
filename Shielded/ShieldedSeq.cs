@@ -7,75 +7,36 @@ namespace Shielded
 {
     /// <summary>
     /// Supports adding at both ends O(1), taking from head O(1), and every other op
-    /// involves a search, O(n).
-    /// Uses ShieldedRefs, so this class itself does not need to be shielded.
+    /// involves a search, O(n). Enumerating must be done in transaction, unless you
+    /// read only one element, e.g. using LINQ Any or First.
+    /// For a faster version, but with no Count property, see <see cref="ShieldedSeqNc&lt;T&gt;"/>.
     /// </summary>
     public class ShieldedSeq<T> : IList<T>
     {
-        private class ItemKeeper
-        {
-            public readonly T Value;
-            public readonly Shielded<ItemKeeper> Next;
-
-            public ItemKeeper(T val, ItemKeeper initialNext)
-            {
-                Value = val;
-                Next = new Shielded<ItemKeeper>(initialNext, this);
-            }
-
-            public void ClearNext()
-            {
-                // this somehow fixes the leak in Queue test... cannot explain it.
-                Next.Value = null;
-            }
-        }
-
-        // a ShieldedRef should always be readonly! unfortunate, really. if you forget, a horrible
-        // class of error becomes possible..
-        private readonly Shielded<ItemKeeper> _head;
-        private readonly Shielded<ItemKeeper> _tail;
-
+        private readonly ShieldedSeqNc<T> _seq;
         private readonly Shielded<int> _count;
 
         /// <summary>
         /// Initialize a new sequence with the given initial contents.
         /// </summary>
-        public ShieldedSeq(params T[] items)
+        public ShieldedSeq(T[] items, object owner = null)
         {
-            ItemKeeper item = null;
-            for (int i = items.Length - 1; i >= 0; i--)
-            {
-                item = new ItemKeeper(items[i], item);
-                if (_tail == null)
-                    _tail = new Shielded<ItemKeeper>(item, this);
-            }
-            _head = new Shielded<ItemKeeper>(item, this);
-            // if this is true, there were no items.
-            if (_tail == null)
-                _tail = new Shielded<ItemKeeper>(this);
-            _count = new Shielded<int>(items.Length, this);
+            _seq = new ShieldedSeqNc<T>(items, owner ?? this);
+            _count = new Shielded<int>(items.Length, owner ?? this);
         }
+
+        /// <summary>
+        /// Initialize a new sequence with the given initial contents.
+        /// </summary>
+        public ShieldedSeq(params T[] items) : this(items, null) { }
 
         /// <summary>
         /// Initialize a new empty sequence.
         /// </summary>
-        public ShieldedSeq()
+        public ShieldedSeq(object owner = null)
         {
-            _head = new Shielded<ItemKeeper>(this);
-            _tail = new Shielded<ItemKeeper>(this);
+            _seq = new ShieldedSeqNc<T>(owner ?? this);
             _count = new Shielded<int>(this);
-        }
-
-        /// <summary>
-        /// Check if the sequence is non-empty. Smaller footprint than Count
-        /// (reads the head only), useful in Conditionals.
-        /// </summary>
-        public bool HasAny
-        {
-            get
-            {
-                return _head.Value != null;
-            }
         }
 
         /// <summary>
@@ -83,10 +44,7 @@ namespace Shielded
         /// </summary>
         public void Prepend(T val)
         {
-            var keeper = new ItemKeeper(val, _head);
-            if (_head.Value == null)
-                _tail.Value = keeper;
-            _head.Value = keeper;
+            _seq.Prepend(val);
             _count.Commute((ref int c) => c++);
         }
 
@@ -98,10 +56,7 @@ namespace Shielded
         {
             get
             {
-                // single read => safe out of transaction.
-                var h = _head.Value;
-                if (h == null) throw new InvalidOperationException();
-                return h.Value;
+                return _seq.Head;
             }
         }
 
@@ -110,15 +65,9 @@ namespace Shielded
         /// </summary>
         public T TakeHead()
         {
-            var item = _head.Value;
-            if (item == null)
-                throw new InvalidOperationException();
-            Skip(_head);
-            // NB we don't read the tail if not needed!
-            if (_head.Value == null)
-                _tail.Value = null;
+            var h = _seq.TakeHead();
             _count.Commute((ref int c) => c--);
-            return item.Value;
+            return h;
         }
 
         /// <summary>
@@ -126,17 +75,10 @@ namespace Shielded
         /// </summary>
         public IEnumerable<T> Take(int? n = null)
         {
-            for (int i = n ?? _count; i > 0; i--)
+            foreach (var a in _seq.Take(n))
             {
-                var item = _head.Value;
-                if (item == null)
-                    yield break;
-                Skip(_head);
-                // NB we don't read the tail if not needed!
-                if (_head.Value == null)
-                    _tail.Value = null;
                 _count.Commute((ref int c) => c--);
-                yield return item.Value;
+                yield return a;
             }
         }
 
@@ -149,34 +91,8 @@ namespace Shielded
         /// </summary>
         public void Append(T val)
         {
-            var newItem = new ItemKeeper(val, null);
-            Shield.EnlistCommute(() => {
-                if (_head.Value == null)
-                {
-                    _head.Value = newItem;
-                    _tail.Value = newItem;
-                }
-                else
-                {
-                    _tail.Modify((ref ItemKeeper t) => {
-                        t.Next.Value = newItem;
-                        t = newItem;
-                    });
-                }
-                _count.Modify((ref int c) => c++);
-            }, _head, _tail, _count); // the commute degenerates if you read from the seq..
-        }
-
-        private Shielded<ItemKeeper> RefToIndex(int index)
-        {
-            return Shield.InTransaction(() => {
-                if (index < 0 || index >= _count)
-                    throw new IndexOutOfRangeException();
-                var curr = _head;
-                for (; index > 0; index--)
-                    curr = curr.Value.Next;
-                return curr;
-            });
+            _seq.Append(val);
+            _count.Commute((ref int c) => c++);
         }
 
         /// <summary>
@@ -187,21 +103,11 @@ namespace Shielded
         {
             get
             {
-                return RefToIndex(index).Value.Value;
+                return _seq[index];
             }
             set
             {
-                Shield.AssertInTransaction();
-                // to make this op transactional, we must create a new ItemKeeper and
-                // insert him in the list.
-                var refInd = RefToIndex(index);
-                var newItem = new ItemKeeper(value, refInd.Value.Next);
-                if (_tail.Value == refInd.Value)
-                    _tail.Value = newItem;
-                refInd.Modify((ref ItemKeeper r) => {
-                    r.ClearNext();
-                    r = newItem;
-                });
+                _seq[index] = value;
             }
         }
 
@@ -216,53 +122,14 @@ namespace Shielded
             }
         }
 
-        private static void Skip(Shielded<ItemKeeper> sh)
-        {
-            sh.Modify((ref ItemKeeper c) => {
-                var old = c;
-                c = c.Next;
-                old.ClearNext();
-            });
-        }
-
         /// <summary>
         /// Remove from the sequence all items that satisfy the given predicate.
         /// </summary>
         public void RemoveAll(Func<T, bool> condition)
         {
-            Shield.AssertInTransaction();
-            var curr = _head;
-            var tail = _tail.Value;
-            ItemKeeper previous = null;
-            int removed = 0;
-            try
-            {
-                while (curr.Value != null)
-                {
-                    if (condition(curr.Value.Value))
-                    {
-                        removed++;
-                        if (tail == curr.Value)
-                        {
-                            _tail.Value = previous;
-                            if (previous == null)
-                                _head.Value = null;
-                            break;
-                        }
-                        Skip(curr);
-                    }
-                    else
-                    {
-                        previous = curr;
-                        curr = curr.Value.Next;
-                    }
-                }
-            }
-            finally
-            {
-                if (removed > 0)
-                    _count.Commute((ref int c) => c -= removed);
-            }
+            var removed = _seq.RemoveAll(condition);
+            // TODO: exception handling
+            _count.Commute((ref int c) => c -= removed);
         }
 
         /// <summary>
@@ -270,8 +137,7 @@ namespace Shielded
         /// </summary>
         public void Clear()
         {
-            _head.Value = null;
-            _tail.Value = null;
+            _seq.Clear();
             _count.Value = 0;
         }
 
@@ -280,23 +146,7 @@ namespace Shielded
         /// </summary>
         public void RemoveAt(int index)
         {
-            Shield.AssertInTransaction();
-            if (index == 0)
-            {
-                if (_head.Value == null)
-                    throw new IndexOutOfRangeException();
-                Skip(_head);
-                if (_head.Value == null)
-                    _tail.Value = null;
-            }
-            else
-            {
-                // slightly more tricky, in case we need to change _tail
-                var r = RefToIndex(index - 1).Value;
-                Skip(r.Next);
-                if (r.Next.Value == null)
-                    _tail.Value = r;
-            }
+            _seq.RemoveAt(index);
             _count.Commute((ref int c) => c--);
         }
 
@@ -305,26 +155,10 @@ namespace Shielded
         /// </summary>
         public bool Remove(T item, IEqualityComparer<T> comp = null)
         {
-            Shield.AssertInTransaction();
-            if (comp == null) comp = EqualityComparer<T>.Default;
-
-            var curr = _head;
-            ItemKeeper previous = null;
-            while (curr.Value != null)
+            if (_seq.Remove(item, comp))
             {
-                if (comp.Equals(item, curr.Value.Value))
-                {
-                    _count.Commute((ref int c) => c--);
-                    if (_tail.Value == curr.Value)
-                        _tail.Value = previous;
-                    Skip(curr);
-                    return true;
-                }
-                else
-                {
-                    previous = curr;
-                    curr = curr.Value.Next;
-                }
+                _count.Commute((ref int c) => c--);
+                return true;
             }
             return false;
         }
@@ -335,18 +169,7 @@ namespace Shielded
         /// <returns>The index of the item in the sequence.</returns>
         public int IndexOf(T item, IEqualityComparer<T> comp = null)
         {
-            if (comp == null)
-                comp = EqualityComparer<T>.Default;
-            return Shield.InTransaction(() => {
-                var curr = _head;
-                int i = 0;
-                while (curr.Value != null && !comp.Equals(curr.Value.Value, item))
-                {
-                    i++;
-                    curr = curr.Value.Next;
-                }
-                return curr.Value == null ? -1 : i;
-            });
+            return _seq.IndexOf(item, comp);
         }
 
         /// <summary>
@@ -355,7 +178,7 @@ namespace Shielded
         /// <returns>The index of the item in the sequence.</returns>
         public int IndexOf(T item)
         {
-            return IndexOf(item, null);
+            return _seq.IndexOf(item, null);
         }
 
         /// <summary>
@@ -364,18 +187,12 @@ namespace Shielded
         /// </summary>
         public IEnumerator<T> GetEnumerator()
         {
-            Shield.AssertInTransaction();
-            var curr = _head;
-            while (curr.Value != null)
-            {
-                yield return curr.Value.Value;
-                curr = curr.Value.Next;
-            }
+            return _seq.GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator()
         {
-            return ((IEnumerable<T>)this).GetEnumerator();
+            return _seq.GetEnumerator();
         }
 
         /// <summary>
@@ -402,12 +219,7 @@ namespace Shielded
         /// <param name="arrayIndex">Index in the array where to begin the copy.</param>
         public void CopyTo(T[] array, int arrayIndex)
         {
-            Shield.InTransaction(() => {
-                if (_count + arrayIndex > array.Length)
-                    throw new IndexOutOfRangeException();
-                foreach (var v in this)
-                    array[arrayIndex++] = v;
-            });
+            _seq.CopyTo(array, arrayIndex);
         }
 
         /// <summary>
@@ -431,18 +243,7 @@ namespace Shielded
         /// </summary>
         public void Insert(int index, T item)
         {
-            if (index == _count)
-            {
-                Append(item);
-                return;
-            }
-
-            RefToIndex(index).Modify((ref ItemKeeper r) => {
-                var newItem = new ItemKeeper(item, r);
-                if (r == null)
-                    _tail.Value = newItem;
-                r = newItem;
-            });
+            _seq.Insert(index, item);
             _count.Commute((ref int c) => c++);
         }
     }

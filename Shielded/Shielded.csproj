@@ -78,6 +78,7 @@
     <Compile Include="CommitSubscriptionContext.cs" />
     <Compile Include="ShieldedDictNc.cs" />
     <Compile Include="ShieldedDict.cs" />
+    <Compile Include="ShieldedSeqNc.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

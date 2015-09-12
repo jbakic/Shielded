@@ -29,16 +29,9 @@ namespace ConsoleTests
                 }
             }
 
-            public static int Take(int max)
+            public static void Take()
             {
-                return Shield.InTransaction(() => {
-                    int res = max;
-                    _count.Modify((ref int c) => {
-                        res = c < res ? c : res;
-                        c = c - res;
-                    });
-                    return res;
-                });
+                Shield.InTransaction(() => _count.Modify((ref int c) => c--));
             }
 
             public static void Release()
@@ -52,8 +45,8 @@ namespace ConsoleTests
             }
         }
 
-        private ShieldedSeq<Item> _queue = new ShieldedSeq<Item>();
-        private Shielded<int> _processed = new Shielded<int>();
+        private ShieldedSeqNc<Item> _queue = new ShieldedSeqNc<Item>();
+        private int _processed;
         private const int ItemCount = 500000;
         private Barrier _barrier = new Barrier(2);
 
@@ -65,15 +58,11 @@ namespace ConsoleTests
             CountTracking();
             Subscribe();
 
-            var maxQueueCount = new Shielded<int>();
-            Shield.Conditional(() => _queue.Count > maxQueueCount, () => {
-                maxQueueCount.Value = _queue.Count;
-            });
-
             // create ItemCount items and push them in the queue.
             Stopwatch stopwatch = new Stopwatch();
             var items = Enumerable.Range(1, ItemCount).Select(
                 i => new Item() { Id = Guid.NewGuid(), Code = i, Amount = 100m * i }).ToArray();
+            InitTiming();
             stopwatch.Start();
             for (int i = 0; i < ItemCount / 100; i++)
             {
@@ -86,32 +75,35 @@ namespace ConsoleTests
             Console.WriteLine("..all items added, waiting.");
             _barrier.SignalAndWait();
             var time = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine(" -- completed in {0} ms, with {1} max queue count.", time, maxQueueCount.Value);
+            Console.WriteLine(" -- completed in {0} ms.", time);
+        }
+
+        private const int _reportEvery = 10000;
+        private int _lastReport;
+        private DateTime _lastTime;
+
+        private void InitTiming()
+        {
+            _lastReport = 0;
+            _lastTime = DateTime.UtcNow;
         }
 
         private void CountTracking()
         {
-            int reportEvery = 10000;
-            Shielded<int> lastReport = new Shielded<int>(0);
-            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
-
-            Shield.Conditional(() => _processed >= lastReport + reportEvery, () =>
+            var last = _lastReport;
+            DateTime newNow = DateTime.UtcNow;
+            if (_processed >= last + _reportEvery &&
+                Interlocked.CompareExchange(ref _lastReport, last + _reportEvery, last) == last)
             {
-                DateTime newNow = DateTime.UtcNow;
-                int count = _processed;
-                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Value = newNow;
-                lastReport.Modify((ref int n) => n += reportEvery);
+                int speed = _reportEvery * 1000 / (int)newNow.Subtract(_lastTime).TotalMilliseconds;
+                _lastTime = newNow;
                 int sc = _subscribeCount;
                 int ptc = _processTestCount;
                 int pbc = _processBodyCount;
-                Shield.SideEffect(() =>
-                {
-                    Console.WriteLine(
-                        "{0} at {1} item/s, stats ( {2}, {3}, {4} )",
-                        count, speed, sc, ptc, pbc);
-                });
-            });
+                Console.WriteLine(
+                    "{0} at {1} item/s, stats ( {2}, {3}, {4} )",
+                    last + _reportEvery, speed, sc, ptc, pbc);
+            }
         }
 
         private static int _subscribeCount;
@@ -120,11 +112,13 @@ namespace ConsoleTests
 
         private void Subscribe()
         {
-            Shield.Conditional(() => ProcessorSlot.Free && _queue.HasAny, () => {
+            Shield.Conditional(() => ProcessorSlot.Free && _queue.Any(), () => {
                 Interlocked.Increment(ref _subscribeCount);
-                int slots = ProcessorSlot.Take(_queue.Count);
-                for (; slots --> 0;)
+                while (ProcessorSlot.Free)
+                {
+                    ProcessorSlot.Take();
                     Shield.SideEffect(() => Task.Factory.StartNew(Process));
+                }
             });
         }
 
@@ -149,19 +143,21 @@ namespace ConsoleTests
                 if ((items = Shield.InTransaction(() =>
                     {
                         Interlocked.Increment(ref _processTestCount);
-                        if (!_queue.HasAny)
+                        if (!_queue.Any())
                             return null;
                         return _queue.Take(10).ToArray();
                     })) != null)
                 {
                     yieldCount = 0;
                     foreach (var item in items)
-                        Shield.InTransaction(() => {
-                            Interlocked.Increment(ref _processBodyCount);
-                            //if (item.Code % 10000 == 0)
-                            //    Shield.SideEffect(() => Console.WriteLine("-- Item {0}", item.Code));
-                            _processed.Commute((ref int n) => n++);
-                        });
+                    {
+                        Interlocked.Increment(ref _processBodyCount);
+                        // do a transaction, or whatever.
+                        //if (item.Code % 10000 == 0)
+                        //    Shield.SideEffect(() => Console.WriteLine("-- Item {0}", item.Code));
+                        Interlocked.Increment(ref _processed);
+                    }
+                    CountTracking();
                 }
                 else
                     Thread.Yield();
@@ -169,11 +165,10 @@ namespace ConsoleTests
 
             Shield.InTransaction(() => {
                 ProcessorSlot.Release();
-                if (_processed == ItemCount)
-                {
-                    _processed.Modify((ref int p) => p++);
-                    Shield.SideEffect(() => _barrier.SignalAndWait());
-                }
+                Shield.SideEffect(() => {
+                    if (_processed == ItemCount && Interlocked.Increment(ref _processed) == ItemCount + 1)
+                        _barrier.SignalAndWait();
+                });
             });
         }
     }

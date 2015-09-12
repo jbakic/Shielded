@@ -94,7 +94,7 @@ namespace ShieldedTests
                 seq.Append(2);
                 seq.Append(3);
                 seq.Remove(2);
-                Assert.IsTrue(seq.HasAny);
+                Assert.IsTrue(seq.Any());
                 Assert.AreEqual(2, seq.Count);
                 Assert.AreEqual(1, seq[0]);
                 Assert.AreEqual(3, seq[1]);
@@ -122,7 +122,7 @@ namespace ShieldedTests
             // the "subthread" commited the append first, so:
             Assert.AreEqual(2, seq[0]);
             Assert.AreEqual(1, seq[1]);
-            Assert.IsTrue(seq.HasAny);
+            Assert.IsTrue(seq.Any());
 
             // test for a commute degeneration - reading the head of a list causes
             // appends done in the same transaction to stop being commutable. for
@@ -150,7 +150,7 @@ namespace ShieldedTests
             });
             Assert.AreEqual(2, transactionCount);
             Assert.AreEqual(3, seq.Count);
-            Assert.IsTrue(seq.HasAny);
+            Assert.IsTrue(seq.Any());
             Assert.AreEqual(2, seq[0]);
             Assert.AreEqual(3, seq[1]);
             Assert.AreEqual(4, seq[2]);
@@ -177,7 +177,7 @@ namespace ShieldedTests
             });
             Assert.AreEqual(2, transactionCount);
             Assert.AreEqual(3, seq.Count);
-            Assert.IsTrue(seq.HasAny);
+            Assert.IsTrue(seq.Any());
             Assert.AreEqual(2, seq[0]);
             Assert.AreEqual(3, seq[1]);
             Assert.AreEqual(4, seq[2]);
@@ -205,7 +205,7 @@ namespace ShieldedTests
             });
             Assert.AreEqual(2, transactionCount);
             Assert.AreEqual(2, seq.Count);
-            Assert.IsTrue(seq.HasAny);
+            Assert.IsTrue(seq.Any());
             Assert.AreEqual(2, seq[0]);
             Assert.AreEqual(3, seq[1]);
 

@@ -19,18 +19,23 @@ namespace Shielded
         /// <summary>
         /// Initializes a new instance with the given initial contents.
         /// </summary>
-        public ShieldedDict(ICollection<KeyValuePair<TKey, TItem>> items)
+        /// <param name="items">Initial items.</param>
+        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
+        /// this shielded will report its owner instead of itself.</param>
+        public ShieldedDict(ICollection<KeyValuePair<TKey, TItem>> items, object owner = null)
         {
-            _dict = new ShieldedDictNc<TKey, TItem>(items);
+            _dict = new ShieldedDictNc<TKey, TItem>(items, owner ?? this);
             _count = new Shielded<int>(items.Count);
         }
 
         /// <summary>
         /// Initializes a new instance.
         /// </summary>
-        public ShieldedDict()
+        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
+        /// this shielded will report its owner instead of itself.</param>
+        public ShieldedDict(object owner = null)
         {
-            _dict = new ShieldedDictNc<TKey, TItem>();
+            _dict = new ShieldedDictNc<TKey, TItem>(owner ?? this);
             _count = new Shielded<int>(0);
         }
 

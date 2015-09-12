@@ -37,23 +37,31 @@ namespace Shielded
             new ConcurrentDictionary<TKey, WriteStamp>();
         private readonly LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
         private readonly StampLocker _locker = new StampLocker();
+        private readonly object _owner;
 
         /// <summary>
         /// Initializes a new instance with the given initial contents.
         /// </summary>
-        public ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items)
+        /// <param name="items">Initial items.</param>
+        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
+        /// this shielded will report its owner instead of itself.</param>
+        public ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items, object owner = null)
         {
             _dict = new ConcurrentDictionary<TKey, ItemKeeper>(items
                 .Select(kvp =>
                     new KeyValuePair<TKey, ItemKeeper>(kvp.Key, new ItemKeeper() { Value = kvp.Value })));
+            _owner = owner ?? this;
         }
 
         /// <summary>
         /// Initializes a new instance.
         /// </summary>
-        public ShieldedDictNc()
+        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
+        /// this shielded will report its owner instead of itself.</param>
+        public ShieldedDictNc(object owner = null)
         {
             _dict = new ConcurrentDictionary<TKey, ItemKeeper>();
+            _owner = owner ?? this;
         }
 
         bool LockCheck(TKey key)
@@ -212,7 +220,7 @@ namespace Shielded
         {
             get
             {
-                return this;
+                return _owner;
             }
         }
 
