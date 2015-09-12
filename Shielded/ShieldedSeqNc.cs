@@ -118,7 +118,7 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Take elements from the head of the sequence.
+        /// Remove and yield elements from the head of the sequence.
         /// </summary>
         public IEnumerable<T> Consume
         {

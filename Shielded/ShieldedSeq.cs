@@ -71,11 +71,12 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Remove and yield elements from the head of the sequence. Optionally specify limit.
+        /// Remove and yield elements from the head of the sequence.
         /// </summary>
         public IEnumerable<T> Consume
         {
-            get {
+            get
+            {
                 foreach (var a in _seq.Consume)
                 {
                     _count.Commute((ref int c) => c--);
