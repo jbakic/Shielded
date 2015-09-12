@@ -79,6 +79,7 @@
     <Compile Include="ShieldedDictNc.cs" />
     <Compile Include="ShieldedDict.cs" />
     <Compile Include="ShieldedSeqNc.cs" />
+    <Compile Include="ShieldedTreeNc.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

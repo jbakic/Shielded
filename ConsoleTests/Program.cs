@@ -479,8 +479,8 @@ namespace ConsoleTests
         public static void TreePoolTest()
         {
             int numThreads = Environment.ProcessorCount;
-            int numItems = 1000000;
-            var tree = new ShieldedDictNc<Guid, TreeItem>();
+            int numItems = 500000;
+            var tree = new ShieldedTreeNc<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);
             var counter = 0;
             int reportEvery = 10000;
@@ -948,29 +948,11 @@ namespace ConsoleTests
         public static void TreeTest()
         {
             int numTasks = 100000;
-            int reportEvery = 1000;
 
-            ShieldedTree<Guid, TreeItem> tree = new ShieldedTree<Guid, TreeItem>();
+            var tree = new ShieldedTreeNc<Guid, TreeItem>();
             int transactionCount = 0;
             Shielded<int> lastReport = new Shielded<int>(0);
             Shielded<int> countComplete = new Shielded<int>(0);
-//            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
-//
-//            Shield.Conditional(() => countComplete >= lastReport + reportEvery, () =>
-//            {
-//                DateTime newNow = DateTime.UtcNow;
-//                int speed = (countComplete - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-//                lastTime.Assign(newNow);
-//                lastReport.Modify((ref int n) => n += reportEvery);
-//                int count = countComplete;
-//                Shield.SideEffect(() =>
-//                {
-//                    Console.Write("\n{0} at {1} item/s", count, speed);
-//                }
-//                );
-//                return true;
-//            }
-//            );
 
             if (true)
             {
@@ -1014,7 +996,7 @@ namespace ConsoleTests
 
             if (true)
             {
-                ShieldedDict<Guid, TreeItem> dict = new ShieldedDict<Guid, TreeItem>();
+                var dict = new ShieldedDictNc<Guid, TreeItem>();
                 transactionCount = 0;
                 Shield.InTransaction(() =>
                 {
