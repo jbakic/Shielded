@@ -92,7 +92,6 @@ namespace ShieldedTests
             Shield.InTransaction(() => seq3.Append(100));
             Assert.AreEqual(4, seq3.Count);
             Assert.AreEqual(100, seq3 [3]);
-
         }
 
         [Test()]
@@ -292,6 +291,21 @@ namespace ShieldedTests
                 for (int i=0; i < seq.Count; i++)
                     Assert.AreEqual(i + 1, seq[i]);
             });
+        }
+
+        [Test]
+        public void RemoveAllWithExceptions()
+        {
+            var seq = new ShieldedSeq<int>(Enumerable.Range(1, 10).ToArray());
+            Shield.InTransaction(() => 
+                // handling the exception here means the transaction will commit.
+                Assert.Throws<InvalidOperationException>(() => seq.RemoveAll(i => {
+                    if (i == 5)
+                        throw new InvalidOperationException();
+                    return true;
+                })));
+            Assert.AreEqual(5, seq[0]);
+            Assert.AreEqual(6, seq.Count);
         }
     }
 }

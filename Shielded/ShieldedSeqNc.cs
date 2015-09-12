@@ -212,15 +212,25 @@ namespace Shielded
 
         /// <summary>
         /// Remove from the sequence all items that satisfy the given predicate.
-        /// Returns the number of items removed.
         /// </summary>
-        public int RemoveAll(Func<T, bool> condition)
+        public void RemoveAll(Func<T, bool> condition)
+        {
+            int _;
+            RemoveAll(condition, out _);
+        }
+
+        /// <summary>
+        /// Remove from the sequence all items that satisfy the given predicate.
+        /// Returns the number of removed items in an out param, guaranteed to
+        /// equal actual number of removed items even if the condition lambda throws.
+        /// </summary>
+        public void RemoveAll(Func<T, bool> condition, out int removed)
         {
             Shield.AssertInTransaction();
             var curr = _head;
             var tail = _tail.Value;
             ItemKeeper previous = null;
-            int removed = 0;
+            removed = 0;
             while (curr.Value != null)
             {
                 if (condition(curr.Value.Value))
@@ -241,7 +251,6 @@ namespace Shielded
                     curr = curr.Value.Next;
                 }
             }
-            return removed;
         }
 
         /// <summary>

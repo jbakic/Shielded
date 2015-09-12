@@ -127,9 +127,15 @@ namespace Shielded
         /// </summary>
         public void RemoveAll(Func<T, bool> condition)
         {
-            var removed = _seq.RemoveAll(condition);
-            // TODO: exception handling
-            _count.Commute((ref int c) => c -= removed);
+            int removed = 0;
+            try
+            {
+                _seq.RemoveAll(condition, out removed);
+            }
+            finally
+            {
+                _count.Commute((ref int c) => c -= removed);
+            }
         }
 
         /// <summary>
