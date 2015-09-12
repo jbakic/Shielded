@@ -307,6 +307,15 @@ namespace ShieldedTests
             Assert.AreEqual(5, seq[0]);
             Assert.AreEqual(6, seq.Count);
         }
+
+        [Test]
+        public void RemoveAllLastElement()
+        {
+            var seq = new ShieldedSeq<int>(Enumerable.Range(1, 10).ToArray());
+            Shield.InTransaction(() => seq.RemoveAll(i => i == 10));
+            Shield.InTransaction(() =>
+                Assert.IsTrue(seq.SequenceEqual(Enumerable.Range(1, 9))));
+        }
     }
 }
 

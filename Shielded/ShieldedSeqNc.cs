@@ -240,8 +240,10 @@ namespace Shielded
                     {
                         _tail.Value = previous;
                         if (previous == null)
+                        {
                             _head.Value = null;
-                        break;
+                            break;
+                        }
                     }
                     Skip(curr);
                 }

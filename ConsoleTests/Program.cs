@@ -480,7 +480,7 @@ namespace ConsoleTests
         {
             int numThreads = Environment.ProcessorCount;
             int numItems = 1000000;
-            var tree = new ShieldedTree<Guid, TreeItem>();
+            var tree = new ShieldedDictNc<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);
             var counter = 0;
             int reportEvery = 10000;
@@ -1180,7 +1180,7 @@ namespace ConsoleTests
 
             //TreeTest();
 
-            //TreePoolTest();
+            TreePoolTest();
 
             //SimpleOps();
 
@@ -1194,7 +1194,7 @@ namespace ConsoleTests
 
             //SimpleCommuteTest();
 
-            new Queue().Run();
+            //new Queue().Run();
 
             //SequentialTests.Run();
         }
