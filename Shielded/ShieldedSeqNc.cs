@@ -114,24 +114,27 @@ namespace Shielded
         /// </summary>
         public T TakeHead()
         {
-            return Take(1).Single();
+            return Consume.Take(1).Single();
         }
 
         /// <summary>
-        /// Take elements from the head of the sequence. Optionally specify limit.
+        /// Take elements from the head of the sequence.
         /// </summary>
-        public IEnumerable<T> Take(int? n = null)
+        public IEnumerable<T> Consume
         {
-            for (int i = 0; n == null || i < n; i++)
+            get
             {
-                var item = _head.Value;
-                if (item == null)
-                    yield break;
-                Skip(_head);
-                // NB we don't read the tail if not needed!
-                if (_head.Value == null)
-                    _tail.Value = null;
-                yield return item.Value;
+                while (true)
+                {
+                    var item = _head.Value;
+                    if (item == null)
+                        yield break;
+                    Skip(_head);
+                    // NB we don't read the tail if not needed!
+                    if (_head.Value == null)
+                        _tail.Value = null;
+                    yield return item.Value;
+                }
             }
         }
 

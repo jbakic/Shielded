@@ -1162,7 +1162,7 @@ namespace ConsoleTests
 
             //TreeTest();
 
-            TreePoolTest();
+            //TreePoolTest();
 
             //SimpleOps();
 
@@ -1176,7 +1176,7 @@ namespace ConsoleTests
 
             //SimpleCommuteTest();
 
-            //new Queue().Run();
+            new Queue().Run();
 
             //SequentialTests.Run();
         }

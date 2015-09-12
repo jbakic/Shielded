@@ -71,14 +71,16 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Take elements from the head of the sequence. Optionally specify limit.
+        /// Remove and yield elements from the head of the sequence. Optionally specify limit.
         /// </summary>
-        public IEnumerable<T> Take(int? n = null)
+        public IEnumerable<T> Consume
         {
-            foreach (var a in _seq.Take(n))
-            {
-                _count.Commute((ref int c) => c--);
-                yield return a;
+            get {
+                foreach (var a in _seq.Consume)
+                {
+                    _count.Commute((ref int c) => c--);
+                    yield return a;
+                }
             }
         }
 

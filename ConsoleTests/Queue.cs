@@ -145,7 +145,7 @@ namespace ConsoleTests
                         Interlocked.Increment(ref _processTestCount);
                         if (!_queue.Any())
                             return null;
-                        return _queue.Take(10).ToArray();
+                        return _queue.Consume.Take(10).ToArray();
                     })) != null)
                 {
                     yieldCount = 0;
