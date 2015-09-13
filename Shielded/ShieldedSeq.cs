@@ -19,7 +19,7 @@ namespace Shielded
         /// <summary>
         /// Initialize a new sequence with the given initial contents.
         /// </summary>
-        public ShieldedSeq(T[] items, object owner = null)
+        public ShieldedSeq(T[] items, object owner)
         {
             _seq = new ShieldedSeqNc<T>(items, owner ?? this);
             _count = new Shielded<int>(items.Length, owner ?? this);

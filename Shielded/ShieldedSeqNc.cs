@@ -52,7 +52,7 @@ namespace Shielded
         /// <param name="items">Initial items.</param>
         /// <param name="owner">If this is given, then in WhenCommitting subscriptions
         /// this shielded will report its owner instead of itself.</param>
-        public ShieldedSeqNc(T[] items, object owner = null)
+        public ShieldedSeqNc(T[] items, object owner)
         {
             _owner = owner ?? this;
             ItemKeeper item = null;

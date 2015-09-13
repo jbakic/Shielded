@@ -130,7 +130,7 @@ namespace ConsoleTests
 
         public void Start()
         {
-            var taskCount = 4;
+            var taskCount = 1;
             var package = 1;
             InitTiming();
             Task.WaitAll(Enumerable.Range(1, taskCount)
