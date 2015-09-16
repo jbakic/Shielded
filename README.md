@@ -8,7 +8,7 @@ in .NET. It provides a system (the Shield static class) for running in-memory
 transactions, and data structures which are aware of transactions. It can also
 generate transaction-aware proxy subclasses based on a POCO class type. The
 implementation is strict, with strong guarantees on safety. It is mostly
-obstruction-free, using only one major lock which is held during the pre-commit
+lock-free, using only one major lock which is held during the pre-commit
 check.
 
 Here is a small example:
@@ -79,6 +79,11 @@ beginning, but this time reading the new data. Though it may seem so,
 this cannot create an infinite loop since for any conflict to occur at
 least one transaction must successfully commit. Overall, the system must
 make progress.
+
+This quality would place Shielded in the lock-free class of non-blocking
+concurrency mechanisms, according to academic classification. However,
+this is not accurate since the commit check gets done under a lock. Hence
+the word "mostly" in the short description.
 
 Features
 --------
