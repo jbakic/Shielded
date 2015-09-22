@@ -52,6 +52,19 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// An enumerable of keys which the current transaction read or wrote into.
+        /// Safely accessible from <see cref="Shield.WhenCommitting"/> subscriptions. NB that
+        /// this also includes keys which were removed from the dictionary.
+        /// </summary>
+        public IEnumerable<TKey> Reads
+        {
+            get
+            {
+                return _dict.Reads;
+            }
+        }
+
         #region IDictionary implementation
 
         /// <summary>

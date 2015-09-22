@@ -208,6 +208,21 @@ namespace Shielded
             }
         }
 
+        /// <summary>
+        /// An enumerable of keys which the current transaction read or wrote into.
+        /// Safely accessible from <see cref="Shield.WhenCommitting"/> subscriptions. NB that
+        /// this also includes keys which were removed from the dictionary.
+        /// </summary>
+        public IEnumerable<TKey> Reads
+        {
+            get
+            {
+                if (Shield.IsInTransaction && _localDict.HasValue)
+                    return _localDict.Value.Items.Keys;
+                return Enumerable.Empty<TKey>();
+            }
+        }
+
         bool IShielded.HasChanges
         {
             get
