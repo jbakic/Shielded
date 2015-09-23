@@ -8,10 +8,10 @@ namespace Shielded
     internal class WriteStamp
     {
         /// <summary>
-        /// ManagedThreadId of the locking thread. Useful to make sure that
+        /// Reference to the locking transaction. Useful to make sure that
         /// a thread, on rollback, releases only those locks it made.
         /// </summary>
-        public readonly int ThreadId;
+        public readonly TransactionContext Locker;
 
         /// <summary>
         /// The version of the data that is about to be written into the
@@ -24,9 +24,9 @@ namespace Shielded
         /// </summary>
         public long? Version;
 
-        public WriteStamp(int threadId)
+        public WriteStamp(TransactionContext locker)
         {
-            ThreadId = threadId;
+            Locker = locker;
         }
     }
 }

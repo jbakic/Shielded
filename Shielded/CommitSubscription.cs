@@ -75,7 +75,7 @@ namespace Shielded
             public List<IShielded> PreAdd;
             public List<IShielded> CommitRemove;
         }
-        private readonly LocalStorage<Locals> _locals = new LocalStorage<Locals>();
+        private readonly TransactionalStorage<Locals> _locals = new TransactionalStorage<Locals>();
 
         /// <summary>
         /// Updates our entries in the dictionary. To be immediately visible as soon as

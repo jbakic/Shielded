@@ -59,7 +59,6 @@
     <Compile Include="Shielded.cs" />
     <Compile Include="ShieldedSeq.cs" />
     <Compile Include="ShieldedTree.cs" />
-    <Compile Include="LocalStorage.cs" />
     <Compile Include="ShieldedEvent.cs" />
     <Compile Include="Actions.cs" />
     <Compile Include="SimpleHashSet.cs" />
@@ -80,6 +79,9 @@
     <Compile Include="ShieldedDict.cs" />
     <Compile Include="ShieldedSeqNc.cs" />
     <Compile Include="ShieldedTreeNc.cs" />
+    <Compile Include="CommitContinuation.cs" />
+    <Compile Include="TransactionContext.cs" />
+    <Compile Include="TransactionalStorage.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

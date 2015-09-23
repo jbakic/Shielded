@@ -20,7 +20,7 @@ namespace Shielded
         private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
         private volatile WriteStamp _writerStamp;
-        private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
+        private readonly TransactionalStorage<ValueKeeper> _locals = new TransactionalStorage<ValueKeeper>();
         private readonly StampLocker _locker = new StampLocker();
         private readonly object _owner;
 
@@ -236,7 +236,7 @@ namespace Shielded
                 return;
             _locals.Release();
             var ws = _writerStamp;
-            if (ws != null && ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
+            if (ws != null && ws.Locker == Shield.Context)
             {
                 _writerStamp = null;
                 _locker.Release();

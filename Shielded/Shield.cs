@@ -13,7 +13,16 @@ namespace Shielded
     public static class Shield
     {
         [ThreadStatic]
-        private static ReadTicket _readTicket;
+        private static TransactionContextInternal _context;
+
+        internal static TransactionContext Context
+        {
+            get
+            {
+                return _context;
+            }
+        }
+
         /// <summary>
         /// Current transaction's read stamp, i.e. the latest version it can read.
         /// Thread-static. Throws if called out of transaction.
@@ -22,7 +31,7 @@ namespace Shielded
         {
             get
             {
-                return _readTicket.Stamp;
+                return _context.ReadTicket.Stamp;
             }
         }
 
@@ -33,7 +42,7 @@ namespace Shielded
         {
             get
             {
-                return _readTicket != null;
+                return _context != null;
             }
         }
 
@@ -42,16 +51,14 @@ namespace Shielded
         /// </summary>
         public static void AssertInTransaction()
         {
-            if (_readTicket == null)
+            if (_context == null)
                 throw new InvalidOperationException("Operation needs to be in a transaction.");
         }
 
-        [ThreadStatic]
-        private static TransItems _localItems;
+
+
         [ThreadStatic]
         private static ICommutableShielded _blockEnlist;
-        [ThreadStatic]
-        private static bool _noNewEnlistsOrWrites;
         [ThreadStatic]
         private static bool _enforceTracking;
         [ThreadStatic]
@@ -67,12 +74,14 @@ namespace Shielded
         /// </summary>
         internal static bool Enlist(IShielded item, bool hasLocals, bool write)
         {
-            if (write && _noNewEnlistsOrWrites && !item.HasChanges)
+            AssertInTransaction();
+            var ctx = _context;
+            if (write && ctx.CommitCheckDone && !item.HasChanges)
                 throw new InvalidOperationException("Writes not allowed here.");
             if (_blockEnlist != null && _blockEnlist != item)
                 throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
-            var items = _localItems;
 
+            var items = ctx.Items;
             if (hasLocals)
             {
                 if (_enforceTracking)
@@ -81,11 +90,10 @@ namespace Shielded
                 return false;
             }
 
-            AssertInTransaction();
             items.HasChanges = items.HasChanges || write;
             if (!items.Enlisted.Contains(item))
             {
-                if (_noNewEnlistsOrWrites)
+                if (ctx.CommitCheckDone)
                     throw new InvalidOperationException("Cannot access new fields.");
                 // must not add into Enlisted before we run commutes, otherwise commutes' calls
                 // to Enlist would return false, and the commutes, although running first, would
@@ -107,7 +115,8 @@ namespace Shielded
         /// </summary>
         private static void CheckCommutes(IShielded item)
         {
-            if (_localItems.Commutes == null || _localItems.Commutes.Count == 0)
+            var ctx = _context;
+            if (ctx.Items.Commutes == null || ctx.Items.Commutes.Count == 0)
                 return;
 
             // in case one commute triggers others, we mark where we are in _comuteTime,
@@ -116,14 +125,14 @@ namespace Shielded
             // after us just get marked, and then we execute them (or, someone lower in the stack).
             var oldTime = _commuteTime;
             var oldBlock = _blockCommute;
-            int execLimit = oldTime ?? _localItems.Commutes.Count;
+            int execLimit = oldTime ?? ctx.Items.Commutes.Count;
             try
             {
                 if (!oldTime.HasValue)
                     _blockCommute = true;
-                for (int i = 0; i < _localItems.Commutes.Count; i++)
+                for (int i = 0; i < ctx.Items.Commutes.Count; i++)
                 {
-                    var comm = _localItems.Commutes[i];
+                    var comm = ctx.Items.Commutes[i];
                     if (comm.State == CommuteState.Ok && comm.Affecting.Contains(item))
                         comm.State = CommuteState.Broken;
                     if (comm.State == CommuteState.Broken && i < execLimit)
@@ -138,7 +147,7 @@ namespace Shielded
             {
                 // not sure if this matters, but i like it. please note that this and the Remove in finally
                 // do not necessarily affect the same commutes.
-                _localItems.Commutes.RemoveAll(c => c.Affecting.Contains(item));
+                ctx.Items.Commutes.RemoveAll(c => c.Affecting.Contains(item));
                 throw;
             }
             finally
@@ -147,7 +156,7 @@ namespace Shielded
                 if (!oldTime.HasValue)
                 {
                     _blockCommute = oldBlock;
-                    _localItems.Commutes.RemoveAll(c => c.State != CommuteState.Ok);
+                    ctx.Items.Commutes.RemoveAll(c => c.State != CommuteState.Ok);
                 }
             }
         }
@@ -200,7 +209,7 @@ namespace Shielded
                 throw new InvalidOperationException("No shielded field access is allowed in this context.");
             AssertInTransaction();
 
-            var items = _localItems;
+            var items = _context.Items;
             if (_blockCommute || items.Enlisted.Overlaps(affecting))
                 perform(); // immediate degeneration. should be some warning.
             else
@@ -321,9 +330,9 @@ namespace Shielded
                 return;
             }
 
-            if (_localItems.Fx == null)
-                _localItems.Fx = new List<SideEffect>();
-            _localItems.Fx.Add(new SideEffect(fx, rollbackFx));
+            if (_context.Items.Fx == null)
+                _context.Items.Fx = new List<SideEffect>();
+            _context.Items.Fx.Add(new SideEffect(fx, rollbackFx));
         }
 
         /// <summary>
@@ -352,32 +361,59 @@ namespace Shielded
         public static void InTransaction(Action act)
         {
             if (IsInTransaction)
-            {
                 act();
-                return;
-            }
+            else
+                TransactionLoop(act, () => { _context.DoCommit(); });
+        }
 
-            do
+        /// <summary>
+        /// Runs a transaction, with repetitions if needed, until it passes the commit check,
+        /// and then stops. The fields that will be written into, remain locked! It returns
+        /// an object which can be used to later commit the transaction, or cancel it. This
+        /// object can be used from another thread safely, but only one thread.
+        /// </summary>
+        public static void RunToCommit(out CommitContinuation cont, Action act)
+        {
+            if (IsInTransaction)
+                throw new InvalidOperationException("Operation not allowed in transaction.");
+            CommitContinuation res = null;
+            try
+            {
+                TransactionLoop(act, () => { res = _context; });
+            }
+            finally
+            {
+                cont = res;
+            }
+        }
+
+        static void TransactionLoop(Action act, Action onChecked)
+        {
+            while (true)
             {
                 try
                 {
-                    _localItems = new TransItems();
-                    VersionList.GetReaderTicket(out _readTicket);
-
+                    _context = new TransactionContextInternal();
                     act();
-                    if (DoCommit())
+                    if (CommitCheck())
                     {
-                        VersionList.TrimCopies();
+                        onChecked();
+                        _context = null;
                         return;
                     }
+                    _context.DoCheckFailed();
+                    _context = null;
                 }
                 catch (TransException) { }
                 finally
                 {
-                    if (_readTicket != null)
-                        DoRollback();
+                    if (_context != null)
+                    {
+                        _context.DoRollback();
+                        _context = null;
+                    }
                 }
-            } while (true);
+            }
         }
 
         /// <summary>
@@ -400,7 +436,7 @@ namespace Shielded
         internal static ISet<IShielded> IsolatedRun(Action act)
         {
             var isolated = new TransItems();
-            isolated.Commutes = _localItems.Commutes;
+            isolated.Commutes = _context.Items.Commutes;
             WithTransactionContext(isolated, act);
             return isolated.Enlisted;
         }
@@ -408,24 +444,24 @@ namespace Shielded
         #region Commit & rollback
 
         /// <summary>
-        /// Create a local transaction context by replacing <see cref="Shield._localItems"/> with
+        /// Create a local transaction context by replacing local context's item container with
         /// <paramref name="isolatedItems"/> and setting <see cref="Shield._blockCommute"/> to <c>true</c>,
         /// then perform <paramref name="act"/> and return with restored state. Forces all IShieldeds to
         /// enlist, regardless of previous enlist status.
         /// </summary>
-        /// <param name="isolatedItems">The instance which temporarily replaces <see cref="Shield._localItems"/>.</param>
+        /// <param name="isolatedItems">The instance which temporarily replaces local context's item container.</param>
         /// <param name="act">The action to execute in the context.</param>
         /// <param name="merge">Whether to merge the isolated items into the original items when done. Defaults to <c>true</c>.
         /// If items are left unmerged, take care to handle TransExceptions and roll back the items yourself!</param>
         private static void WithTransactionContext(
             TransItems isolatedItems, Action act, bool merge = true)
         {
-            var originalItems = _localItems;
+            var originalItems = _context.Items;
             var oldEnforce = _enforceTracking;
             var oldBlock = _blockCommute;
             try
             {
-                Shield._localItems = isolatedItems;
+                Shield._context.Items = isolatedItems;
                 Shield._blockCommute = true;
                 Shield._enforceTracking = true;
 
@@ -434,7 +470,7 @@ namespace Shielded
             finally
             {
                 if (merge) originalItems.UnionWith(isolatedItems);
-                Shield._localItems = originalItems;
+                Shield._context.Items = originalItems;
                 Shield._blockCommute = oldBlock;
                 Shield._enforceTracking = oldEnforce;
             }
@@ -448,7 +484,7 @@ namespace Shielded
         /// </summary>
         static void RunCommutes(out TransItems commutedItems)
         {
-            var commutes = _localItems.Commutes;
+            var commutes = _context.Items.Commutes;
             Action commuteRunner = () => {
                 for (int i = 0; i < commutes.Count; i++)
                     commutes[i].Perform();
@@ -456,7 +492,7 @@ namespace Shielded
 
             while (true)
             {
-                _readTicket = VersionList.GetUntrackedReadStamp();
+                _context.ReadTicket = VersionList.GetUntrackedReadStamp();
                 commutedItems = new TransItems();
                 try
                 {
@@ -481,10 +517,10 @@ namespace Shielded
             return item.HasChanges;
         }
 
-        private static object _checkLock = new object();
+        private static readonly object _checkLock = new object();
 
         /// <summary>
-        /// Performs the commit check, returning the outcome. Also returns a write ticket.
+        /// Performs the commit check, returning the outcome. Prepares the write ticket in the context.
         /// The ticket is obtained before leaving the lock here, so that any thread which
         /// later conflicts with us will surely (in its retry) read the version we are now
         /// writing. The idea is to avoid senseless repetitions, retries after which a
@@ -492,12 +528,16 @@ namespace Shielded
         /// It is critical that this ticket be marked when complete (i.e. Changes set to
         /// something non-null), because trimming will not go past it until this happens.
         /// </summary>
-        static bool CommitCheck(out WriteTicket ticket)
+        static bool CommitCheck()
         {
-            ticket = null;
-            var items = _localItems;
+            var ctx = _context;
+            ctx.WriteTicket = null;
+            var items = ctx.Items;
+            if (!items.HasChanges)
+                return true;
+
             TransItems commutedItems = null;
-            var oldReadTicket = _readTicket;
+            var oldReadTicket = ctx.ReadTicket;
             bool commit = false;
             bool brokeInCommutes = items.Commutes != null && items.Commutes.Count > 0;
 
@@ -525,8 +565,7 @@ repeatCommutes: if (brokeInCommutes)
                         throw new InvalidOperationException("Invalid commute - conflict with transaction.");
                 }
 
-                var writeStamp = new WriteStamp(
-                    Thread.CurrentThread.ManagedThreadId);
+                var writeStamp = new WriteStamp(ctx);
                 lock (_checkLock)
                 {
                     try
@@ -541,7 +580,7 @@ repeatCommutes: if (brokeInCommutes)
                                 goto repeatCommutes;
 #endif
 
-                        _readTicket = oldReadTicket;
+                        ctx.ReadTicket = oldReadTicket;
                         brokeInCommutes = false;
 #if USE_STD_HASHSET
                         foreach (var item in items.Enlisted)
@@ -573,113 +612,170 @@ repeatCommutes: if (brokeInCommutes)
 #endif
                         }
                         else
-                            VersionList.NewVersion(writeStamp, out ticket);
+                            VersionList.NewVersion(writeStamp, out ctx.WriteTicket);
                     }
                 }
                 return true;
             }
             finally
             {
-                _readTicket = oldReadTicket;
+                ctx.ReadTicket = oldReadTicket;
+                ctx.CommitCheckDone = true;
                 // note that this changes the _localItems.Enlisted hashset to contain the
                 // commute-enlists as well, regardless of the check outcome.
                 if (commutedItems != null)
-                    _localItems.UnionWith(commutedItems);
+                    items.UnionWith(commutedItems);
             }
         }
 
-        private static bool DoCommit()
+        private class TransactionContextInternal : TransactionContext
         {
-            var items = _localItems;
-            if (!items.HasChanges)
+            public ReadTicket ReadTicket;
+            public WriteTicket WriteTicket;
+            public TransItems Items;
+            public bool CommitCheckDone;
+
+            public TransactionContextInternal()
             {
-                CommitWoChanges();
-                return true;
+                Items = new TransItems();
+                VersionList.GetReaderTicket(out ReadTicket);
             }
-            else
+
+            public override void InContext(Action<TransactionField[]> act)
             {
-                WriteTicket ticket = null;
+                if (Shield._context != null)
+                    throw new InvalidOperationException("Operation not allowed in a transaction.");
+                if (Completed)
+                    throw new InvalidOperationException("Transaction is completed.");
                 try
                 {
-                    if (CommitCheck(out ticket))
-                    {
-                        CommitWChanges(ticket);
-                        return true;
-                    }
-                    else
-                    {
-                        // items already rolled back, so just this:
-                        CloseTransaction();
-                        if (items.Fx != null)
-                            items.Fx.Select(f => f.OnRollback).SafeRun();
-                        return false;
-                    }
+                    Shield._context = this;
+                    act(Items.GetFields());
                 }
                 finally
                 {
-                    if (ticket != null && ticket.Changes == null)
-                        ticket.Changes = Enumerable.Empty<IShielded>();
+                    Shield._context = null;
                 }
             }
-        }
 
-        private static void CommitWoChanges()
-        {
-            var items = _localItems;
+            private void Complete()
+            {
+                try { }
+                finally
+                {
+                    if (WriteTicket != null && WriteTicket.Changes == null)
+                        WriteTicket.Changes = Enumerable.Empty<IShielded>();
+                    VersionList.ReleaseReaderTicket(ReadTicket);
+                    Completed = true;
+                    Shield._context = null;
+                }
+            }
+
+            public override void Commit()
+            {
+                if (Shield._context != null)
+                    throw new InvalidOperationException("Operation not allowed in a transaction.");
+                if (Completed)
+                    return;
+                try
+                {
+                    Shield._context = this;
+                    DoCommit();
+                }
+                catch
+                {
+                    DoRollback();
+                    throw;
+                }
+                finally
+                {
+                    Shield._context = null;
+                }
+            }
+
+            public void DoCommit()
+            {
+                if (Items.HasChanges)
+                    CommitWChanges();
+                else
+                    CommitWoChanges();
+                VersionList.TrimCopies();
+            }
+
+            private void CommitWoChanges()
+            {
 #if USE_STD_HASHSET
-            foreach (var item in items.Enlisted)
+                foreach (var item in Items.Enlisted)
                 item.Commit();
 #else
-            items.Enlisted.CommitWoChanges();
+                Items.Enlisted.CommitWoChanges();
 #endif
+                Complete();
+                if (Items.Fx != null)
+                    Items.Fx.Select(f => f.OnCommit).SafeRun();
+            }
 
-            CloseTransaction();
-
-            if (items.Fx != null)
-                items.Fx.Select(f => f.OnCommit).SafeRun();
-        }
-
-        private static void CommitWChanges(WriteTicket ticket)
-        {
-            var items = _localItems;
-
-            if (CommittingSubscription.Any)
-                FireCommitting(items);
-
-            List<IShielded> trigger;
-            // this must not be interrupted by a Thread.Abort!
-            try { }
-            finally
+            private void CommitWChanges()
             {
-#if USE_STD_HASHSET
-                trigger = new List<IShielded>();
-                foreach (var item in items.Enlisted)
+                CommittingSubscription.Fire(Items);
+
+                List<IShielded> trigger;
+                // this must not be interrupted by a Thread.Abort!
+                try { }
+                finally
                 {
+#if USE_STD_HASHSET
+                    trigger = new List<IShielded>();
+                    foreach (var item in Items.Enlisted)
+                    {
                     if (item.HasChanges) trigger.Add(item);
                     item.Commit();
-                }
+                    }
 #else
-                trigger = items.Enlisted.Commit();
+                    trigger = Items.Enlisted.Commit();
 #endif
-                ticket.Changes = trigger;
-                CloseTransaction();
+                    WriteTicket.Changes = trigger;
+                }
+
+                Complete();
+                (Items.Fx != null ? Items.Fx.Select(f => f.OnCommit) : null)
+                    .SafeConcat(CommitSubscriptionContext.PostCommit.Trigger(trigger))
+                    .SafeRun();
             }
 
-            (items.Fx != null ? items.Fx.Select(f => f.OnCommit) : null)
-                .SafeConcat(CommitSubscriptionContext.PostCommit.Trigger(trigger))
-                .SafeRun();
-        }
-
-        static void FireCommitting(TransItems items)
-        {
-            try
+            public override void Rollback()
             {
-                _noNewEnlistsOrWrites = true;
-                CommittingSubscription.Fire(items);
+                if (Shield._context != null)
+                    throw new InvalidOperationException("Operation not allowed in a transaction.");
+                if (Completed)
+                    return;
+                try
+                {
+                    Shield._context = this;
+                    DoRollback();
+                }
+                finally
+                {
+                    Shield._context = null;
+                }
             }
-            finally
+
+            public void DoRollback()
             {
-                _noNewEnlistsOrWrites = false;
+#if USE_STD_HASHSET
+                foreach (var item in Items.Enlisted)
+                item.Rollback();
+#else
+                Items.Enlisted.Rollback();
+#endif
+                DoCheckFailed();
+            }
+
+            public void DoCheckFailed()
+            {
+                Complete();
+                if (Items.Fx != null)
+                    Items.Fx.Select(f => f.OnRollback).SafeRun();
             }
         }
 
@@ -691,32 +787,6 @@ repeatCommutes: if (brokeInCommutes)
                 return first;
             else
                 return second;
-        }
-
-        private static void DoRollback()
-        {
-            var items = _localItems;
-#if USE_STD_HASHSET
-            foreach (var item in items.Enlisted)
-                item.Rollback();
-#else
-            items.Enlisted.Rollback();
-#endif
-            CloseTransaction();
-
-            if (items.Fx != null)
-                items.Fx.Select(f => f.OnRollback).SafeRun();
-        }
-
-        private static void CloseTransaction()
-        {
-            try { }
-            finally
-            {
-                VersionList.ReleaseReaderTicket(_readTicket);
-                _readTicket = null;
-                _localItems = null;
-            }
         }
 
         #endregion

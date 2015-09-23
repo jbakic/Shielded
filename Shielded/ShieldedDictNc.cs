@@ -35,7 +35,7 @@ namespace Shielded
         private readonly ConcurrentDictionary<TKey, ItemKeeper> _dict;
         private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps =
             new ConcurrentDictionary<TKey, WriteStamp>();
-        private readonly LocalStorage<LocalDict> _localDict = new LocalStorage<LocalDict>();
+        private readonly TransactionalStorage<LocalDict> _localDict = new TransactionalStorage<LocalDict>();
         private readonly StampLocker _locker = new StampLocker();
         private readonly object _owner;
 
@@ -307,11 +307,11 @@ namespace Shielded
             if (locals.HasChanges)
             {
                 WriteStamp ws;
+                var ctx = Shield.Context;
                 foreach (var kvp in locals.Items)
                 {
                     if (kvp.Value != null &&
-                        _writeStamps.TryGetValue(kvp.Key, out ws) &&
-                        ws.ThreadId == Thread.CurrentThread.ManagedThreadId)
+                        _writeStamps.TryGetValue(kvp.Key, out ws) && ws.Locker == ctx)
                     {
                         _writeStamps.TryRemove(kvp.Key, out ws);
                     }

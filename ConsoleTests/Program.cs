@@ -1162,7 +1162,7 @@ namespace ConsoleTests
 
             //TreeTest();
 
-            //TreePoolTest();
+            TreePoolTest();
 
             //SimpleOps();
 
@@ -1180,7 +1180,7 @@ namespace ConsoleTests
 
             //SequentialTests.Run();
 
-            new ActorTestRun().Start();
+            //new ActorTestRun().Start();
         }
     }
 }
