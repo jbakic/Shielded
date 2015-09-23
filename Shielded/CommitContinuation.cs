@@ -20,8 +20,8 @@ namespace Shielded
 
         /// <summary>
         /// Commit the transaction held in this continuation.
-        /// Warning: WhenCommitting subscriptions are executed first, and any excptions
-        /// that they throw will currently bubble out of this method!
+        /// Warning: WhenCommitting subscriptions are executed first - any excptions
+        /// that they throw will bubble out of this method, and cause the commit to fail!
         /// </summary>
         public abstract void Commit();
 

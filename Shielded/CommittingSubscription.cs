@@ -16,8 +16,7 @@ namespace Shielded
                 return;
 
             var fields = items.GetFields();
-            for (int i = 0; i < theList.Length; i++)
-                theList[i].Act(fields);
+            theList.Select(cs => (Action)(() => cs.Act(fields))).SafeRun();
         }
 
         public readonly Action<TransactionField[]> Act;

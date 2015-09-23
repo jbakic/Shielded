@@ -122,10 +122,13 @@ interested in, just before that transaction will commit.
     * Can be used to ensure certain invariants are held, or to implement
     thread prioritization by allowing only some threads which access a field
     to commit into it.
-* **Synchronous commits**: By using Shield.WhenCommitting, you can integrate
-your code into the commit process. This enables you to, e.g., perform the same
-changes in a relational database, or publish commits to other servers...
-    * You can also cause a retry, using Shield.Rollback.
+* **Custom commit operations**: You can integrate your own code into the commit process,
+to execute while the shielded fields, that are being written, are held locked.
+    * Using Shield.WhenCommitting, you subscribe for any commit, or based on
+    the type of field being written. These subscriptions should never throw!
+    * Shield.RunToCommit runs a transaction just up to commit, and allows you to
+    commit/rollback later, or from another thread. This is useful for asynchronous
+    programming.
 * **Commutables**: operations which can be performed without conflict, because
 they can be reordered in time and have the same net effect, i.e. they are
 commutable (name borrowed from Clojure). Incrementing an int is an

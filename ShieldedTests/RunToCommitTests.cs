@@ -11,7 +11,7 @@ namespace ShieldedTests
         [Test]
         public void BasicRunToCommit()
         {
-            Shielded<int> a = new Shielded<int>(5);
+            var a = new Shielded<int>(5);
             CommitContinuation cont = null;
             try
             {
@@ -50,6 +50,29 @@ namespace ShieldedTests
                     cont.Dispose();
             }
             Assert.AreEqual(20, a);
+        }
+
+        [Test]
+        public void RunToCommitAndFail()
+        {
+            var a = new Shielded<int>(5);
+            using (Shield.WhenCommitting(_ => Shield.Rollback()))
+            {
+                CommitContinuation cont = null;
+                try
+                {
+                    Shield.RunToCommit(out cont, () => a.Value = 10);
+                    // RunToCommit guarantees that Shielded will allow the commit, but cannot
+                    // guarantee for any WhenCommitting subscriptions.
+                    Assert.Throws<AggregateException>(cont.Commit);
+                    Assert.IsTrue(cont.Completed);
+                }
+                finally
+                {
+                    if (cont != null)
+                        cont.Dispose();
+                }
+            }
         }
     }
 }

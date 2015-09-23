@@ -261,11 +261,11 @@ namespace Shielded
         /// <summary>
         /// Execute an action parallel to every commit which changes fields of a type.
         /// The action will be immediately enlisted, and get called after any commit is
-        /// checked, but before anything is written. The action can then make parallel
-        /// changes in another data store, or it can call <see cref="Shield.Rollback"/>
-        /// to retry the transaction from the beginning. The action may not access any
-        /// fields that the transaction did not already access, and it may only write
-        /// into fields which were already written to by the transaction.
+        /// checked, but before anything is written. Any exceptions bubble out to the thread
+        /// running the transaction (or, on calling <see cref="CommitContinuation.Commit"/>).
+        /// Calls to <see cref="Rollback"/> are not allowed.
+        /// The action may not access any fields that the transaction did not already access,
+        /// and it may only write into fields which were already written to by the transaction.
         /// This method throws when called within a transaction.
         /// </summary>
         /// <returns>An IDisposable for unsubscribing.</returns>
@@ -295,11 +295,11 @@ namespace Shielded
         /// <summary>
         /// Execute an action parallel to every commit with changes.
         /// The action will be immediately enlisted, and get called after any commit is
-        /// checked, but before anything is written. The action can then make parallel
-        /// changes in another data store, or it can call <see cref="Shield.Rollback"/>
-        /// to retry the transaction from the beginning. The action may not access any
-        /// fields that the transaction did not already access, and it may only write
-        /// into fields which were already written to by the transaction.
+        /// checked, but before anything is written. Any exceptions bubble out to the thread
+        /// running the transaction (or, on calling <see cref="CommitContinuation.Commit"/>).
+        /// Calls to <see cref="Rollback"/> are not allowed.
+        /// The action may not access any fields that the transaction did not already access,
+        /// and it may only write into fields which were already written to by the transaction.
         /// This version receives a full list of enlisted items, even those without changes.
         /// This method throws when called within a transaction.
         /// </summary>
@@ -423,6 +423,8 @@ namespace Shielded
         public static void Rollback()
         {
             AssertInTransaction();
+            if (_context.CommitCheckDone)
+                throw new InvalidOperationException("Rollback not allowed for checked transactions.");
             throw new TransException("Requested rollback and retry.");
         }
 
