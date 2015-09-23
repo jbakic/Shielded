@@ -20,20 +20,28 @@ namespace ShieldedTests
                         a.Value = 20;
                 });
 
+                int runCount = 0, insideIfCount = 0;
                 var t = new Thread(() => Shield.InTransaction(() => {
-                    if (a == 5) // this will block, and retry only after the Commit call below
+                    Interlocked.Increment(ref runCount);
+                    if (a == 5) // this will block, and continue after the Commit call below
+                    {
+                        Interlocked.Increment(ref insideIfCount);
                         a.Value = 10;
+                    }
                 }));
                 t.Start();
                 Thread.Sleep(100);
-                Assert.IsTrue(t.IsAlive);
+                Assert.AreEqual(1, runCount);
+                Assert.AreEqual(0, insideIfCount);
 
                 cont.InContext(_ => Assert.AreEqual(20, a));
                 Assert.AreEqual(5, a);
-                var t2 = new Thread(() => cont.Commit());
+                var t2 = new Thread(cont.Commit);
                 t2.Start();
                 t2.Join();
                 t.Join();
+                Assert.AreEqual(1, runCount);
+                Assert.AreEqual(0, insideIfCount);
                 Assert.AreEqual(20, a);
             }
             finally
