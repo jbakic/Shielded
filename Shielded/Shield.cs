@@ -379,10 +379,7 @@ namespace Shielded
             CommitContinuation res = null;
             try
             {
-                TransactionLoop(act, () => {
-                    res = _context;
-                    _context = null;
-                });
+                TransactionLoop(act, () => { res = _context; });
             }
             finally
             {
@@ -401,9 +398,11 @@ namespace Shielded
                     if (CommitCheck())
                     {
                         onChecked();
+                        _context = null;
                         return;
                     }
                     _context.DoCheckFailed();
+                    _context = null;
                 }
                 catch (TransException) { }
                 finally
