@@ -5,7 +5,7 @@ namespace Shielded
     /// <summary>
     /// A descriptor for some object taking part in a transaction.
     /// </summary>
-    public class TransactionField
+    public struct TransactionField
     {
         /// <summary>
         /// The object which enlisted in the transaction.
