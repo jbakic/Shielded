@@ -379,7 +379,10 @@ namespace Shielded
             CommitContinuation res = null;
             try
             {
-                TransactionLoop(act, () => { res = _context; });
+                TransactionLoop(act, () => {
+                    res = _context;
+                    _context = null;
+                });
             }
             finally
             {
@@ -398,11 +401,9 @@ namespace Shielded
                     if (CommitCheck())
                     {
                         onChecked();
-                        _context = null;
                         return;
                     }
                     _context.DoCheckFailed();
-                    _context = null;
                 }
                 catch (TransException) { }
                 finally
@@ -684,14 +685,13 @@ repeatCommutes: if (brokeInCommutes)
                     Shield._context = this;
                     DoCommit();
                 }
-                catch
-                {
-                    DoRollback();
-                    throw;
-                }
                 finally
                 {
-                    Shield._context = null;
+                    if (Shield._context != null)
+                    {
+                        DoRollback();
+                        Shield._context = null;
+                    }
                 }
             }
 
