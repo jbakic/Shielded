@@ -97,9 +97,10 @@ namespace Shielded
         /// <summary>
         /// After no reading will be done for the given reader ticket, release it with this method.
         /// </summary>
-        public static void ReleaseReaderTicket(ReadTicket ticket)
+        public static void ReleaseReaderTicket(ref ReadTicket ticket)
         {
             var node = (VersionEntry)ticket;
+            ticket = null;
             Interlocked.Decrement(ref node.ReaderCount);
         }
         

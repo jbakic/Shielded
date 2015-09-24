@@ -534,7 +534,6 @@ namespace Shielded
         static bool CommitCheck()
         {
             var ctx = _context;
-            ctx.WriteTicket = null;
             var items = ctx.Items;
             if (!items.HasChanges)
                 return true;
@@ -668,7 +667,8 @@ repeatCommutes: if (brokeInCommutes)
                 {
                     if (WriteTicket != null && WriteTicket.Changes == null)
                         WriteTicket.Changes = Enumerable.Empty<IShielded>();
-                    VersionList.ReleaseReaderTicket(ReadTicket);
+                    if (ReadTicket != null)
+                        VersionList.ReleaseReaderTicket(ref ReadTicket);
                     Completed = true;
                     Shield._context = null;
                 }
