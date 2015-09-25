@@ -2,6 +2,7 @@
 using System.Threading;
 using NUnit.Framework;
 using Shielded;
+using System.Diagnostics;
 
 namespace ShieldedTests
 {
@@ -12,14 +13,12 @@ namespace ShieldedTests
         public void BasicRunToCommit()
         {
             var a = new Shielded<int>(5);
-            CommitContinuation cont = null;
-            try
-            {
-                Shield.RunToCommit(out cont, () => {
+            using (var cont = Shield.RunToCommit(5000,
+                () => {
                     if (a == 5)
                         a.Value = 20;
-                });
-
+                }))
+            {
                 int runCount = 0, insideIfCount = 0;
                 var t = new Thread(() => Shield.InTransaction(() => {
                     Interlocked.Increment(ref runCount);
@@ -44,11 +43,6 @@ namespace ShieldedTests
                 Assert.AreEqual(0, insideIfCount);
                 Assert.AreEqual(20, a);
             }
-            finally
-            {
-                if (cont != null)
-                    cont.Dispose();
-            }
             Assert.AreEqual(20, a);
         }
 
@@ -58,21 +52,35 @@ namespace ShieldedTests
             var a = new Shielded<int>(5);
             using (Shield.WhenCommitting(_ => Shield.Rollback()))
             {
-                CommitContinuation cont = null;
-                try
+                using (var cont = Shield.RunToCommit(5000, () => a.Value = 10))
                 {
-                    Shield.RunToCommit(out cont, () => a.Value = 10);
                     // RunToCommit guarantees that Shielded will allow the commit, but cannot
                     // guarantee for any WhenCommitting subscriptions.
                     Assert.Throws<AggregateException>(cont.Commit);
                     Assert.IsTrue(cont.Completed);
                 }
-                finally
-                {
-                    if (cont != null)
-                        cont.Dispose();
-                }
             }
+        }
+
+        [Test]
+        public void RunToCommitTimeout()
+        {
+            var a = new Shielded<int>(5);
+            using (var cont = Shield.RunToCommit(200, () => a.Value = 10))
+            {
+                Assert.IsFalse(cont.Completed);
+                var sw = Stopwatch.StartNew();
+                // this causes a simple deadlock! the a field is fully locked, even reading blocks on it.
+                // but the locks are released after 200 ms, and this transaction just continues..
+                Shield.InTransaction(() => Assert.AreEqual(5, a));
+
+                var time = sw.ElapsedMilliseconds;
+                Assert.Greater(time, 150);
+                Assert.Less(time, 250);
+                // the continuation has been rolled back.
+                Assert.IsTrue(cont.Completed);
+            }
+            Assert.AreEqual(5, a);
         }
     }
 }

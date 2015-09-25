@@ -31,6 +31,7 @@ namespace Shielded
         {
             get
             {
+                AssertInTransaction();
                 return _context.ReadTicket.Stamp;
             }
         }
@@ -369,10 +370,12 @@ namespace Shielded
         /// <summary>
         /// Runs a transaction, with repetitions if needed, until it passes the commit check,
         /// and then stops. The fields that will be written into, remain locked! It returns
-        /// an object which can be used to later commit the transaction, or cancel it. This
-        /// object can be used from another thread safely, but only one thread.
+        /// an object which can be used to later commit the transaction, roll it back, or run
+        /// code inside of its scope, restricted to fields touched by the original transaction.
+        /// Receives a timeout in milliseconds, and the returned continuation will, if not
+        /// completed by then, automatically roll back by this time.
         /// </summary>
-        public static void RunToCommit(out CommitContinuation cont, Action act)
+        public static CommitContinuation RunToCommit(int timeoutMs, Action act)
         {
             if (IsInTransaction)
                 throw new InvalidOperationException("Operation not allowed in transaction.");
@@ -383,10 +386,12 @@ namespace Shielded
                     res = _context;
                     _context = null;
                 });
+                return res;
             }
             finally
             {
-                cont = res;
+                if (res != null && !res.Completed)
+                    res.StartTimer(timeoutMs);
             }
         }
 
@@ -409,10 +414,7 @@ namespace Shielded
                 finally
                 {
                     if (_context != null)
-                    {
                         _context.DoRollback();
-                        _context = null;
-                    }
                 }
             }
         }
@@ -674,31 +676,71 @@ repeatCommutes: if (brokeInCommutes)
                 }
             }
 
+            private int _committing;
+            private int _completing;
+                
+            private bool Sync(ref int flag, Action act)
+            {
+                var effect = false;
+                try
+                {
+                    try { } finally
+                    {
+                        effect = Interlocked.CompareExchange(ref flag, 1, 0) == 0;
+                    }
+                    if (!effect || Completed)
+                        return false;
+                    act();
+                    return true;
+                }
+                finally
+                {
+                    if (effect)
+                        Interlocked.Exchange(ref flag, 0);
+                }
+            }
+
             public override void Commit()
             {
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
-                if (Completed)
-                    return;
-                try
-                {
-                    Shield._context = this;
-                    DoCommit();
-                }
-                finally
-                {
-                    if (Shield._context != null)
+                if (!Sync(ref _committing, () => {
+                    try
                     {
-                        DoRollback();
-                        Shield._context = null;
+                        Shield._context = this;
+                        if (Items.HasChanges)
+                        {
+                            CommittingSubscription.Fire(Items);
+                            if (!Sync(ref _completing, CommitWChanges))
+                                throw new InvalidOperationException("Commit interrupted");
+                        }
+                        else if (!Sync(ref _completing, CommitWoChanges))
+                            throw new InvalidOperationException("Commit interrupted");
+
+                        Dispose();
+                        VersionList.TrimCopies();
                     }
+                    finally
+                    {
+                        if (Shield._context != null)
+                        {
+                            Sync(ref _completing, DoRollback);
+                            Shield._context = null;
+                        }
+                    }
+                }))
+                {
+                    throw new InvalidOperationException("Transaction already complete, or completing.");
                 }
             }
 
             public void DoCommit()
             {
                 if (Items.HasChanges)
+                {
+                    CommittingSubscription.Fire(Items);
                     CommitWChanges();
+                }
                 else
                     CommitWoChanges();
                 VersionList.TrimCopies();
@@ -708,7 +750,7 @@ repeatCommutes: if (brokeInCommutes)
             {
 #if USE_STD_HASHSET
                 foreach (var item in Items.Enlisted)
-                item.Commit();
+                    item.Commit();
 #else
                 Items.Enlisted.CommitWoChanges();
 #endif
@@ -719,8 +761,6 @@ repeatCommutes: if (brokeInCommutes)
 
             private void CommitWChanges()
             {
-                CommittingSubscription.Fire(Items);
-
                 List<IShielded> trigger;
                 // this must not be interrupted by a Thread.Abort!
                 try { }
@@ -730,8 +770,8 @@ repeatCommutes: if (brokeInCommutes)
                     trigger = new List<IShielded>();
                     foreach (var item in Items.Enlisted)
                     {
-                    if (item.HasChanges) trigger.Add(item);
-                    item.Commit();
+                        if (item.HasChanges) trigger.Add(item);
+                        item.Commit();
                     }
 #else
                     trigger = Items.Enlisted.Commit();
@@ -749,24 +789,25 @@ repeatCommutes: if (brokeInCommutes)
             {
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
-                if (Completed)
-                    return;
-                try
-                {
-                    Shield._context = this;
-                    DoRollback();
-                }
-                finally
-                {
-                    Shield._context = null;
-                }
+                Sync(ref _completing, () => {
+                    try
+                    {
+                        Shield._context = this;
+                        DoRollback();
+                        Dispose();
+                    }
+                    finally
+                    {
+                        Shield._context = null;
+                    }
+                });
             }
 
             public void DoRollback()
             {
 #if USE_STD_HASHSET
                 foreach (var item in Items.Enlisted)
-                item.Rollback();
+                    item.Rollback();
 #else
                 Items.Enlisted.Rollback();
 #endif
