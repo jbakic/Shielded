@@ -678,7 +678,7 @@ repeatCommutes: if (brokeInCommutes)
 
             private int _committing;
             private int _completing;
-                
+
             private bool Sync(ref int flag, Action act)
             {
                 var effect = false;
