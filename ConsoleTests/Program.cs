@@ -1162,9 +1162,9 @@ namespace ConsoleTests
 
             //TreeTest();
 
-            TreePoolTest();
+            //TreePoolTest();
 
-            //SimpleOps();
+            SimpleOps();
 
             //MultiFieldOps();
 

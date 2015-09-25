@@ -716,9 +716,6 @@ repeatCommutes: if (brokeInCommutes)
                         }
                         else if (!Sync(ref _completing, CommitWoChanges))
                             throw new InvalidOperationException("Commit interrupted");
-
-                        Dispose();
-                        VersionList.TrimCopies();
                     }
                     finally
                     {
@@ -728,6 +725,8 @@ repeatCommutes: if (brokeInCommutes)
                             Shield._context = null;
                         }
                     }
+                    Dispose();
+                    VersionList.TrimCopies();
                 }))
                 {
                     throw new InvalidOperationException("Transaction already complete, or completing.");
@@ -793,13 +792,12 @@ repeatCommutes: if (brokeInCommutes)
                     try
                     {
                         Shield._context = this;
-                        DoRollback();
-                        Dispose();
                     }
                     finally
                     {
-                        Shield._context = null;
+                        DoRollback();
                     }
+                    Dispose();
                 });
             }
 
