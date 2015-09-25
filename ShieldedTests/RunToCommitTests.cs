@@ -66,9 +66,17 @@ namespace ShieldedTests
         public void RunToCommitTimeout()
         {
             var a = new Shielded<int>(5);
+            bool rollback = false;
             using (var cont = Shield.RunToCommit(200, () => a.Value = 10))
             {
                 Assert.IsFalse(cont.Completed);
+                // we can still do stuff..
+                cont.InContext(_ => {
+                    a.Value = 20;
+                    // NB that any exception thrown in onRollback would be unhandled in this example!
+                    Shield.SideEffect(null, () => rollback = true);
+                });
+
                 var sw = Stopwatch.StartNew();
                 // this causes a simple deadlock! the a field is fully locked, even reading blocks on it.
                 // but the locks are released after 200 ms, and this transaction just continues..
@@ -79,6 +87,7 @@ namespace ShieldedTests
                 Assert.Less(time, 250);
                 // the continuation has been rolled back.
                 Assert.IsTrue(cont.Completed);
+                Assert.IsTrue(rollback);
             }
             Assert.AreEqual(5, a);
         }
