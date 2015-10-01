@@ -240,6 +240,8 @@ namespace Shielded
         /// Dispose on it. Dispose can be called from trans.</returns>
         public static IDisposable Conditional(Func<bool> test, Action trans)
         {
+            if (test == null || trans == null)
+                throw new ArgumentNullException();
             return new CommitSubscription(CommitSubscriptionContext.PostCommit, test, trans);
         }
 
@@ -256,11 +258,13 @@ namespace Shielded
         /// Dispose on it. Dispose can be called from trans.</returns>
         public static IDisposable PreCommit(Func<bool> test, Action trans)
         {
+            if (test == null || trans == null)
+                throw new ArgumentNullException();
             return new CommitSubscription(CommitSubscriptionContext.PreCommit, test, trans);
         }
 
         /// <summary>
-        /// Execute an action parallel to every commit which changes fields of a type.
+        /// Execute an action during every commit which changes fields of a type.
         /// The action will be immediately enlisted, and get called after any commit is
         /// checked, but before anything is written. Any exceptions bubble out to the thread
         /// running the transaction (or, on calling <see cref="CommitContinuation.Commit"/>).
@@ -272,6 +276,8 @@ namespace Shielded
         /// <returns>An IDisposable for unsubscribing.</returns>
         public static IDisposable WhenCommitting<T>(Action<IEnumerable<T>> act) where T : class
         {
+            if (act == null)
+                throw new ArgumentNullException();
             if (IsInTransaction)
                 throw new InvalidOperationException("Operation not allowed in transaction.");
             return new CommittingSubscription(
@@ -294,7 +300,30 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Execute an action parallel to every commit with changes.
+        /// Execute an action during every writing commit which reads or changes a given field.
+        /// The lambda receives a bool indicating whether the field has changes.
+        /// The action will be immediately enlisted, and get called after any commit is
+        /// checked, but before anything is written. Any exceptions bubble out to the thread
+        /// running the transaction (or, on calling <see cref="CommitContinuation.Commit"/>).
+        /// Calls to <see cref="Rollback"/> are not allowed.
+        /// The action may not access any fields that the transaction did not already access,
+        /// and it may only write into fields which were already written to by the transaction.
+        /// This method throws when called within a transaction.
+        /// </summary>
+        /// <returns>An IDisposable for unsubscribing.</returns>
+        public static IDisposable WhenCommitting(object field, Action<bool> act)
+        {
+            if (field == null || act == null)
+                throw new ArgumentNullException();
+            return WhenCommitting(fields => {
+                var tf = fields.FirstOrDefault(f => f.Field == field);
+                if (tf.Field != null)
+                    act(tf.HasChanges);
+            });
+        }
+
+        /// <summary>
+        /// Execute an action during every writing commit.
         /// The action will be immediately enlisted, and get called after any commit is
         /// checked, but before anything is written. Any exceptions bubble out to the thread
         /// running the transaction (or, on calling <see cref="CommitContinuation.Commit"/>).
@@ -307,6 +336,8 @@ namespace Shielded
         /// <returns>An IDisposable for unsubscribing.</returns>
         public static IDisposable WhenCommitting(Action<IEnumerable<TransactionField>> act)
         {
+            if (act == null)
+                throw new ArgumentNullException();
             if (IsInTransaction)
                 throw new InvalidOperationException("Operation not allowed in transaction.");
             return new CommittingSubscription(act);
@@ -325,6 +356,8 @@ namespace Shielded
         /// </summary>
         public static void SideEffect(Action fx, Action rollbackFx = null)
         {
+            if (fx == null && rollbackFx == null)
+                throw new ArgumentNullException(null, "At least one arg must be != null.");
             if (!IsInTransaction)
             {
                 if (fx != null) fx();

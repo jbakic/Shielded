@@ -13,11 +13,10 @@ namespace ShieldedTests
         {
             var x = new Shielded<int>();
             int commitCount = 0;
-            using (Shield.WhenCommitting<Shielded<int>>(ints =>
-                {
-                    if (commitCount++ == 0)
-                        Shield.Rollback();
-                }))
+            using (Shield.WhenCommitting(x, hasChanges => {
+                commitCount++;
+                Shield.Rollback();
+            }))
             {
                 try
                 {
@@ -161,6 +160,25 @@ namespace ShieldedTests
                     var obj = d[1];
                     d[2] = new object();
                 });
+            }
+        }
+
+        [Test]
+        public void WhenCommittingOneField()
+        {
+            var a = new Shielded<int>();
+            var b = new Shielded<int>();
+            using (Shield.WhenCommitting(a, _ => Assert.Fail()))
+            {
+                Shield.InTransaction(() => b.Value = 10);
+                Assert.AreEqual(10, b);
+            }
+            var counter = 0;
+            using (Shield.WhenCommitting(a, _ => counter++))
+            {
+                Shield.InTransaction(() => a.Value = 10);
+                Assert.AreEqual(10, a);
+                Assert.AreEqual(1, counter);
             }
         }
     }
