@@ -269,14 +269,19 @@ namespace Shielded
             throw new System.NotImplementedException();
         }
 
+        public void UnionWith(SimpleHashSet otherAsSet)
+        {
+            for (int i = 0; i < otherAsSet._array.Length; i++)
+                if (otherAsSet._array[i] != null)
+                    AddInternal(otherAsSet._array[i]);
+        }
+
         public void UnionWith(IEnumerable<IShielded> other)
         {
             var otherAsSet = other as SimpleHashSet;
             if (otherAsSet != null)
             {
-                for (int i = 0; i < otherAsSet._array.Length; i++)
-                    if (otherAsSet._array[i] != null)
-                        AddInternal(otherAsSet._array[i]);
+                UnionWith(otherAsSet);
                 return;
             }
             var otherAsList = other as List<IShielded>;
