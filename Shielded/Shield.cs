@@ -598,8 +598,10 @@ namespace Shielded
 repeatCommutes: if (brokeInCommutes)
                 {
                     RunCommutes(out commutedItems);
+#if DEBUG
                     if (items.Enlisted.Overlaps(commutedItems.Enlisted))
                         throw new InvalidOperationException("Invalid commute - conflict with transaction.");
+#endif
                 }
 
                 var writeStamp = new WriteStamp(ctx);
@@ -753,10 +755,7 @@ repeatCommutes: if (brokeInCommutes)
                     finally
                     {
                         if (Shield._context != null)
-                        {
                             Sync(ref _completing, DoRollback);
-                            Shield._context = null;
-                        }
                     }
                     Dispose();
                     VersionList.TrimCopies();
