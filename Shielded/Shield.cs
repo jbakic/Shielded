@@ -755,7 +755,10 @@ repeatCommutes: if (brokeInCommutes)
                     finally
                     {
                         if (Shield._context != null)
+                        {
                             Sync(ref _completing, DoRollback);
+                            Shield._context = null;
+                        }
                     }
                     Dispose();
                     VersionList.TrimCopies();

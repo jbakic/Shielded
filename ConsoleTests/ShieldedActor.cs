@@ -42,9 +42,7 @@ namespace ConsoleTests
                 }
             }, TaskCreationOptions.LongRunning);
 
-            _subscription = Shield.WhenCommitting(fields => {
-                if (fields.All(f => f.Field != this))
-                    return;
+            _subscription = Shield.WhenCommitting(this, hasChanges => {
                 foreach (var item in _addGate.Value)
                     _queue.Add(item);
                 _addGate.Value = null;

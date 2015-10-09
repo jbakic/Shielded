@@ -60,7 +60,7 @@ namespace Shielded
         static VersionList()
         {
             // base version, has 0 stamp, and no changes
-            _oldestRead = _current = new VersionEntry() { Changes = Enumerable.Empty<IShielded>() };
+            _oldestRead = _current = new VersionEntry();
         }
 
         /// <summary>
@@ -144,7 +144,7 @@ namespace Shielded
                 if (toTrim == null)
                     return;
 
-                old.Changes = Enumerable.Empty<IShielded>();
+                old.Changes = null;
                 _oldestRead = old;
                 var version = old.Stamp;
 #if USE_STD_HASHSET
