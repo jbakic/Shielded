@@ -5,24 +5,14 @@ using System.Collections.Generic;
 namespace Shielded
 {
     /// <summary>
-    /// Transactional storage - value inside depends on the transaction accessing it. Works
-    /// only inside transactions. It is simple, using direct local fields when one transaction
-    /// is using it, and resorting to the transactional storage otherwise.
+    /// Transactional storage, but very specialized, and thus internal.
     /// </summary>
-    public class TransactionalStorage<T> where T : class
+    internal class TransactionalStorage<T> where T : class
     {
         // These two are faster, immediate storage, which can be used by one transaction only.
         // If there is more than one, transactional storage is used by the others.
         private TransactionContext _holderContext;
         private T _heldValue;
-
-        static TransactionContext GetContext()
-        {
-            var ctx = Shield.Context;
-            if (ctx == null)
-                throw new InvalidOperationException("Operation allowed only inside transactions.");
-            return ctx;
-        }
 
         /// <summary>
         /// Returns <c>true</c> if current transaction has something inside this storage.
@@ -31,7 +21,7 @@ namespace Shielded
         {
             get
             {
-                var ctx = GetContext();
+                var ctx = Shield.Context;
                 return ctx == _holderContext ||
                     (ctx.Storage != null && ctx.Storage.ContainsKey(this));
             }
@@ -45,24 +35,17 @@ namespace Shielded
         {
             get
             {
-                var ctx = GetContext();
+                var ctx = Shield.Context;
                 return _holderContext == ctx ?
                     _heldValue : (T)ctx.Storage[this];
             }
             set
             {
-                var ctx = GetContext();
+                var ctx = Shield.Context;
                 var holder = Interlocked.CompareExchange(ref _holderContext, ctx, null);
                 if (holder == ctx || holder == null)
                 {
                     _heldValue = value;
-                    // A bugfix for a bug that never was. -- If we're just now taking over
-                    // local fields, then what if we already had something in the dictionary?
-                    // Let's remove it then. The bug, however, never happened, because no user
-                    // of this class makes two consecutive writes. They put something in,
-                    // then null, and only then something else. But it's best to be safe.
-                    if (holder == null && ctx.Storage != null)
-                        ctx.Storage.Remove(this);
                 }
                 else
                 {
@@ -78,7 +61,7 @@ namespace Shielded
         /// </summary>
         public void Release()
         {
-            var ctx = GetContext();
+            var ctx = Shield.Context;
             if (_holderContext == ctx)
             {
                 _heldValue = null;
