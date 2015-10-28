@@ -15,9 +15,6 @@ namespace Shielded
         /// </summary>
         public IEnumerable<Action> Trigger(IEnumerable<IShielded> changes)
         {
-            if (Count == 0)
-                return null;
-
             HashSet<CommitSubscription> result = null;
             foreach (var item in changes)
             {
