@@ -480,7 +480,7 @@ namespace ConsoleTests
         {
             int numThreads = Environment.ProcessorCount;
             int numItems = 500000;
-            var tree = new ShieldedTreeNc<Guid, TreeItem>();
+            var tree = new ShieldedDictNc<Guid, TreeItem>();
             var barrier = new Barrier(numThreads + 1);
             var counter = 0;
             int reportEvery = 10000;
@@ -488,14 +488,13 @@ namespace ConsoleTests
             long time;
 
             TreeItem x = new TreeItem();
+            var y = new Shielded<int>();
 
             _timer = new Stopwatch();
             _timer.Start();
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => {
-                    var a = x.Id;
-                });
+                Shield.InTransaction(() => { });
             time = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("Empty transactions in {0} ms.", time);
 
@@ -591,7 +590,15 @@ namespace ConsoleTests
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
-                Shield.InTransaction(() => { var a = x.Id; });
+            {
+                var a = y.Value;
+            }
+            time = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("One field out-of-tr. reads in {0} ms.", time);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems))
+                Shield.InTransaction(() => { });
             time = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("Empty transactions in {0} ms.", time);
         }
@@ -635,13 +642,21 @@ namespace ConsoleTests
                     Shield.InTransaction(() => { });
             });
 
-            var emptyReturningTime = Timed("1 out-of-t. read w/ result", numItems, () => {
+            var emptyReturningTime = Timed("1 empty transaction w/ result", numItems, () => {
                 // this version uses the generic, result-returning InTransaction, which involves creation
                 // of a closure, i.e. an allocation.
                 foreach (var k in Enumerable.Repeat(1, numItems))
                     Shield.InTransaction(() => 5);
             });
 
+            var outOfTrReadTime = Timed("N out-of-tr. reads", numItems, () => {
+                // this version uses the generic, result-returning InTransaction, which involves creation
+                // of a closure, i.e. an allocation.
+                foreach (var k in Enumerable.Repeat(1, numItems * repeatsPerTrans))
+                {
+                    var a = accessTest.Value;
+                }
+            });
 
             // the purpose here is to get a better picture of the expense of using Shielded. a more
             // complex project would probably, during one transaction, repeatedly access the same
@@ -750,6 +765,8 @@ namespace ConsoleTests
             Console.WriteLine("\ncost of empty transaction = {0:0.000} us", emptyTime / (numItems / 1000.0));
             Console.WriteLine("cost of the closure in InTransaction<T> = {0:0.000} us",
                               (emptyReturningTime - emptyTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of an out-of-tr. read = {0:0.000} us",
+                              outOfTrReadTime * 1000.0 / (numItems * repeatsPerTrans));
             Console.WriteLine("cost of the first read = {0:0.000} us",
                               (oneReadTime - emptyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of an additional read = {0:0.000} us",
@@ -764,7 +781,7 @@ namespace ConsoleTests
                               (nModifyTime - oneModifyTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
             Console.WriteLine("cost of a second, different Modify = {0:0.000} us",
                               (modifyModifyTime - oneModifyTime) / (numItems / 1000.0));
-            Console.WriteLine("cost of a Value after Modify = {0:0.000} us",
+            Console.WriteLine("cost of a read after Modify = {0:0.000} us",
                               (oneModifyNReadTime - oneModifyTime) / (repeatsPerTrans * numItems / 1000.0));
             Console.WriteLine("cost of the first Assign = {0:0.000} us",
                               (oneAssignTime - emptyTime) / (numItems / 1000.0));

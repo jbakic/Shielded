@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace Shielded
 {
@@ -27,6 +28,58 @@ namespace Shielded
         public WriteStamp(TransactionContext locker)
         {
             Locker = locker;
+        }
+
+        public bool Released
+        {
+            get
+            {
+                return _released;
+            }
+        }
+
+        int _lockers;
+        bool _released;
+
+        public void Wait()
+        {
+            if (_released)
+                return;
+            SpinWait sw = new SpinWait();
+            int count = 0;
+            do
+            {
+                sw.SpinOnce();
+                if (_released)
+                    return;
+            } while (!sw.NextSpinWillYield || ++count < 4);
+            int? effect = null;
+            try
+            {
+                try {} finally
+                {
+                    effect = Interlocked.Increment(ref _lockers);
+                }
+                lock (this)
+                {
+                    while (!_released)
+                        Monitor.Wait(this);
+                }
+            }
+            finally
+            {
+                if (effect.HasValue)
+                    Interlocked.Decrement(ref _lockers);
+            }
+        }
+
+        public void Release()
+        {
+            _released = true;
+            Thread.MemoryBarrier();
+            if (_lockers > 0)
+                lock (this)
+                    Monitor.PulseAll(this);
         }
     }
 }

@@ -604,7 +604,7 @@ repeatCommutes: if (brokeInCommutes)
 #endif
                 }
 
-                var writeStamp = new WriteStamp(ctx);
+                var writeStamp = ctx.WriteStamp = new WriteStamp(ctx);
                 lock (_checkLock)
                 {
                     try
@@ -671,6 +671,7 @@ repeatCommutes: if (brokeInCommutes)
         {
             public ReadTicket ReadTicket;
             public WriteTicket WriteTicket;
+            public WriteStamp WriteStamp;
             public TransItems Items;
             public bool CommitCheckDone;
 
@@ -706,6 +707,8 @@ repeatCommutes: if (brokeInCommutes)
                         WriteTicket.Changes = Enumerable.Empty<IShielded>();
                     if (ReadTicket != null)
                         VersionList.ReleaseReaderTicket(ref ReadTicket);
+                    if (WriteStamp != null && !WriteStamp.Released)
+                        WriteStamp.Release();
                     Completed = true;
                     Shield._context = null;
                 }

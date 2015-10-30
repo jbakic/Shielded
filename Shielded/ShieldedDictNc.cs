@@ -36,7 +36,6 @@ namespace Shielded
         private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps =
             new ConcurrentDictionary<TKey, WriteStamp>();
         private readonly TransactionalStorage<LocalDict> _localDict = new TransactionalStorage<LocalDict>();
-        private readonly StampLocker _locker = new StampLocker();
         private readonly object _owner;
 
         /// <summary>
@@ -64,12 +63,6 @@ namespace Shielded
             _owner = owner ?? this;
         }
 
-        bool LockCheck(TKey key)
-        {
-            WriteStamp w;
-            return !_writeStamps.TryGetValue(key, out w) || w.Version == null || w.Version > Shield.ReadStamp;
-        }
-
         private void CheckLockAndEnlist(TKey key, bool write)
         {
             var locals = _localDict.HasValue ? _localDict.Value : null;
@@ -81,8 +74,8 @@ namespace Shielded
             if (!Shield.Enlist(this, locals != null, write) && locals.Items.ContainsKey(key))
                 return;
 
-            if (!LockCheck(key))
-                _locker.WaitUntil(() => LockCheck(key));
+            WriteStamp w;
+            if (_writeStamps.TryGetValue(key, out w) && !w.Released) w.Wait();
         }
 
         /// <summary>
@@ -294,7 +287,6 @@ namespace Shielded
                 }
                 if (version.HasValue)
                     _copies.Enqueue(Tuple.Create((long)version, copyList));
-                _locker.Release();
             }
             _localDict.Release();
         }
@@ -316,7 +308,6 @@ namespace Shielded
                         _writeStamps.TryRemove(kvp.Key, out ws);
                     }
                 }
-                _locker.Release();
             }
             _localDict.Release();
         }

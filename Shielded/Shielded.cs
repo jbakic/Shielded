@@ -21,7 +21,6 @@ namespace Shielded
         // once negotiated, kept until commit or rollback
         private volatile WriteStamp _writerStamp;
         private readonly TransactionalStorage<ValueKeeper> _locals = new TransactionalStorage<ValueKeeper>();
-        private readonly StampLocker _locker = new StampLocker();
         private readonly object _owner;
 
         /// <summary>
@@ -48,12 +47,6 @@ namespace Shielded
             _owner = owner ?? this;
         }
 
-        bool LockCheck()
-        {
-            var w = _writerStamp;
-            return w == null || w.Version == null || w.Version > Shield.ReadStamp;
-        }
-
         /// <summary>
         /// Enlists the field in the current transaction and, if this is the first
         /// access, checks the write lock. Will wait (using StampLocker) if the write
@@ -67,8 +60,8 @@ namespace Shielded
             if (!Shield.Enlist(this, _locals.HasValue, write))
                 return;
 
-            if (!LockCheck())
-                _locker.WaitUntil(LockCheck);
+            var ws = _writerStamp;
+            if (ws != null && !ws.Released) ws.Wait();
         }
 
         private ValueKeeper CurrentTransactionOldValue()
@@ -227,7 +220,6 @@ namespace Shielded
             _current = newCurrent;
             _locals.Release();
             _writerStamp = null;
-            _locker.Release();
         }
 
         void IShielded.Rollback()
@@ -237,10 +229,7 @@ namespace Shielded
             _locals.Release();
             var ws = _writerStamp;
             if (ws != null && ws.Locker == Shield.Context)
-            {
                 _writerStamp = null;
-                _locker.Release();
-            }
         }
         
         void IShielded.TrimCopies(long smallestOpenTransactionId)

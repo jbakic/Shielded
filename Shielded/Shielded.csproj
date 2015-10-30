@@ -72,7 +72,6 @@
     <Compile Include="Commute.cs" />
     <Compile Include="TransactionField.cs" />
     <Compile Include="CommittingSubscription.cs" />
-    <Compile Include="StampLocker.cs" />
     <Compile Include="CommitSubscription.cs" />
     <Compile Include="CommitSubscriptionContext.cs" />
     <Compile Include="ShieldedDictNc.cs" />
