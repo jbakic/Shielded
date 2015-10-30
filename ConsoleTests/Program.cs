@@ -799,8 +799,8 @@ namespace ConsoleTests
 
             long time;
             _timer = Stopwatch.StartNew();
-            var numItems = 200000;
-            var repeatsPerTrans = 100;
+            var numItems = 1000000;
+            var repeatsPerTrans = 50;
 
             Console.WriteLine(
                 "Testing simple proxy ops with {0} iterations, and repeats per trans (N) = {1}",
@@ -836,6 +836,14 @@ namespace ConsoleTests
                 Shield.InTransaction(() => { var a = entity.Id; });
             var oneReadTime = _timer.ElapsedMilliseconds - time;
             Console.WriteLine("1-read transactions in {0} ms.", oneReadTime);
+
+            time = _timer.ElapsedMilliseconds;
+            foreach (var k in Enumerable.Repeat(1, numItems * repeatsPerTrans))
+            {
+                var a = entity.Id;
+            }
+            var nOutOfTrReadTime = _timer.ElapsedMilliseconds - time;
+            Console.WriteLine("N out-of-tr. reads in {0} ms.", nOutOfTrReadTime);
 
             time = _timer.ElapsedMilliseconds;
             foreach (var k in Enumerable.Repeat(1, numItems))
@@ -890,7 +898,7 @@ namespace ConsoleTests
             Console.WriteLine("1-commute transactions in {0} ms.", oneCommuteTime);
 
             time = _timer.ElapsedMilliseconds;
-            foreach (var k in Enumerable.Repeat(1, numItems))
+            foreach (var k in Enumerable.Repeat(1, numItems/10))
                 Shield.InTransaction(() => {
                     for (int i = 0; i < repeatsPerTrans; i++)
                         entity.Commute(() => entity.Id = 1);
@@ -902,6 +910,8 @@ namespace ConsoleTests
             Console.WriteLine("\ncost of empty transaction = {0:0.000} us", emptyTime / (numItems / 1000.0));
             Console.WriteLine("cost of the closure in InTransaction<T> = {0:0.000} us",
                               (emptyReturningTime - emptyTime) / (numItems / 1000.0));
+            Console.WriteLine("cost of an out-of-tr. read = {0:0.000} us",
+                              nOutOfTrReadTime * 1000.0 / (numItems * repeatsPerTrans));
             Console.WriteLine("cost of the first read = {0:0.000} us",
                               (oneReadTime - emptyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of an additional read = {0:0.000} us",
@@ -917,7 +927,7 @@ namespace ConsoleTests
             Console.WriteLine("cost of the first commute = {0:0.000} us",
                               (oneCommuteTime - emptyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of an additional commute = {0:0.000} us",
-                              (nCommuteTime - oneCommuteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
+                              (nCommuteTime*10 - oneCommuteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
         }
 
         public static void MultiFieldOps()
