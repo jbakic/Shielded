@@ -34,7 +34,7 @@ namespace Shielded
         {
             get
             {
-                return _released;
+                return Version == null || _released;
             }
         }
 
@@ -43,8 +43,6 @@ namespace Shielded
 
         public void Wait()
         {
-            if (_released)
-                return;
             SpinWait sw = new SpinWait();
             int count = 0;
             do

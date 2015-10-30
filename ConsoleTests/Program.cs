@@ -618,8 +618,8 @@ namespace ConsoleTests
         {
             long time;
             _timer = Stopwatch.StartNew();
-            var numItems = 200000;
-            var repeatsPerTrans = 100;
+            var numItems = 1000000;
+            var repeatsPerTrans = 50;
 
             Console.WriteLine(
                 "Testing simple ops with {0} iterations, and repeats per trans (N) = {1}",
@@ -754,7 +754,7 @@ namespace ConsoleTests
             });
 
             var nCommuteTime = Timed("N-commute transactions", numItems, () => {
-                foreach (var k in Enumerable.Repeat(1, numItems))
+                foreach (var k in Enumerable.Repeat(1, numItems/10))
                     Shield.InTransaction(() => {
                         for (int i = 0; i < repeatsPerTrans; i++)
                             accessTest.Commute((ref int n) => n = 1);
@@ -790,7 +790,7 @@ namespace ConsoleTests
             Console.WriteLine("cost of the first commute = {0:0.000} us",
                               (oneCommuteTime - emptyTime) / (numItems / 1000.0));
             Console.WriteLine("cost of an additional commute = {0:0.000} us",
-                              (nCommuteTime - oneCommuteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
+                              (nCommuteTime*10 - oneCommuteTime) / ((repeatsPerTrans - 1) * numItems / 1000.0));
         }
 
         public static void SimpleProxyOps()
