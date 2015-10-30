@@ -30,11 +30,11 @@ namespace Shielded
             Locker = locker;
         }
 
-        public bool Released
+        public bool Locked
         {
             get
             {
-                return Version == null || _released;
+                return !_released && Version != null;
             }
         }
 

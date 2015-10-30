@@ -707,7 +707,7 @@ repeatCommutes: if (brokeInCommutes)
                         WriteTicket.Changes = Enumerable.Empty<IShielded>();
                     if (ReadTicket != null)
                         VersionList.ReleaseReaderTicket(ref ReadTicket);
-                    if (WriteStamp != null && !WriteStamp.Released)
+                    if (WriteStamp != null && WriteStamp.Locked)
                         WriteStamp.Release();
                     Completed = true;
                     Shield._context = null;

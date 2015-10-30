@@ -75,7 +75,7 @@ namespace Shielded
                 return;
 
             WriteStamp w;
-            if (_writeStamps.TryGetValue(key, out w) && !w.Released) w.Wait();
+            if (_writeStamps.TryGetValue(key, out w) && w.Locked) w.Wait();
         }
 
         /// <summary>
