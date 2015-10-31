@@ -17,9 +17,10 @@ namespace Shielded
         private readonly Shielded<int> _count;
 
         /// <summary>
-        /// Initialize a new sequence with the given initial contents.
+        /// Initialize a new sequence with the given initial contents, and optionally
+        /// an "owner" - this seq will then report that object to WhenSubmitting subscriptions.
         /// </summary>
-        public ShieldedSeq(T[] items, object owner)
+        public ShieldedSeq(T[] items = null, object owner = null)
         {
             _seq = new ShieldedSeqNc<T>(items, owner ?? this);
             _count = new Shielded<int>(items.Length, owner ?? this);
@@ -29,15 +30,6 @@ namespace Shielded
         /// Initialize a new sequence with the given initial contents.
         /// </summary>
         public ShieldedSeq(params T[] items) : this(items, null) { }
-
-        /// <summary>
-        /// Initialize a new empty sequence.
-        /// </summary>
-        public ShieldedSeq(object owner = null)
-        {
-            _seq = new ShieldedSeqNc<T>(owner ?? this);
-            _count = new Shielded<int>(this);
-        }
 
         /// <summary>
         /// Prepend an item, i.e. insert at index 0.

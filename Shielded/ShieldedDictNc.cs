@@ -44,22 +44,12 @@ namespace Shielded
         /// <param name="items">Initial items.</param>
         /// <param name="owner">If this is given, then in WhenCommitting subscriptions
         /// this shielded will report its owner instead of itself.</param>
-        public ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items, object owner = null)
+        public ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items = null, object owner = null)
         {
-            _dict = new ConcurrentDictionary<TKey, ItemKeeper>(items
-                .Select(kvp =>
-                    new KeyValuePair<TKey, ItemKeeper>(kvp.Key, new ItemKeeper() { Value = kvp.Value })));
-            _owner = owner ?? this;
-        }
-
-        /// <summary>
-        /// Initializes a new instance.
-        /// </summary>
-        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
-        /// this shielded will report its owner instead of itself.</param>
-        public ShieldedDictNc(object owner = null)
-        {
-            _dict = new ConcurrentDictionary<TKey, ItemKeeper>();
+            _dict = items == null ? new ConcurrentDictionary<TKey, ItemKeeper>() :
+                new ConcurrentDictionary<TKey, ItemKeeper>(
+                    items.Select(kvp =>
+                        new KeyValuePair<TKey, ItemKeeper>(kvp.Key, new ItemKeeper() { Value = kvp.Value })));
             _owner = owner ?? this;
         }
 

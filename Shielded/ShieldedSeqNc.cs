@@ -52,9 +52,16 @@ namespace Shielded
         /// <param name="items">Initial items.</param>
         /// <param name="owner">If this is given, then in WhenCommitting subscriptions
         /// this shielded will report its owner instead of itself.</param>
-        public ShieldedSeqNc(T[] items, object owner)
+        public ShieldedSeqNc(T[] items = null, object owner = null)
         {
             _owner = owner ?? this;
+            if (items == null)
+            {
+                _head = CreateRef();
+                _tail = CreateRef();
+                return;
+            }
+
             ItemKeeper item = null;
             for (int i = items.Length - 1; i >= 0; i--)
             {
@@ -72,16 +79,6 @@ namespace Shielded
         /// Initialize a new sequence with the given initial contents.
         /// </summary>
         public ShieldedSeqNc(params T[] items) : this(items, null) { }
-
-        /// <summary>
-        /// Initialize a new empty sequence.
-        /// </summary>
-        public ShieldedSeqNc(object owner = null)
-        {
-            _owner = owner ?? this;
-            _head = CreateRef();
-            _tail = CreateRef();
-        }
 
         /// <summary>
         /// Prepend an item, i.e. insert at index 0.

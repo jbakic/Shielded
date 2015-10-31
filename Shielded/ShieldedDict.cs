@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Shielded
 {
@@ -22,21 +23,10 @@ namespace Shielded
         /// <param name="items">Initial items.</param>
         /// <param name="owner">If this is given, then in WhenCommitting subscriptions
         /// this shielded will report its owner instead of itself.</param>
-        public ShieldedDict(ICollection<KeyValuePair<TKey, TItem>> items, object owner = null)
+        public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items = null, object owner = null)
         {
-            _dict = new ShieldedDictNc<TKey, TItem>(items, owner ?? this);
-            _count = new Shielded<int>(items.Count);
-        }
-
-        /// <summary>
-        /// Initializes a new instance.
-        /// </summary>
-        /// <param name="owner">If this is given, then in WhenCommitting subscriptions
-        /// this shielded will report its owner instead of itself.</param>
-        public ShieldedDict(object owner = null)
-        {
-            _dict = new ShieldedDictNc<TKey, TItem>(owner ?? this);
-            _count = new Shielded<int>(0);
+            _dict = new ShieldedDictNc<TKey, TItem>(items, owner);
+            _count = new Shielded<int>(items == null ? 0 : items.Count());
         }
 
         /// <summary>
