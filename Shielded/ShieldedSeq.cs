@@ -22,8 +22,9 @@ namespace Shielded
         /// </summary>
         public ShieldedSeq(T[] items = null, object owner = null)
         {
-            _seq = new ShieldedSeqNc<T>(items, owner ?? this);
-            _count = new Shielded<int>(items.Length, owner ?? this);
+            owner = owner ?? this;
+            _seq = new ShieldedSeqNc<T>(items, owner);
+            _count = new Shielded<int>(items == null ? 0 : items.Length, owner);
         }
 
         /// <summary>

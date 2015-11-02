@@ -53,6 +53,12 @@ namespace Shielded
             _owner = owner ?? this;
         }
 
+        internal ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items, object owner, out int count)
+            : this(items, owner)
+        {
+            count = _dict.Count;
+        }
+
         private void CheckLockAndEnlist(TKey key, bool write)
         {
             var locals = _localDict.HasValue ? _localDict.Value : null;
