@@ -25,9 +25,10 @@ namespace Shielded
         /// this shielded will report its owner instead of itself.</param>
         public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items = null, object owner = null)
         {
+            owner = owner ?? this;
             int count;
             _dict = new ShieldedDictNc<TKey, TItem>(items, owner, out count);
-            _count = new Shielded<int>(count);
+            _count = new Shielded<int>(count, owner);
         }
 
         /// <summary>
