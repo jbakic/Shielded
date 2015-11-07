@@ -11,6 +11,9 @@ If your class defines a method "public void Commute(Action)", this will get
 overriden. The override will execute the received action as a commute. The action
 may not access (not even indirectly) any other shielded field.
 
+If the class has a protected method OnChanged(string), that will get called
+by the proxy after every property change, with the property name as argument.
+
 ====
 
 Shielded.ProxyGen is based on the work of Felice Pollano, titled "Automatic

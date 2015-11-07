@@ -20,6 +20,8 @@ namespace Shielded.ProxyGen
         /// and may use the getter to obtain the old value.
         /// If the class has a virtual method Commute(Action), this will be overriden
         /// and the override will perform the action as a commute.
+        /// If the class has a protected method OnChanged(string), this will be called
+        /// after every property change, with the property name as argument.
         /// The subtype is generated once per type, and cached for future calls.
         /// The given type must have a parameterless constructor visible to inheritors.
         /// </summary>
