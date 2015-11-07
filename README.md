@@ -14,14 +14,15 @@ check.
 Here is a small example:
 
 ```csharp
-Shielded<int> n = new Shielded<int>();
+var n = new Shielded<int>();
 int a = n;
 Shield.InTransaction(() =>
     n.Value = n + 5);
 ```
 
-You can read out of transaction, but changes must be inside. While inside,
-the library guarantees a consistent view of all shielded fields.
+Shielded fields are thread-safe. You can read them out of transaction, but
+changes must be done inside. While inside, the library guarantees a consistent
+view of all shielded fields.
 
 Another example, the STM version of "Hello world!" - parallel addition in an
 array. Here, in a dictionary:
