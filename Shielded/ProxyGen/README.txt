@@ -2,9 +2,9 @@ Shielded.ProxyGen generates transactional proxy subclasses. Your class should
 have virtual properties with getters and setters. The proxy will override both.
 Getter will not call base, but setter will, before it has changed the value in
 the storage, allowing you to access the old value using the getter.
-WARNING: Due to limitations of CodeDom, both the getter and setter must be
-virtual and *public*. If either is protected, the property will not be
-transactional.
+WARNING: Due to limitations of CodeDom, the getter and setter must be either
+both public, or both protected. A mix will cause the Factory to throw an
+exception.
 
 ====
 

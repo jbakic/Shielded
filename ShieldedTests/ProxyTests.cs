@@ -15,13 +15,12 @@ namespace ShieldedTests
     {
         public virtual Guid Id { get; set; }
         public virtual int Counter { get; set; }
-        public virtual int ProtectedSetter { get; protected set; }
+        protected virtual int FullyProtected { get; set; }
 
-        public void SetProtectedField(int v)
+        public void SetFullyProtected(int x)
         {
-            // just to test if this field will also be transactional. it won't, since
-            // CodeDom does not support defining access flags for getter and setter separately. lame.
-            ProtectedSetter = v;
+            // this is transactional as well.
+            FullyProtected = x;
         }
 
         public virtual string Name
@@ -52,6 +51,13 @@ namespace ShieldedTests
             if (name != "AnyPropertyChanges")
                 AnyPropertyChanges += 1;
         }
+    }
+
+    public class BadEntity
+    {
+        // CodeDOM does not support overriding a property with different accessors on get and set,
+        // so trying to make a proxy of this class will cause an exception.
+        public virtual int X { get; protected set; }
     }
 
     [TestFixture]
@@ -156,10 +162,11 @@ namespace ShieldedTests
         [Test]
         public void ProtectedSetterTest()
         {
-            var t = Factory.NewShielded<TestEntity>();
+            Assert.Throws<InvalidOperationException>(() => Factory.NewShielded<BadEntity>());
 
-            // just confirms that the ProtectedSetter field is not transactional.
-            t.SetProtectedField(1);
+            var test = Factory.NewShielded<TestEntity>();
+            Assert.Throws<InvalidOperationException>(() => test.SetFullyProtected(5));
+            Shield.InTransaction(() => test.SetFullyProtected(5));
         }
 
         private void AssertTransactional<T>(IIdentifiable<T> item)

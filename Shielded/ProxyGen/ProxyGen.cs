@@ -146,7 +146,9 @@ namespace Shielded.ProxyGen
 
             var onChanged = GetOnChanged(t);
             bool hasCommute = HasCommute(t);
-            foreach (PropertyInfo pi in t.GetProperties().Where(IsInteresting))
+            foreach (PropertyInfo pi in
+                t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .Where(IsInteresting))
             {
                 theStruct.Members.Add(CreateStructField(pi));
                 decl.Members.Add(CreatePropertyOverride(theStruct.Name, pi, onChanged));
@@ -197,10 +199,15 @@ namespace Shielded.ProxyGen
 
         internal static bool IsInteresting(PropertyInfo pi)
         {
-            MethodInfo getter, setter;
-            return pi.CanRead && pi.CanWrite &&
-                (getter = pi.GetGetMethod()) != null && getter.IsVirtual &&
-                (setter = pi.GetSetMethod()) != null && setter.IsVirtual;
+            if (!pi.CanRead || !pi.CanWrite)
+                return false;
+            var access = pi.GetAccessors(true);
+            // must have both accessors, both virtual, and both either public or protected, no mixing.
+            if (access == null || access.Length != 2 || !access[0].IsVirtual)
+                return false;
+            if (access[0].IsPublic && access[1].IsFamily || access[0].IsFamily && access[1].IsPublic)
+                throw new InvalidOperationException("Virtual property accessors must both be public, or both protected.");
+            return access[0].IsPublic && access[1].IsPublic || access[0].IsFamily && access[1].IsFamily;
         }
 
         private static CodeTypeMember CreateStructField(PropertyInfo pi)
@@ -217,7 +224,8 @@ namespace Shielded.ProxyGen
         {
             CodeMemberProperty mp = new CodeMemberProperty();
             mp.Name = pi.Name;
-            mp.Attributes = MemberAttributes.Override | MemberAttributes.Public;
+            mp.Attributes = MemberAttributes.Override |
+                (pi.GetAccessors(true)[0].IsPublic ? MemberAttributes.Public : MemberAttributes.Family);
             mp.Type = new CodeTypeReference(pi.PropertyType);
             mp.HasGet = mp.HasSet = true;
             

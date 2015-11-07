@@ -54,10 +54,10 @@ var t = Factory.NewShielded<TestClass>();
 ```
 
 The Factory creates a proxy sub-class, using CodeDom, which will have transactional
-overrides for all public virtual properties of the base class. It is important to
-know that, due to CodeDom limitations, both the getter and setter must be public!
-Such objects are thread-safe (or, at least their virtual properties are), but can
-only be changed inside transactions. Usage is simple:
+overrides for all virtual properties of the base class that are public or protected.
+Due to CodeDom limitations, the getter and setter must have the same accessibility!
+The proxy objects are thread-safe (or, at least their virtual properties are), and
+can only be changed inside transactions. Usage is simple:
 
 ```csharp
 var id = t.Id;
