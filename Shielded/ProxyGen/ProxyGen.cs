@@ -17,10 +17,11 @@ namespace Shielded.ProxyGen
     static class ProxyGen
     {
         static ConcurrentDictionary<Type, Type> proxies = new ConcurrentDictionary<Type, Type>();
-        const string ShieldedFieldName = "_data";
+        const string ShieldedField = "_data";
         const string ShieldedValueProperty = "Value";
-        const string CommuteMethodName = "Commute";
-        const string ShieldedDllFileName = "Shielded.dll";
+        const string CommuteMethod = "Commute";
+        const string OnChangedMethod = "OnChanged";
+        const string ShieldedDll = "Shielded.dll";
 
         /// <summary>
         /// Prepare the specified types.
@@ -38,7 +39,7 @@ namespace Shielded.ProxyGen
                 .Where(t => !proxies.ContainsKey(t))
                 .ToArray();
             var compiledAssembly = MakeAssembly(cu => {
-                cu.ReferencedAssemblies.Add(ShieldedDllFileName);
+                cu.ReferencedAssemblies.Add(ShieldedDll);
                 foreach (var loc in unpreparedTypes.Select(t => t.Assembly.Location).Distinct())
                     cu.ReferencedAssemblies.Add(loc);
 
@@ -63,7 +64,7 @@ namespace Shielded.ProxyGen
 
             var compiledAssembly = MakeAssembly(cu => {
                 cu.ReferencedAssemblies.Add(t.Assembly.Location);
-                cu.ReferencedAssemblies.Add(ShieldedDllFileName);
+                cu.ReferencedAssemblies.Add(ShieldedDll);
                 PrepareType(t, cu);
             });
             return compiledAssembly.GetTypes()[0];
@@ -126,7 +127,7 @@ namespace Shielded.ProxyGen
 
             var theShieldedType = new CodeTypeReference("Shielded.Shielded",
                 new CodeTypeReference(theStruct.Name));
-            var theShieldedField = new CodeMemberField(theShieldedType, ShieldedFieldName) {
+            var theShieldedField = new CodeMemberField(theShieldedType, ShieldedField) {
                 Attributes = MemberAttributes.Private
             };
             decl.Members.Add(theShieldedField);
@@ -137,35 +138,36 @@ namespace Shielded.ProxyGen
             constructor.Statements.Add(new CodeAssignStatement(
                 new CodeFieldReferenceExpression(
                     new CodeThisReferenceExpression(),
-                    ShieldedFieldName),
+                    ShieldedField),
                 new CodeObjectCreateExpression(
                     theShieldedType,
                     new CodeThisReferenceExpression())));
             decl.Members.Add(constructor);
 
+            var onChanged = GetOnChanged(t);
+            bool hasCommute = HasCommute(t);
             foreach (PropertyInfo pi in t.GetProperties().Where(IsInteresting))
             {
                 theStruct.Members.Add(CreateStructField(pi));
-                decl.Members.Add(CreatePropertyOverride(theStruct.Name, pi));
+                decl.Members.Add(CreatePropertyOverride(theStruct.Name, pi, onChanged));
             }
 
-            if (HasCommute(t))
+            if (hasCommute)
             {
-                var commOverride = new CodeMemberMethod() {
+                decl.Members.Add(new CodeMemberMethod() {
                     Attributes = MemberAttributes.Override | MemberAttributes.Public,
-                    Name = CommuteMethodName,
-                };
-                commOverride.Parameters.Add(new CodeParameterDeclarationExpression(
-                    new CodeTypeReference(typeof(Action)),
-                    "a"));
-                commOverride.ReturnType = new CodeTypeReference(typeof(void));
-                commOverride.Statements.Add(new CodeMethodInvokeExpression(
-                    new CodeFieldReferenceExpression(
-                        new CodeThisReferenceExpression(),
-                        ShieldedFieldName),
-                    CommuteMethodName,
-                    new CodeArgumentReferenceExpression("a")));
-                decl.Members.Add(commOverride);
+                    Name = CommuteMethod,
+                    Parameters = {
+                        new CodeParameterDeclarationExpression(typeof(Action), "a")
+                    },
+                    Statements = {
+                        new CodeMethodInvokeExpression(
+                            new CodeFieldReferenceExpression(
+                                new CodeThisReferenceExpression(), ShieldedField),
+                            CommuteMethod,
+                            new CodeArgumentReferenceExpression("a"))
+                    }
+                });
             }
 
             decl.Members.Add(theStruct);
@@ -174,11 +176,23 @@ namespace Shielded.ProxyGen
 
         internal static bool HasCommute(Type t)
         {
-            var commMethod = t.GetMethod(CommuteMethodName);
+            var commMethod = t.GetMethod(CommuteMethod);
             if (commMethod == null || !commMethod.IsVirtual)
                 return false;
             var commParameters = commMethod.GetParameters();
             return commParameters.Length == 1 && commParameters[0].ParameterType == typeof(Action);
+        }
+
+        internal static CodeMethodReferenceExpression GetOnChanged(Type t)
+        {
+            var onChanged = t.GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == OnChangedMethod);
+            if (onChanged == null)
+                return null;
+            var parameters = onChanged.GetParameters();
+            return parameters.Length == 1 && parameters[0].ParameterType == typeof(string)
+                ? new CodeMethodReferenceExpression(new CodeThisReferenceExpression(), OnChangedMethod)
+                : null;
         }
 
         internal static bool IsInteresting(PropertyInfo pi)
@@ -198,7 +212,8 @@ namespace Shielded.ProxyGen
             return field;
         }
 
-        private static CodeMemberProperty CreatePropertyOverride(string structType, PropertyInfo pi)
+        private static CodeMemberProperty CreatePropertyOverride(string structType, PropertyInfo pi,
+            CodeMethodReferenceExpression changeMethod)
         {
             CodeMemberProperty mp = new CodeMemberProperty();
             mp.Name = pi.Name;
@@ -210,7 +225,7 @@ namespace Shielded.ProxyGen
                 TargetObject = new CodePropertyReferenceExpression() {
                     TargetObject = new CodeFieldReferenceExpression() {
                         TargetObject = new CodeThisReferenceExpression(),
-                        FieldName = ShieldedFieldName,
+                        FieldName = ShieldedField,
                     },
                     PropertyName = ShieldedValueProperty,
                 },
@@ -227,7 +242,11 @@ namespace Shielded.ProxyGen
             // copies of the underlying struct around.
             mp.SetStatements.Add(new CodeSnippetStatement(
                 string.Format("{0}.Modify((ref {1} a) => a.{2} = value);",
-                    ShieldedFieldName, structType, pi.Name)));
+                    ShieldedField, structType, pi.Name)));
+            
+            if (changeMethod != null)
+                mp.SetStatements.Add(new CodeMethodInvokeExpression(
+                    changeMethod, new CodePrimitiveExpression(pi.Name)));
 
             return mp;
         }

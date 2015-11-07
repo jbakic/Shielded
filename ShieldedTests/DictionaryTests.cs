@@ -19,11 +19,15 @@ namespace ShieldedTests
             Assert.Throws<InvalidOperationException>(() =>
                 dict[1] = new object());
 
+            bool detectable = false;
+            using (Shield.WhenCommitting(dict, _ => detectable = true))
+                Shield.InTransaction(() => dict[1] = new object());
+            Assert.IsTrue(detectable);
+
             Shield.InTransaction(() =>
             {
                 dict[2] = new object();
                 // the TPL sometimes executes tasks on the same thread.
-                object x1 = null;
                 var t = new Thread(() =>
                 {
                     Assert.IsFalse(Shield.IsInTransaction);

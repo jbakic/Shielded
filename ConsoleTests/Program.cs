@@ -14,7 +14,11 @@ namespace ConsoleTests
     public class SimpleEntity
     {
         public virtual int Id { get; set; }
+        // by convention, overriden to execute the action as a commutable, non-conflicting operation
         public virtual void Commute(Action a) { a(); }
+        // ...and this one gets called on every change. also called from commutes, in which case trying
+        // to access any other shielded field will throw.
+        protected void OnChanged(string property) { }
     }
 
     public class SmallEntity
@@ -1191,11 +1195,11 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            SimpleOps();
+            //SimpleOps();
 
             //MultiFieldOps();
 
-            //SimpleProxyOps();
+            SimpleProxyOps();
 
             //SkewTest();
 
