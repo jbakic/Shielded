@@ -78,9 +78,9 @@ namespace Shielded
             AssertInTransaction();
             var ctx = _context;
             if (write && ctx.CommitCheckDone && !item.HasChanges)
-                throw new InvalidOperationException("Writes not allowed here.");
+                throw new InvalidOperationException("New writes not allowed here.");
             if (_blockEnlist != null && _blockEnlist != item)
-                throw new InvalidOperationException("Accessing shielded fields in this context is forbidden.");
+                throw new InvalidOperationException("Accessing other shielded fields in this context is forbidden.");
 
             var items = ctx.Items;
             if (hasLocals)
@@ -95,7 +95,7 @@ namespace Shielded
             if (!items.Enlisted.Contains(item))
             {
                 if (ctx.CommitCheckDone)
-                    throw new InvalidOperationException("Cannot access new fields.");
+                    throw new InvalidOperationException("Cannot access new fields here.");
                 // must not add into Enlisted before we run commutes, otherwise commutes' calls
                 // to Enlist would return false, and the commutes, although running first, would
                 // not actually check the lock! this also means that CheckCommutes must tolerate
