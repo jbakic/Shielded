@@ -116,8 +116,8 @@ namespace Shielded
         /// </summary>
         private static void CheckCommutes(IShielded item)
         {
-            var ctx = _context;
-            if (ctx.Items.Commutes == null || ctx.Items.Commutes.Count == 0)
+            var commutes = _context.Items.Commutes;
+            if (commutes == null || commutes.Count == 0)
                 return;
 
             // in case one commute triggers others, we mark where we are in _comuteTime,
@@ -126,14 +126,14 @@ namespace Shielded
             // after us just get marked, and then we execute them (or, someone lower in the stack).
             var oldTime = _commuteTime;
             var oldBlock = _blockCommute;
-            int execLimit = oldTime ?? ctx.Items.Commutes.Count;
+            int execLimit = oldTime ?? commutes.Count;
             try
             {
                 if (!oldTime.HasValue)
                     _blockCommute = true;
-                for (int i = 0; i < ctx.Items.Commutes.Count; i++)
+                for (int i = 0; i < commutes.Count; i++)
                 {
-                    var comm = ctx.Items.Commutes[i];
+                    var comm = commutes[i];
                     if (comm.State == CommuteState.Ok && comm.Affecting.Contains(item))
                         comm.State = CommuteState.Broken;
                     if (comm.State == CommuteState.Broken && i < execLimit)
@@ -148,7 +148,7 @@ namespace Shielded
             {
                 // not sure if this matters, but i like it. please note that this and the Remove in finally
                 // do not necessarily affect the same commutes.
-                ctx.Items.Commutes.RemoveAll(c => c.Affecting.Contains(item));
+                commutes.RemoveAll(c => c.Affecting.Contains(item));
                 throw;
             }
             finally
@@ -157,7 +157,7 @@ namespace Shielded
                 if (!oldTime.HasValue)
                 {
                     _blockCommute = oldBlock;
-                    ctx.Items.Commutes.RemoveAll(c => c.State != CommuteState.Ok);
+                    commutes.RemoveAll(c => c.State != CommuteState.Ok);
                 }
             }
         }
