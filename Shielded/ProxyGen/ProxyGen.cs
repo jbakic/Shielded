@@ -40,7 +40,7 @@ namespace Shielded.ProxyGen
                 .ToArray();
             var compiledAssembly = MakeAssembly(cu => {
                 cu.ReferencedAssemblies.Add(ShieldedDll);
-                foreach (var loc in unpreparedTypes.Select(t => t.Assembly.Location).Distinct())
+                foreach (var loc in unpreparedTypes.SelectMany(GetReferences).Distinct())
                     cu.ReferencedAssemblies.Add(loc);
 
                 foreach (var t in unpreparedTypes)
@@ -49,6 +49,14 @@ namespace Shielded.ProxyGen
             foreach (var t in unpreparedTypes)
                 proxies.TryAdd(t, compiledAssembly.GetType(
                     t.Namespace + "." + GetNameForDerivedClass(t)));
+        }
+
+        private static IEnumerable<string> GetReferences(Type t)
+        {
+            return t.GetInterfaces()
+                .Select(i => i.Assembly.Location)
+                .Concat(new[] { t.BaseType.Assembly.Location, t.Assembly.Location })
+                .Distinct();
         }
 
         public static Type GetFor(Type t)
@@ -63,7 +71,8 @@ namespace Shielded.ProxyGen
                     "Unable to create proxy type - base type must be public and have virtual properties.");
 
             var compiledAssembly = MakeAssembly(cu => {
-                cu.ReferencedAssemblies.Add(t.Assembly.Location);
+                foreach (var assembly in GetReferences(t))
+                    cu.ReferencedAssemblies.Add(assembly);
                 cu.ReferencedAssemblies.Add(ShieldedDll);
                 PrepareType(t, cu);
             });
