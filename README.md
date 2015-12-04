@@ -91,7 +91,7 @@ Features
 
 * **MVCC**: Each transaction reads a consistent snapshot of the state without
 the need for locking, since updates just create new versions.
-    * Old versions are dropped soon after noone is capable of reading them
+    * Old versions are dropped soon after no one is capable of reading them
     any more.
 * **Read-only transactions** always complete without any repetitions and
 without entering the global lock!
