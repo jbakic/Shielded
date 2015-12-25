@@ -67,6 +67,7 @@ namespace ShieldedTests
         public void BasicTest()
         {
             var test = Factory.NewShielded<TestEntity>();
+            Assert.IsTrue(Factory.IsProxy(test.GetType()));
 
             Assert.Throws<InvalidOperationException>(() =>
                 test.Id = Guid.NewGuid());
@@ -171,6 +172,7 @@ namespace ShieldedTests
 
         private void AssertTransactional<T>(IIdentifiable<T> item)
         {
+            Assert.IsTrue(Factory.IsProxy(item.GetType()));
             Assert.Throws<InvalidOperationException>(() =>
                 item.Id = default(T));
 

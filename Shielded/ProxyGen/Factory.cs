@@ -14,7 +14,8 @@ namespace Shielded.ProxyGen
     public static class Factory
     {
         /// <summary>
-        /// Returns a subtype of the given type, which implements backing storage
+        /// Returns the proxy subtype for a given type. If arg already is a proxy type,
+        /// then it just returns it directly. The proxy type implements backing storage
         /// for all virtual properties (with virtual getters and setters) in one
         /// Shielded struct container. Base setters will be called before any change,
         /// and may use the getter to obtain the old value.
@@ -58,7 +59,7 @@ namespace Shielded.ProxyGen
         /// </summary>
         public static T NewShielded<T>() where T : class, new()
         {
-            return (T)_activators.GetOrAdd(ShieldedType(typeof(T)), CreateActivator)();
+            return (T)_activators.GetOrAdd(ProxyGen.GetFor(typeof(T)), CreateActivator)();
         }
 
         /// <summary>
@@ -72,6 +73,14 @@ namespace Shielded.ProxyGen
         public static bool CanGenerateProxy(Type t)
         {
             return !NothingToDo.With(t);
+        }
+
+        /// <summary>
+        /// Returns true if the type is a shielded proxy type.
+        /// </summary>
+        public static bool IsProxy(Type t)
+        {
+            return ProxyGen.IsProxy(t);
         }
 
         /// <summary>

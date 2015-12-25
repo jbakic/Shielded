@@ -59,8 +59,15 @@ namespace Shielded.ProxyGen
                 .Distinct();
         }
 
+        public static bool IsProxy(Type t)
+        {
+            return t.BaseType != null && proxies.ContainsKey(t.BaseType);
+        }
+
         public static Type GetFor(Type t)
         {
+            if (IsProxy(t))
+                return t;
             return proxies.GetOrAdd(t, CreateFor);
         }
 
