@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
+using System.Linq;
 using NUnit.Framework;
 using Shielded;
 using System.Diagnostics;
@@ -98,6 +100,22 @@ namespace ShieldedTests
                 Assert.IsFalse(cont.Committed);
             }
             Assert.AreEqual(5, a);
+        }
+
+        [Test]
+        public void FieldsTest()
+        {
+            var a = new Shielded<int>();
+            using (var continuation = Shield.RunToCommit(1000, () => { int _ = a.Value; }))
+            {
+                var fields = continuation.Fields;
+                Assert.AreEqual(1, fields.Length);
+                Assert.AreSame(a, fields[0].Field);
+                Assert.IsFalse(fields[0].HasChanges);
+
+                continuation.InContext(f =>
+                    Assert.AreEqual(fields, f));
+            }
         }
     }
 }
