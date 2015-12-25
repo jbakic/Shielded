@@ -681,7 +681,16 @@ repeatCommutes: if (brokeInCommutes)
                 VersionList.GetReaderTicket(out ReadTicket);
             }
 
-            public override void InContext(Action<TransactionField[]> act)
+            public override TransactionField[] Fields
+            {
+                get
+                {
+                    return _fields ?? (_fields = Items.GetFields());
+                }
+            }
+            private TransactionField[] _fields;
+
+            public override void InContext(Action act)
             {
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
@@ -690,7 +699,7 @@ repeatCommutes: if (brokeInCommutes)
                 try
                 {
                     Shield._context = this;
-                    act(Items.GetFields());
+                    act();
                 }
                 finally
                 {
@@ -698,7 +707,7 @@ repeatCommutes: if (brokeInCommutes)
                 }
             }
 
-            private void Complete()
+            private void Complete(bool committed)
             {
                 try { }
                 finally
@@ -709,6 +718,7 @@ repeatCommutes: if (brokeInCommutes)
                         VersionList.ReleaseReaderTicket(ref ReadTicket);
                     if (WriteStamp != null && WriteStamp.Locked)
                         WriteStamp.Release();
+                    Committed = committed;
                     Completed = true;
                     Shield._context = null;
                 }
@@ -719,6 +729,12 @@ repeatCommutes: if (brokeInCommutes)
 
             private bool Sync(ref int flag, Action act)
             {
+                return Sync(ref flag, () => { act(); return true; });
+            }
+
+            // returns true iff it wins the flag, and the lambda returns true.
+            private bool Sync(ref int flag, Func<bool> act)
+            {
                 var effect = false;
                 try
                 {
@@ -728,8 +744,7 @@ repeatCommutes: if (brokeInCommutes)
                     }
                     if (!effect || Completed)
                         return false;
-                    act();
-                    return true;
+                    return act();
                 }
                 finally
                 {
@@ -740,20 +755,26 @@ repeatCommutes: if (brokeInCommutes)
 
             public override void Commit()
             {
+                if (!TryCommit())
+                    throw new InvalidOperationException("Continuation already completing or completed.");
+            }
+
+            public override bool TryCommit()
+            {
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
-                if (!Sync(ref _committing, () => {
-                    try
+                return Sync(ref _committing, () => {
+                    using (this) try
                     {
                         Shield._context = this;
                         if (Items.HasChanges)
                         {
                             CommittingSubscription.Fire(Items);
                             if (!Sync(ref _completing, CommitWChanges))
-                                throw new InvalidOperationException("Commit interrupted");
+                                return false;
                         }
                         else if (!Sync(ref _completing, CommitWoChanges))
-                            throw new InvalidOperationException("Commit interrupted");
+                            return false;
                     }
                     finally
                     {
@@ -763,12 +784,9 @@ repeatCommutes: if (brokeInCommutes)
                             Shield._context = null;
                         }
                     }
-                    Dispose();
                     VersionList.TrimCopies();
-                }))
-                {
-                    throw new InvalidOperationException("Transaction already complete, or completing.");
-                }
+                    return true;
+                });
             }
 
             public void DoCommit()
@@ -791,7 +809,7 @@ repeatCommutes: if (brokeInCommutes)
 #else
                 Items.Enlisted.CommitWoChanges();
 #endif
-                Complete();
+                Complete(true);
                 if (Items.Fx != null)
                     Items.Fx.Select(f => f.OnCommit).SafeRun();
             }
@@ -816,7 +834,7 @@ repeatCommutes: if (brokeInCommutes)
                     WriteTicket.Changes = trigger;
                 }
 
-                Complete();
+                Complete(true);
                 (Items.Fx != null ? Items.Fx.Select(f => f.OnCommit) : null)
                     .SafeConcat(CommitSubscriptionContext.PostCommit.Trigger(trigger))
                     .SafeRun();
@@ -824,10 +842,16 @@ repeatCommutes: if (brokeInCommutes)
 
             public override void Rollback()
             {
+                if (!TryRollback())
+                    throw new InvalidOperationException("Continuation already completing or completed.");
+            }
+
+            public override bool TryRollback()
+            {
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
-                Sync(ref _completing, () => {
-                    try
+                return Sync(ref _completing, () => {
+                    using (this) try
                     {
                         Shield._context = this;
                     }
@@ -835,7 +859,6 @@ repeatCommutes: if (brokeInCommutes)
                     {
                         DoRollback();
                     }
-                    Dispose();
                 });
             }
 
@@ -852,7 +875,7 @@ repeatCommutes: if (brokeInCommutes)
 
             public void DoCheckFailed()
             {
-                Complete();
+                Complete(false);
                 if (Items.Fx != null)
                     Items.Fx.Select(f => f.OnRollback).SafeRun();
             }

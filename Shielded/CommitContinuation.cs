@@ -8,12 +8,13 @@ namespace Shielded
     /// thread. Returned by <see cref="Shield.RunToCommit"/>. The transaction has
     /// been checked, and is OK to commit. This class is thread-safe - it makes
     /// sure only one thread can initiate a commit, but any number of threads
-    /// may try a rollback in parallel.
+    /// may try a rollback in parallel. However, it cannot make any strong guarantees.
+    /// Use something transactional if you need to reliably check/wait for completion.
     /// </summary>
     public abstract class CommitContinuation : IDisposable
     {
         /// <summary>
-        /// True if <see cref="Commit"/> or <see cref="Rollback"/> have been called.
+        /// True if <see cref="Commit"/> or <see cref="Rollback"/> have completed.
         /// </summary>
         public bool Completed
         {
@@ -22,22 +23,61 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Commit the transaction held in this continuation.
-        /// Warning: WhenCommitting subscriptions are executed first - any excptions
-        /// that they throw will bubble out of this method, and cause the commit to fail!
+        /// True if this continuation has successfully committed.
+        /// </summary>
+        public bool Committed
+        {
+            get;
+            protected set;
+        }
+
+        /// <summary>
+        /// Commit the transaction held in this continuation. Throws if it's already completing/ed.
         /// </summary>
         public abstract void Commit();
 
         /// <summary>
-        /// Roll back the transaction held in this continuation.
+        /// Try to commit the transaction held in this continuation, returning true if successful.
+        /// It returns true only if this call actually did the full commit.
+        /// </summary>
+        public abstract bool TryCommit();
+
+        /// <summary>
+        /// Roll back the transaction held in this continuation. Throws if already completing/ed.
         /// </summary>
         public abstract void Rollback();
 
         /// <summary>
-        /// Runs the action inside the transaction context, with information on the
-        /// transaction's access pattern given in its argument.
+        /// Try to roll back the transaction held in this continuation, returning true if successful.
+        /// Returns true only if this call actually performs the rollback.
         /// </summary>
-        public abstract void InContext(Action<TransactionField[]> act);
+        public abstract bool TryRollback();
+
+        /// <summary>
+        /// Meta-info on the fields affected by this transaction.
+        /// </summary>
+        public abstract TransactionField[] Fields
+        {
+            get;
+        }
+
+        /// <summary>
+        /// Run the action inside the transaction context, with information on the
+        /// transaction's access pattern given in its argument. Access is limited to
+        /// exactly what the main transaction already did. Throws if the continuation
+        /// has completed, dangerous if it is completing.
+        /// </summary>
+        public void InContext(Action<TransactionField[]> act)
+        {
+            InContext(() => act(Fields));
+        }
+
+        /// <summary>
+        /// Run the action inside the transaction context. Access is limited to
+        /// exactly what the main transaction already did. Throws if the continuation
+        /// has completed, dangerous if it is completing.
+        /// </summary>
+        public abstract void InContext(Action act);
 
         private Timer _timer;
 

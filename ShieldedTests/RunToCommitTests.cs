@@ -33,7 +33,7 @@ namespace ShieldedTests
                 Assert.AreEqual(1, runCount);
                 Assert.AreEqual(0, insideIfCount);
 
-                cont.InContext(_ => Assert.AreEqual(20, a));
+                cont.InContext(() => Assert.AreEqual(20, a));
                 Assert.AreEqual(5, a);
                 var t2 = new Thread(cont.Commit);
                 t2.Start();
@@ -42,6 +42,10 @@ namespace ShieldedTests
                 Assert.AreEqual(1, runCount);
                 Assert.AreEqual(0, insideIfCount);
                 Assert.AreEqual(20, a);
+
+                Assert.IsFalse(cont.TryCommit());
+                Assert.IsFalse(cont.TryRollback());
+                Assert.IsTrue(cont.Committed);
             }
             Assert.AreEqual(20, a);
         }
@@ -88,6 +92,10 @@ namespace ShieldedTests
                 // the continuation has been rolled back.
                 Assert.IsTrue(cont.Completed);
                 Assert.IsTrue(rollback);
+
+                Assert.IsFalse(cont.TryCommit());
+                Assert.IsFalse(cont.TryRollback());
+                Assert.IsFalse(cont.Committed);
             }
             Assert.AreEqual(5, a);
         }

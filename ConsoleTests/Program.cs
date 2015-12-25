@@ -484,14 +484,14 @@ namespace ConsoleTests
         {
             int numThreads = Environment.ProcessorCount;
             int numItems = 500000;
-            var tree = new ShieldedDictNc<Guid, TreeItem>();
+            var tree = new ShieldedDictNc<int, int>();
             var barrier = new Barrier(numThreads + 1);
             var counter = 0;
             int reportEvery = 10000;
             var lastReport = 0;
             long time;
 
-            TreeItem x = new TreeItem();
+            int x;
             var y = new Shielded<int>();
 
             _timer = new Stopwatch();
@@ -526,9 +526,9 @@ namespace ConsoleTests
             var lastTime = _timer.ElapsedMilliseconds;
             foreach (var i in Enumerable.Range(0, numItems))
             {
-                var item1 = new TreeItem();
+                var index = i;
                 bags[i % numThreads].Add(() => Shield.InTransaction(() => {
-                    tree.Add(item1.Id, item1);
+                    tree.Add(index, index);
                     Shield.SideEffect(() => {
                         var last = lastReport;
                         var count = Interlocked.Increment(ref counter);
