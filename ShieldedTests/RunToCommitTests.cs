@@ -114,7 +114,7 @@ namespace ShieldedTests
                 Assert.IsFalse(fields[0].HasChanges);
 
                 continuation.InContext(f =>
-                    Assert.AreEqual(fields, f));
+                    Assert.AreSame(fields, f));
             }
         }
     }

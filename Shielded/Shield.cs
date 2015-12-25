@@ -685,17 +685,20 @@ repeatCommutes: if (brokeInCommutes)
             {
                 get
                 {
-                    return _fields ?? (_fields = Items.GetFields());
+                    if (Completed)
+                        throw new InvalidOperationException("Transaction is completed.");
+                    if (_fields == null)
+                        InContext(() => _fields = Items.GetFields());
+                    return _fields;
                 }
             }
             private TransactionField[] _fields;
 
             public override void InContext(Action act)
             {
-                if (Shield._context != null)
-                    throw new InvalidOperationException("Operation not allowed in a transaction.");
                 if (Completed)
                     throw new InvalidOperationException("Transaction is completed.");
+                var oldContext = Shield._context;
                 try
                 {
                     Shield._context = this;
@@ -703,7 +706,7 @@ repeatCommutes: if (brokeInCommutes)
                 }
                 finally
                 {
-                    Shield._context = null;
+                    Shield._context = oldContext;
                 }
             }
 
