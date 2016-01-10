@@ -756,12 +756,6 @@ repeatCommutes: if (brokeInCommutes)
                 }
             }
 
-            public override void Commit()
-            {
-                if (!TryCommit())
-                    throw new InvalidOperationException("Continuation already completing or completed.");
-            }
-
             public override bool TryCommit()
             {
                 if (Shield._context != null)
@@ -841,12 +835,6 @@ repeatCommutes: if (brokeInCommutes)
                 (Items.Fx != null ? Items.Fx.Select(f => f.OnCommit) : null)
                     .SafeConcat(CommitSubscriptionContext.PostCommit.Trigger(trigger))
                     .SafeRun();
-            }
-
-            public override void Rollback()
-            {
-                if (!TryRollback())
-                    throw new InvalidOperationException("Continuation already completing or completed.");
             }
 
             public override bool TryRollback()

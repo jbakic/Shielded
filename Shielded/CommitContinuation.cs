@@ -8,19 +8,21 @@ namespace Shielded
     /// thread. Returned by <see cref="Shield.RunToCommit"/>. The transaction has
     /// been checked, and is OK to commit. This class is thread-safe - it makes
     /// sure only one thread can initiate a commit, but any number of threads
-    /// may try a rollback in parallel. However, it cannot make any strong guarantees.
-    /// Use something transactional if you need to reliably check/wait for completion.
+    /// may try a rollback in parallel.
     /// </summary>
     public abstract class CommitContinuation : IDisposable
     {
         /// <summary>
         /// True if <see cref="Commit"/> or <see cref="Rollback"/> have completed.
+        /// Volatile and set last, so after this becomes true, <see cref="Committed"/>
+        /// reliably indicates the outcome of the transaction.
         /// </summary>
         public bool Completed
         {
-            get;
-            protected set;
+            get { return _completed; }
+            protected set { _completed = value; }
         }
+        private volatile bool _completed;
 
         /// <summary>
         /// True if this continuation has successfully committed.
@@ -34,7 +36,11 @@ namespace Shielded
         /// <summary>
         /// Commit the transaction held in this continuation. Throws if it's already completing/ed.
         /// </summary>
-        public abstract void Commit();
+        public virtual void Commit()
+        {
+            if (!TryCommit())
+                throw new InvalidOperationException("Transaction already completing or completed.");
+        }
 
         /// <summary>
         /// Try to commit the transaction held in this continuation, returning true if successful.
@@ -45,7 +51,11 @@ namespace Shielded
         /// <summary>
         /// Roll back the transaction held in this continuation. Throws if already completing/ed.
         /// </summary>
-        public abstract void Rollback();
+        public virtual void Rollback()
+        {
+            if (!TryRollback())
+                throw new InvalidOperationException("Transaction already completing or completed.");
+        }
 
         /// <summary>
         /// Try to roll back the transaction held in this continuation, returning true if successful.
@@ -97,7 +107,7 @@ namespace Shielded
                 _timer = null;
             }
             if (!Completed)
-                Rollback();
+                TryRollback();
         }
     }
 }
