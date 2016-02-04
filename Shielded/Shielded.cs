@@ -61,7 +61,8 @@ namespace Shielded
                 return;
 
             var ws = _writerStamp;
-            if (ws != null && ws.Locked) ws.Wait();
+            if (ws != null && ws.Locked && ws.Version <= Shield.ReadStamp)
+                ws.Wait();
         }
 
         private ValueKeeper CurrentTransactionOldValue()
