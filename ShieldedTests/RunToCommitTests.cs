@@ -117,6 +117,37 @@ namespace ShieldedTests
                     Assert.AreSame(fields, f));
             }
         }
+
+        public class CustomException : Exception {}
+
+        [Test]
+        public void ExceptionWhenTryingToCommit()
+        {
+            var a = new Shielded<int>();
+            using (Shield.WhenCommitting(a, _ => { throw new CustomException(); }))
+            using (var cont = Shield.RunToCommit(5000, () => a.Value = 5))
+            {
+                var aggr = Assert.Throws<AggregateException>(() => cont.TryCommit());
+                Assert.IsInstanceOf<CustomException>(aggr.InnerExceptions.Single());
+            }
+        }
+
+        [Test]
+        public void TryCommitRollbackAfterTimeout()
+        {
+            var a = new Shielded<int>();
+            using (Shield.WhenCommitting(a, _ => { throw new CustomException(); }))
+            using (var cont = Shield.RunToCommit(0, () => a.Value = 5))
+            {
+                Thread.Sleep(100);
+                Assert.IsFalse(cont.TryCommit());
+            }
+            using (var cont = Shield.RunToCommit(0, () => a.Value = 5))
+            {
+                Thread.Sleep(100);
+                Assert.IsFalse(cont.TryRollback());
+            }
+        }
     }
 }
 

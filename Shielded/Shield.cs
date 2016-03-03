@@ -727,32 +727,27 @@ repeatCommutes: if (brokeInCommutes)
                 }
             }
 
-            private int _committing;
             private int _completing;
 
-            private bool Sync(ref int flag, Action act)
-            {
-                return Sync(ref flag, () => { act(); return true; });
-            }
-
             // returns true iff it wins the flag, and the lambda returns true.
-            private bool Sync(ref int flag, Func<bool> act)
+            private bool Sync(Action act)
             {
                 var effect = false;
                 try
                 {
                     try { } finally
                     {
-                        effect = Interlocked.CompareExchange(ref flag, 1, 0) == 0;
+                        effect = Interlocked.CompareExchange(ref _completing, 1, 0) == 0;
                     }
                     if (!effect || Completed)
                         return false;
-                    return act();
+                    act();
+                    return true;
                 }
                 finally
                 {
                     if (effect)
-                        Interlocked.Exchange(ref flag, 0);
+                        Interlocked.Exchange(ref _completing, 0);
                 }
             }
 
@@ -760,29 +755,20 @@ repeatCommutes: if (brokeInCommutes)
             {
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
-                return Sync(ref _committing, () => {
+                return Sync(() => {
                     using (this) try
                     {
                         Shield._context = this;
-                        if (Items.HasChanges)
-                        {
-                            CommittingSubscription.Fire(Items);
-                            if (!Sync(ref _completing, CommitWChanges))
-                                return false;
-                        }
-                        else if (!Sync(ref _completing, CommitWoChanges))
-                            return false;
+                        DoCommit();
                     }
                     finally
                     {
                         if (Shield._context != null)
                         {
-                            Sync(ref _completing, DoRollback);
+                            DoRollback();
                             Shield._context = null;
                         }
                     }
-                    VersionList.TrimCopies();
-                    return true;
                 });
             }
 
@@ -841,7 +827,7 @@ repeatCommutes: if (brokeInCommutes)
             {
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
-                return Sync(ref _completing, () => {
+                return Sync(() => {
                     using (this) try
                     {
                         Shield._context = this;
