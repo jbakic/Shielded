@@ -102,8 +102,8 @@ suffer from the Write Skew issue.
 * **Transactional collections**: Included in the library are ShieldedDict<>
 (dictionary), ShieldedSeq<> (singly linked list) and ShieldedTree<> (a
 red-black tree implementation).
-    * It is possible to use this library with the BCL [Immutable Collections]
-    (http://msdn.microsoft.com/en-us/library/dn385366%28v=vs.110%29.aspx) package.
+    * It is possible to use this library with immutable collections from
+    [System.Collections.Immutable](https://msdn.microsoft.com/en-us/library/mt452182%28v=vs.110%29.aspx).
 * To perform **side-effects** (IO, and most other operations which are not
 shielded) you use the SideEffect method of the Shield class, which takes
 optional onCommit and onRollback lambdas.
