@@ -31,11 +31,7 @@ namespace ConsoleTests
 
             public static void Take()
             {
-                Shield.InTransaction(() => {
-                    if (_count == 0)
-                        throw new InvalidOperationException();
-                    _count.Modify((ref int c) => c--);
-                });
+                Shield.InTransaction(() => _count.Modify((ref int c) => c--));
             }
 
             public static void Release()
@@ -49,8 +45,8 @@ namespace ConsoleTests
             }
         }
 
-        private ShieldedSeq<Item> _queue = new ShieldedSeq<Item>();
-        private Shielded<int> _processed = new Shielded<int>();
+        private ShieldedSeqNc<Item> _queue = new ShieldedSeqNc<Item>();
+        private int _processed;
         private const int ItemCount = 500000;
         private Barrier _barrier = new Barrier(2);
 
@@ -62,53 +58,52 @@ namespace ConsoleTests
             CountTracking();
             Subscribe();
 
-            var maxQueueCount = new Shielded<int>();
-            Shield.Conditional(() => _queue.Count > maxQueueCount, () => {
-                maxQueueCount.Value = _queue.Count;
-            });
-
             // create ItemCount items and push them in the queue.
             Stopwatch stopwatch = new Stopwatch();
             var items = Enumerable.Range(1, ItemCount).Select(
                 i => new Item() { Id = Guid.NewGuid(), Code = i, Amount = 100m * i }).ToArray();
+            InitTiming();
             stopwatch.Start();
-            for (int i = 0; i < ItemCount / 100; i++)
+            for (int i = 0; i < ItemCount / 1; i++)
             {
                 Shield.InTransaction(() => {
-                    for (int j = 0; j < 100; j++)
-                        _queue.Append(items[i*100 + j]);
+                    for (int j = 0; j < 1; j++)
+                        _queue.Append(items[i*1 + j]);
                 });
             }
 
             Console.WriteLine("..all items added, waiting.");
             _barrier.SignalAndWait();
             var time = stopwatch.ElapsedMilliseconds;
-            Console.WriteLine(" -- completed in {0} ms, with {1} max queue count.", time, maxQueueCount.Value);
+            Console.WriteLine(" -- completed in {0} ms.", time);
+        }
+
+        private const int _reportEvery = 10000;
+        private int _lastReport;
+        private DateTime _lastTime;
+
+        private void InitTiming()
+        {
+            _lastReport = 0;
+            _lastTime = DateTime.UtcNow;
         }
 
         private void CountTracking()
         {
-            int reportEvery = 10000;
-            Shielded<int> lastReport = new Shielded<int>(0);
-            Shielded<DateTime> lastTime = new Shielded<DateTime>(DateTime.UtcNow);
-
-            Shield.Conditional(() => _processed >= lastReport + reportEvery, () =>
+            var last = _lastReport;
+            DateTime newNow = DateTime.UtcNow;
+            if (_processed >= last + _reportEvery &&
+                Interlocked.CompareExchange(ref _lastReport, last + _reportEvery, last) == last)
             {
-                DateTime newNow = DateTime.UtcNow;
-                int count = _processed;
-                int speed = (count - lastReport) * 1000 / (int)newNow.Subtract(lastTime).TotalMilliseconds;
-                lastTime.Value = newNow;
-                lastReport.Modify((ref int n) => n += reportEvery);
+                int speed = _reportEvery * 1000 / (int)newNow.Subtract(_lastTime).TotalMilliseconds;
+                _lastTime = newNow;
                 int sc = _subscribeCount;
                 int ptc = _processTestCount;
                 int pbc = _processBodyCount;
-                Shield.SideEffect(() =>
-                {
-                    Console.WriteLine(
-                        "{0} at {1} item/s, stats ( {2}, {3}, {4} )",
-                        count, speed, sc, ptc, pbc);
-                });
-            });
+                Console.WriteLine(
+                    "{0} at {1} item/s, stats ( {2}, {3}, {4} )",
+                    last + _reportEvery, speed, sc, ptc, pbc);
+            }
         }
 
         private static int _subscribeCount;
@@ -117,40 +112,63 @@ namespace ConsoleTests
 
         private void Subscribe()
         {
-            Shield.Conditional(() => ProcessorSlot.Free && _queue.HasAny, () => {
+            Shield.Conditional(() => ProcessorSlot.Free && _queue.Any(), () => {
                 Interlocked.Increment(ref _subscribeCount);
-                ProcessorSlot.Take();
-                var first = _queue.TakeHead();
-                Shield.SideEffect(() => Task.Factory.StartNew(() => Process(first)));
+                while (ProcessorSlot.Free)
+                {
+                    ProcessorSlot.Take();
+                    Shield.SideEffect(() => Task.Factory.StartNew(Process));
+                }
             });
         }
 
-        private void Process(Item item)
+        private void Process()
         {
-            do
+            try
             {
-                Shield.InTransaction(() => {
-                    Interlocked.Increment(ref _processBodyCount);
-                    //if (item.Code % 10000 == 0)
-                    //    Shield.SideEffect(() => Console.WriteLine("-- Item {0}", item.Code));
-                    _processed.Commute((ref int n) => n++);
-                });
-            } while ((item = Shield.InTransaction(() => {
-                Interlocked.Increment(ref _processTestCount);
-                if (!_queue.HasAny)
+                ProcessInt();
+            }
+            catch (Exception ex)
+            {
+                Console.Write(" [{0}] ", ex.GetType().Name);
+            }
+        }
+
+        private void ProcessInt()
+        {
+            int yieldCount = 0;
+            Item[] items;
+            while (yieldCount++ < 10)
+            {
+                if ((items = Shield.InTransaction(() =>
+                    {
+                        Interlocked.Increment(ref _processTestCount);
+                        if (!_queue.Any())
+                            return null;
+                        return _queue.Consume.Take(10).ToArray();
+                    })) != null)
                 {
-                    ProcessorSlot.Release();
-                    return null;
+                    yieldCount = 0;
+                    foreach (var item in items)
+                    {
+                        Interlocked.Increment(ref _processBodyCount);
+                        // do a transaction, or whatever.
+                        //if (item.Code % 10000 == 0)
+                        //    Shield.SideEffect(() => Console.WriteLine("-- Item {0}", item.Code));
+                        Interlocked.Increment(ref _processed);
+                    }
+                    CountTracking();
                 }
-                return _queue.TakeHead();
-            })) != null);
+                else
+                    Thread.Yield();
+            }
 
             Shield.InTransaction(() => {
-                if (_processed == ItemCount)
-                {
-                    _processed.Modify((ref int p) => p++);
-                    Shield.SideEffect(() => _barrier.SignalAndWait());
-                }
+                ProcessorSlot.Release();
+                Shield.SideEffect(() => {
+                    if (_processed == ItemCount && Interlocked.Increment(ref _processed) == ItemCount + 1)
+                        _barrier.SignalAndWait();
+                });
             });
         }
     }

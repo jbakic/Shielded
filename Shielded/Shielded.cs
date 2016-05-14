@@ -19,9 +19,14 @@ namespace Shielded
         
         private ValueKeeper _current;
         // once negotiated, kept until commit or rollback
-        private volatile WriteTicket _writerStamp;
-        private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
-        private readonly StampLocker _locker = new StampLocker();
+//<<<<<<< HEAD
+//        private volatile WriteTicket _writerStamp;
+//        private readonly LocalStorage<ValueKeeper> _locals = new LocalStorage<ValueKeeper>();
+//        private readonly StampLocker _locker = new StampLocker();
+//=======
+        private volatile WriteStamp _writerStamp;
+        private readonly TransactionalStorage<ValueKeeper> _locals = new TransactionalStorage<ValueKeeper>();
+//>>>>>>> 3da3781d2b545b5f61e8050815f85c33950fa3e4
         private readonly object _owner;
 
         /// <summary>
@@ -48,18 +53,12 @@ namespace Shielded
             _owner = owner ?? this;
         }
 
-        bool LockCheck()
-        {
-            var w = _writerStamp;
-            return w == null || w.Stamp > Shield.ReadStamp;
-        }
-
         /// <summary>
         /// Enlists the field in the current transaction and, if this is the first
-        /// access, checks the write lock. Will spin-wait (or Monitor.Wait if SERVER
-        /// is defined) if the write stamp &lt;= <see cref="Shield.ReadStamp"/>, until
-        /// write lock is released. Since write stamps are increasing, this is
-        /// likely to happen only at the beginning of transactions.
+        /// access, checks the write lock. Will wait (using StampLocker) if the write
+        /// stamp &lt;= <see cref="Shield.ReadStamp"/>, until write lock is released.
+        /// Since write stamps are increasing, this is likely to happen only at the
+        /// beginning of transactions.
         /// </summary>
         private void CheckLockAndEnlist(bool write)
         {
@@ -67,8 +66,9 @@ namespace Shielded
             if (!Shield.Enlist(this, _locals.HasValue, write))
                 return;
 
-            if (!LockCheck())
-                _locker.WaitUntil(LockCheck);
+            var ws = _writerStamp;
+            if (ws != null && ws.Locked && ws.Version <= Shield.ReadStamp)
+                ws.Wait();
         }
 
         private ValueKeeper CurrentTransactionOldValue()
@@ -184,6 +184,9 @@ namespace Shielded
         /// </summary>
         public readonly ShieldedEvent<EventArgs> Changed = new ShieldedEvent<EventArgs>();
 
+        /// <summary>
+        /// Returns the current <see cref="Value"/>.
+        /// </summary>
         public static implicit operator T(Shielded<T> obj)
         {
             return obj.Value;
@@ -205,12 +208,12 @@ namespace Shielded
             }
         }
 
-        bool IShielded.CanCommit(WriteTicket ticket)
+        bool IShielded.CanCommit(WriteStamp stamp)
         {
             var res = _writerStamp == null &&
                 _current.Version <= Shield.ReadStamp;
             if (res && _locals.HasValue)
-                _writerStamp = ticket;
+                _writerStamp = stamp;
             return res;
         }
         
@@ -220,23 +223,20 @@ namespace Shielded
                 return;
             var newCurrent = _locals.Value;
             newCurrent.Older = _current;
-            newCurrent.Version = _writerStamp.Stamp;
+            newCurrent.Version = _writerStamp.Version;
             _current = newCurrent;
             _locals.Release();
             _writerStamp = null;
-            _locker.Release();
         }
 
-        void IShielded.Rollback(WriteTicket ticket)
+        void IShielded.Rollback()
         {
             if (!_locals.HasValue)
                 return;
             _locals.Release();
-            if (ticket != null && _writerStamp == ticket)
-            {
+            var ws = _writerStamp;
+            if (ws != null && ws.Locker == Shield.Context)
                 _writerStamp = null;
-                _locker.Release();
-            }
         }
         
         void IShielded.TrimCopies(long smallestOpenTransactionId)

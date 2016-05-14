@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Shielded
 {
@@ -26,6 +27,14 @@ namespace Shielded
                     Fx = new List<SideEffect>(other.Fx);
                 else
                     Fx.AddRange(other.Fx);
+        }
+
+        public TransactionField[] GetFields()
+        {
+            return Enlisted
+                .GroupBy(i => i.Owner)
+                .Select(grp => new TransactionField(grp.Key, grp.Any(i => i.HasChanges)))
+                .ToArray();
         }
     }
 }

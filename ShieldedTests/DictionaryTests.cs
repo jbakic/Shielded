@@ -19,11 +19,15 @@ namespace ShieldedTests
             Assert.Throws<InvalidOperationException>(() =>
                 dict[1] = new object());
 
+            bool detectable = false;
+            using (Shield.WhenCommitting(dict, _ => detectable = true))
+                Shield.InTransaction(() => dict[1] = new object());
+            Assert.IsTrue(detectable);
+
             Shield.InTransaction(() =>
             {
                 dict[2] = new object();
                 // the TPL sometimes executes tasks on the same thread.
-                object x1 = null;
                 var t = new Thread(() =>
                 {
                     Assert.IsFalse(Shield.IsInTransaction);
@@ -65,7 +69,8 @@ namespace ShieldedTests
         {
             var dict = new ShieldedDict<int, int>(
                 Enumerable.Range(0, 100)
-                .Select(i => new KeyValuePair<int, int>(i, 0)));
+                    .Select(i => new KeyValuePair<int, int>(i, 0))
+                    .ToArray());
             int transactionCount = 0;
 
             Task.WaitAll(
@@ -281,7 +286,7 @@ namespace ShieldedTests
         {
             var dict = new ShieldedDict<int, object>(
                 Enumerable.Range(1, 1000).Select(i =>
-                    new KeyValuePair<int, object>(i, new object())));
+                    new KeyValuePair<int, object>(i, new object())).ToArray());
             Assert.AreEqual(1000, dict.Count);
 
             var array = new KeyValuePair<int, object>[1100];

@@ -87,10 +87,10 @@ namespace Shielded
         /// <summary>
         /// Performs the commit check on the enlisted items.
         /// </summary>
-        public bool CanCommit(WriteTicket ticket)
+        public bool CanCommit(WriteStamp stamp)
         {
             for (int i = 0; i < _array.Length; i++)
-                if (_array[i] != null && !_array[i].CanCommit(ticket))
+                if (_array[i] != null && !_array[i].CanCommit(stamp))
                     return false;
             return true;
         }
@@ -127,11 +127,11 @@ namespace Shielded
         /// <summary>
         /// Rolls the enlisted items back.
         /// </summary>
-        public void Rollback(WriteTicket ticket)
+        public void Rollback()
         {
             for (int i = 0; i < _array.Length; i++)
                 if (_array[i] != null)
-                    _array[i].Rollback(ticket);
+                    _array[i].Rollback();
         }
 
         /// <summary>
@@ -291,14 +291,19 @@ namespace Shielded
             throw new System.NotImplementedException();
         }
 
+        public void UnionWith(SimpleHashSet otherAsSet)
+        {
+            for (int i = 0; i < otherAsSet._array.Length; i++)
+                if (otherAsSet._array[i] != null)
+                    AddInternal(otherAsSet._array[i]);
+        }
+
         public void UnionWith(IEnumerable<IShielded> other)
         {
             var otherAsSet = other as SimpleHashSet;
             if (otherAsSet != null)
             {
-                for (int i = 0; i < otherAsSet._array.Length; i++)
-                    if (otherAsSet._array[i] != null)
-                        AddInternal(otherAsSet._array[i]);
+                UnionWith(otherAsSet);
                 return;
             }
             var otherAsList = other as List<IShielded>;

@@ -8,20 +8,21 @@ in .NET. It provides a system (the Shield static class) for running in-memory
 transactions, and data structures which are aware of transactions. It can also
 generate transaction-aware proxy subclasses based on a POCO class type. The
 implementation is strict, with strong guarantees on safety. It is mostly
-obstruction-free, using only one major lock which is held during the pre-commit
+lock-free, using only one major lock which is held during the pre-commit
 check.
 
 Here is a small example:
 
 ```csharp
-Shielded<int> n = new Shielded<int>();
+var n = new Shielded<int>();
 int a = n;
 Shield.InTransaction(() =>
     n.Value = n + 5);
 ```
 
-You can read out of transaction, but changes must be inside. While inside,
-the library guarantees a consistent view of all shielded fields.
+Shielded fields are thread-safe. You can read them out of transaction, but
+changes must be done inside. While inside, the library guarantees a consistent
+view of all shielded fields.
 
 Another example, the STM version of "Hello world!" - parallel addition in an
 array. Here, in a dictionary:
@@ -54,10 +55,10 @@ var t = Factory.NewShielded<TestClass>();
 ```
 
 The Factory creates a proxy sub-class, using CodeDom, which will have transactional
-overrides for all public virtual properties of the base class. It is important to
-know that, due to CodeDom limitations, both the getter and setter must be public!
-Such objects are thread-safe (or, at least their virtual properties are), but can
-only be changed inside transactions. Usage is simple:
+overrides for all virtual properties of the base class that are public or protected.
+Due to CodeDom limitations, the getter and setter must have the same accessibility!
+The proxy objects are thread-safe (or, at least their virtual properties are), and
+can only be changed inside transactions. Usage is simple:
 
 ```csharp
 var id = t.Id;
@@ -80,12 +81,17 @@ this cannot create an infinite loop since for any conflict to occur at
 least one transaction must successfully commit. Overall, the system must
 make progress.
 
+This quality would place Shielded in the lock-free class of non-blocking
+concurrency mechanisms, according to academic classification. However,
+this is not accurate since the commit check gets done under a lock. Hence
+the word "mostly" in the short description.
+
 Features
 --------
 
 * **MVCC**: Each transaction reads a consistent snapshot of the state without
 the need for locking, since updates just create new versions.
-    * Old versions are dropped soon after noone is capable of reading them
+    * Old versions are dropped soon after no one is capable of reading them
     any more.
 * **Read-only transactions** always complete without any repetitions and
 without entering the global lock!
@@ -96,8 +102,8 @@ suffer from the Write Skew issue.
 * **Transactional collections**: Included in the library are ShieldedDict<>
 (dictionary), ShieldedSeq<> (singly linked list) and ShieldedTree<> (a
 red-black tree implementation).
-    * It is possible to use this library with the BCL [Immutable Collections]
-    (http://msdn.microsoft.com/en-us/library/dn385366%28v=vs.110%29.aspx) package.
+    * It is possible to use this library with immutable collections from
+    [System.Collections.Immutable](https://msdn.microsoft.com/en-us/library/mt452182%28v=vs.110%29.aspx).
 * To perform **side-effects** (IO, and most other operations which are not
 shielded) you use the SideEffect method of the Shield class, which takes
 optional onCommit and onRollback lambdas.
@@ -117,10 +123,13 @@ interested in, just before that transaction will commit.
     * Can be used to ensure certain invariants are held, or to implement
     thread prioritization by allowing only some threads which access a field
     to commit into it.
-* **Synchronous commits**: By using Shield.WhenCommitting, you can integrate
-your code into the commit process. This enables you to, e.g., perform the same
-changes in a relational database, or publish commits to other servers...
-    * You can also cause a retry, using Shield.Rollback.
+* **Custom commit operations**: You can integrate your own code into the commit process,
+to execute while the shielded fields, that are being written, are held locked.
+    * Using Shield.WhenCommitting, you subscribe for any commit, or based on
+    the type of field being written. These subscriptions should never throw!
+    * Shield.RunToCommit runs a transaction just up to commit, and allows you to
+    commit/rollback later, or from another thread. This is useful for asynchronous
+    programming.
 * **Commutables**: operations which can be performed without conflict, because
 they can be reordered in time and have the same net effect, i.e. they are
 commutable (name borrowed from Clojure). Incrementing an int is an

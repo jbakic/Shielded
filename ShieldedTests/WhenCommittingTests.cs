@@ -13,17 +13,23 @@ namespace ShieldedTests
         {
             var x = new Shielded<int>();
             int commitCount = 0;
-            using (Shield.WhenCommitting<Shielded<int>>(ints =>
-                {
-                    if (commitCount++ == 0)
-                        Shield.Rollback();
-                }))
+            using (Shield.WhenCommitting(x, hasChanges => {
+                commitCount++;
+                Shield.Rollback();
+            }))
             {
-                Shield.InTransaction(() => x.Value = 5);
+                try
+                {
+                    Shield.InTransaction(() => x.Value = 5);
+                }
+                catch (AggregateException ex)
+                {
+                    Assert.IsTrue(ex.InnerExceptions[0] is InvalidOperationException);
+                }
             }
 
-            Assert.AreEqual(2, commitCount);
-            Assert.AreEqual(5, x);
+            Assert.AreEqual(1, commitCount);
+            Assert.AreEqual(0, x);
         }
 
         [Test]
@@ -78,7 +84,7 @@ namespace ShieldedTests
             // reader promotion to writer not allowed
             using (Shield.WhenCommitting(fs => d[2] = new object()))
             {
-                Assert.Throws<InvalidOperationException>(() =>
+                Assert.Throws<AggregateException>(() =>
                     Shield.InTransaction(() => {
                         x.Value = 1;
                         var obj = d[2];
@@ -87,7 +93,7 @@ namespace ShieldedTests
             // new read not allowed
             using (Shield.WhenCommitting(fs => { var obj = d[2]; }))
             {
-                Assert.Throws<InvalidOperationException>(() =>
+                Assert.Throws<AggregateException>(() =>
                     Shield.InTransaction(() => {
                         x.Value = 1;
                         var obj = d[1];
@@ -96,7 +102,7 @@ namespace ShieldedTests
             // new write not allowed
             using (Shield.WhenCommitting(fs => d[2] = new object()))
             {
-                Assert.Throws<InvalidOperationException>(() =>
+                Assert.Throws<AggregateException>(() =>
                     Shield.InTransaction(() => {
                         x.Value = 1;
                         var obj = d[1];
@@ -105,7 +111,7 @@ namespace ShieldedTests
             // same checks, but in situations when we did a write in the dict
             using (Shield.WhenCommitting(fs => d[2] = new object()))
             {
-                Assert.Throws<InvalidOperationException>(() =>
+                Assert.Throws<AggregateException>(() =>
                     Shield.InTransaction(() => {
                         d[1] = new object();
                         var obj = d[2];
@@ -113,14 +119,14 @@ namespace ShieldedTests
             }
             using (Shield.WhenCommitting(fs => { var obj = d[2]; }))
             {
-                Assert.Throws<InvalidOperationException>(() =>
+                Assert.Throws<AggregateException>(() =>
                     Shield.InTransaction(() => {
                         d[1] = new object();
                     }));
             }
             using (Shield.WhenCommitting(fs => d[2] = new object()))
             {
-                Assert.Throws<InvalidOperationException>(() =>
+                Assert.Throws<AggregateException>(() =>
                     Shield.InTransaction(() => {
                         d[1] = new object();
                     }));
@@ -154,6 +160,25 @@ namespace ShieldedTests
                     var obj = d[1];
                     d[2] = new object();
                 });
+            }
+        }
+
+        [Test]
+        public void WhenCommittingOneField()
+        {
+            var a = new Shielded<int>();
+            var b = new Shielded<int>();
+            using (Shield.WhenCommitting(a, _ => Assert.Fail()))
+            {
+                Shield.InTransaction(() => b.Value = 10);
+                Assert.AreEqual(10, b);
+            }
+            var counter = 0;
+            using (Shield.WhenCommitting(a, _ => counter++))
+            {
+                Shield.InTransaction(() => a.Value = 10);
+                Assert.AreEqual(10, a);
+                Assert.AreEqual(1, counter);
             }
         }
     }

@@ -57,10 +57,8 @@
     <Compile Include="SideEffect.cs" />
     <Compile Include="Shield.cs" />
     <Compile Include="Shielded.cs" />
-    <Compile Include="ShieldedDict.cs" />
     <Compile Include="ShieldedSeq.cs" />
     <Compile Include="ShieldedTree.cs" />
-    <Compile Include="LocalStorage.cs" />
     <Compile Include="ShieldedEvent.cs" />
     <Compile Include="Actions.cs" />
     <Compile Include="SimpleHashSet.cs" />
@@ -73,9 +71,16 @@
     <Compile Include="Commute.cs" />
     <Compile Include="TransactionField.cs" />
     <Compile Include="CommittingSubscription.cs" />
-    <Compile Include="StampLocker.cs" />
     <Compile Include="CommitSubscription.cs" />
     <Compile Include="CommitSubscriptionContext.cs" />
+    <Compile Include="ShieldedDictNc.cs" />
+    <Compile Include="ShieldedDict.cs" />
+    <Compile Include="ShieldedSeqNc.cs" />
+    <Compile Include="ShieldedTreeNc.cs" />
+    <Compile Include="CommitContinuation.cs" />
+    <Compile Include="TransactionContext.cs" />
+    <Compile Include="TransactionalStorage.cs" />
+    <Compile Include="WriteStamp.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

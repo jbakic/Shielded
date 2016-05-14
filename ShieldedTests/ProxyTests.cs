@@ -15,13 +15,12 @@ namespace ShieldedTests
     {
         public virtual Guid Id { get; set; }
         public virtual int Counter { get; set; }
-        public virtual int ProtectedSetter { get; protected set; }
+        protected virtual int FullyProtected { get; set; }
 
-        public void SetProtectedField(int v)
+        public void SetFullyProtected(int x)
         {
-            // just to test if this field will also be transactional. it won't, since
-            // CodeDom does not support defining access flags for getter and setter separately. lame.
-            ProtectedSetter = v;
+            // this is transactional as well.
+            FullyProtected = x;
         }
 
         public virtual string Name
@@ -32,18 +31,33 @@ namespace ShieldedTests
                 if (Name == "conflicting")
                     // see test below.
                     Assert.AreEqual("testing conflict...", value);
-                // this should be avoided! see ProxyCommuteTest for reason.
+                // this should be avoided! see ProxyCommuteTest. basically, we could be
+                // running within a commute, and Shielded throws if a commute touches anything
+                // except its field. but changing other properties of this object is always safe.
                 NameChanges.Commute((ref int i) => i++);
             }
         }
 
         public readonly Shielded<int> NameChanges = new Shielded<int>();
+        public virtual int AnyPropertyChanges { get; set; }
 
         // by convention, if this exists, it gets overriden.
-        public virtual void Commute(Action a)
+        public virtual void Commute(Action a) { a(); }
+
+        // likewise, by convention, this gets called after a property changes. called
+        // from commutes too, in which case it may not access any other shielded field.
+        protected void OnChanged(string name)
         {
-            a();
+            if (name != "AnyPropertyChanges")
+                AnyPropertyChanges += 1;
         }
+    }
+
+    public class BadEntity
+    {
+        // CodeDOM does not support overriding a property with different accessors on get and set,
+        // so trying to make a proxy of this class will cause an exception.
+        public virtual int X { get; protected set; }
     }
 
     [TestFixture]
@@ -53,6 +67,7 @@ namespace ShieldedTests
         public void BasicTest()
         {
             var test = Factory.NewShielded<TestEntity>();
+            Assert.IsTrue(Factory.IsProxy(test.GetType()));
 
             Assert.Throws<InvalidOperationException>(() =>
                 test.Id = Guid.NewGuid());
@@ -90,30 +105,32 @@ namespace ShieldedTests
 
             int transactionCount = 0;
             Thread tConflict = null;
+            var newTest = Factory.NewShielded<TestEntity>();
             Shield.InTransaction(() => {
-                test.Name = "testing conflict...";
+                newTest.Id = Guid.NewGuid();
+                newTest.Name = "testing conflict...";
                 transactionCount++;
 
                 if (tConflict == null)
                 {
                     tConflict = new Thread(() =>
                         // property setters are not commutable, and cause conflicts
-                        Shield.InTransaction(() => test.Name = "conflicting"));
+                        Shield.InTransaction(() => newTest.Name = "conflicting"));
                     tConflict.Start();
                     tConflict.Join();
                 }
             });
             Assert.AreEqual(2, transactionCount);
-            Assert.AreEqual("testing conflict...", test.Name);
+            Assert.AreEqual("testing conflict...", newTest.Name);
             // it was first "conflicting", then "testing conflict..."
-            Assert.AreEqual(2, test.NameChanges);
+            Assert.AreEqual(2, newTest.NameChanges);
+            Assert.AreEqual(3, newTest.AnyPropertyChanges);
         }
 
         [Test]
         public void ProxyCommuteTest()
         {
             var test = Factory.NewShielded<TestEntity>();
-
             int transactionCount = 0, commuteCount = 0;
             Task.WaitAll(Enumerable.Range(1, 100).Select(i => Task.Factory.StartNew(() => {
                 Shield.InTransaction(() => {
@@ -146,20 +163,23 @@ namespace ShieldedTests
         [Test]
         public void ProtectedSetterTest()
         {
-            var t = Factory.NewShielded<TestEntity>();
+            Assert.Throws<InvalidOperationException>(() => Factory.NewShielded<BadEntity>());
 
-            // just confirms that the ProtectedSetter field is not transactional.
-            t.SetProtectedField(1);
+            var test = Factory.NewShielded<TestEntity>();
+            Assert.Throws<InvalidOperationException>(() => test.SetFullyProtected(5));
+            Shield.InTransaction(() => test.SetFullyProtected(5));
         }
 
         private void AssertTransactional<T>(IIdentifiable<T> item)
         {
+            Assert.IsTrue(Factory.IsProxy(item.GetType()));
             Assert.Throws<InvalidOperationException>(() =>
                 item.Id = default(T));
 
-            Shield.InTransaction(() => {
-                item.Id = default(T);
-            });
+            bool detectable = false;
+            using (Shield.WhenCommitting<IIdentifiable<T>>(ts => detectable = true))
+                Shield.InTransaction(() => item.Id = default(T));
+            Assert.IsTrue(detectable);
         }
 
         [Test]

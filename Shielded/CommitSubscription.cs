@@ -75,7 +75,7 @@ namespace Shielded
             public List<IShielded> PreAdd;
             public List<IShielded> CommitRemove;
         }
-        private readonly LocalStorage<Locals> _locals = new LocalStorage<Locals>();
+        private readonly TransactionalStorage<Locals> _locals = new TransactionalStorage<Locals>();
 
         /// <summary>
         /// Updates our entries in the dictionary. To be immediately visible as soon as
@@ -144,7 +144,7 @@ namespace Shielded
         }
 
         #region IShielded implementation
-        bool IShielded.CanCommit(WriteTicket ticket)
+        bool IShielded.CanCommit(WriteStamp stamp)
         {
             return true;
         }
@@ -156,7 +156,7 @@ namespace Shielded
             _locals.Release();
         }
 
-        void IShielded.Rollback(WriteTicket ticket)
+        void IShielded.Rollback()
         {
             if (!_locals.HasValue)
                 return;

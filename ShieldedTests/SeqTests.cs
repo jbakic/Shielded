@@ -17,7 +17,7 @@ namespace ShieldedTests
                 Enumerable.Range(1, 20).ToArray());
 
             Assert.AreEqual(20, seq.Count);
-            Assert.IsTrue(seq.HasAny);
+            Assert.IsTrue(seq.Any());
             Assert.AreEqual(1, seq.Head);
 
             for (int i = 0; i < 20; i++)
@@ -33,8 +33,8 @@ namespace ShieldedTests
             });
 
             ParallelEnumerable.Range(0, 20)
-                .ForAll(n => Shield.InTransaction(
-                    () => seq [n] = seq [n] + 20)
+                .ForAll(n => Shield.InTransaction(() => 
+                    seq [n] = seq [n] + 20)
             );
             for (int i = 0; i < 20; i++)
                 Assert.AreEqual(i + 21, seq [i]);
@@ -92,7 +92,6 @@ namespace ShieldedTests
             Shield.InTransaction(() => seq3.Append(100));
             Assert.AreEqual(4, seq3.Count);
             Assert.AreEqual(100, seq3 [3]);
-
         }
 
         [Test()]
@@ -103,13 +102,14 @@ namespace ShieldedTests
             Shield.InTransaction(() => { seq4.Prepend(100); });
             Assert.AreEqual(11, seq4.Count);
             Assert.AreEqual(100, seq4.Head);
-            Assert.IsTrue(seq4.HasAny);
+            Assert.AreEqual(100, seq4.First());
+            Assert.IsTrue(seq4.Any());
 
             Assert.AreEqual(100,
                 Shield.InTransaction(() => seq4.TakeHead()));
             Assert.AreEqual(10, seq4.Count);
             Assert.AreEqual(1, seq4.Head);
-            Assert.IsTrue(seq4.HasAny);
+            Assert.IsTrue(seq4.Any());
 
             for (int i = 0; i < 10; i++)
             {
@@ -125,7 +125,7 @@ namespace ShieldedTests
                 var x = seq4.Head;
             });
 
-            Assert.IsFalse(seq4.HasAny);
+            Assert.IsFalse(seq4.Any());
             Assert.AreEqual(0, seq4.Count);
         }
 
@@ -134,10 +134,11 @@ namespace ShieldedTests
         {
             var seq = new ShieldedSeq<int>(
                 Enumerable.Range(1, 20).ToArray());
-            Shield.InTransaction(() => { seq.Remove(5); });
+            Shield.InTransaction(() =>
+                Assert.IsTrue(seq.Remove(5)));
 
             Assert.AreEqual(19, seq.Count);
-            Assert.IsTrue(seq.HasAny);
+            Assert.IsTrue(seq.Any());
             Assert.AreEqual(1, seq.Head);
 
             for (int i = 1; i <= 20; i++)
@@ -146,16 +147,20 @@ namespace ShieldedTests
                 else
                     Assert.AreEqual(i, seq[i > 5 ? i - 2 : i - 1]);
 
-            Shield.InTransaction(() => { seq.Remove(1); });
+            Shield.InTransaction(() =>
+                Assert.IsTrue(seq.Remove(1)));
 
             Assert.AreEqual(18, seq.Count);
-            Assert.IsTrue(seq.HasAny);
+            Assert.IsTrue(seq.Any());
             Assert.AreEqual(2, seq.Head);
 
-            Shield.InTransaction(() => { seq.Remove(20); });
+            Shield.InTransaction(() =>
+                Assert.IsTrue(seq.Remove(20)));
+            Shield.InTransaction(() =>
+                Assert.IsFalse(seq.Remove(30)));
 
             Assert.AreEqual(17, seq.Count);
-            Assert.IsTrue(seq.HasAny);
+            Assert.IsTrue(seq.Any());
             Assert.AreEqual(2, seq.Head);
             Assert.AreEqual(19, seq[16]);
         }
@@ -163,7 +168,6 @@ namespace ShieldedTests
         [Test]
         public void TailPassTest()
         {
-            ///////
             // pass by the tail - potential commute bug
             // - when you append(), and then iterate a seq,
             //   will you find the new last item missing?
@@ -179,7 +183,7 @@ namespace ShieldedTests
 
             Shield.InTransaction(() => {
                 // this causes immediate degeneration of the Append commute.
-                var h = tailPass.HasAny;
+                var h = tailPass.Any();
                 tailPass.Append(7);
                 int counter = 0;
                 foreach (var i in tailPass)
@@ -222,11 +226,11 @@ namespace ShieldedTests
                     oneTimer.Start();
                     oneTimer.Join();
                 }
-                var b = seq1.HasAny;
+                var b = seq1.Any();
             });
             Assert.AreEqual(1, transactionCount);
             Assert.AreEqual(2, seq2.Count);
-            Assert.IsTrue(seq2.HasAny);
+            Assert.IsTrue(seq2.Any());
             Assert.AreEqual(1, seq2[0]);
             Assert.AreEqual(2, seq2[1]);
 
@@ -246,11 +250,11 @@ namespace ShieldedTests
                     oneTimer.Start();
                     oneTimer.Join();
                 }
-                var b = seq2.HasAny;
+                var b = seq2.Any();
             });
             Assert.AreEqual(2, transactionCount);
             Assert.AreEqual(2, seq2.Count);
-            Assert.IsTrue(seq2.HasAny);
+            Assert.IsTrue(seq2.Any());
             Assert.AreEqual(1, seq2[0]);
             Assert.AreEqual(2, seq2[1]);
         }
@@ -258,6 +262,15 @@ namespace ShieldedTests
         [Test]
         public void InsertTest()
         {
+            var emptySeq = new ShieldedSeqNc<int>();
+
+            Shield.InTransaction(() => emptySeq.Insert(0, 1));
+            Assert.IsTrue(emptySeq.Any());
+            Assert.AreEqual(1, emptySeq[0]);
+            Assert.Throws<InvalidOperationException>(() => emptySeq.Count());
+            Shield.InTransaction(() =>
+                Assert.AreEqual(1, emptySeq.Count()));
+
             var seq = new ShieldedSeq<int>(2, 3, 4, 6, 7);
 
             Shield.InTransaction(() => seq.Insert(0, 1));
@@ -278,6 +291,30 @@ namespace ShieldedTests
                 for (int i=0; i < seq.Count; i++)
                     Assert.AreEqual(i + 1, seq[i]);
             });
+        }
+
+        [Test]
+        public void RemoveAllWithExceptions()
+        {
+            var seq = new ShieldedSeq<int>(Enumerable.Range(1, 10).ToArray());
+            Shield.InTransaction(() => 
+                // handling the exception here means the transaction will commit.
+                Assert.Throws<InvalidOperationException>(() => seq.RemoveAll(i => {
+                    if (i == 5)
+                        throw new InvalidOperationException();
+                    return true;
+                })));
+            Assert.AreEqual(5, seq[0]);
+            Assert.AreEqual(6, seq.Count);
+        }
+
+        [Test]
+        public void RemoveAllLastElement()
+        {
+            var seq = new ShieldedSeq<int>(Enumerable.Range(1, 10).ToArray());
+            Shield.InTransaction(() => seq.RemoveAll(i => i == 10));
+            Shield.InTransaction(() =>
+                Assert.IsTrue(seq.SequenceEqual(Enumerable.Range(1, 9))));
         }
     }
 }

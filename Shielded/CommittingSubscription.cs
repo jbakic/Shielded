@@ -9,26 +9,14 @@ namespace Shielded
     {
         private static volatile CommittingSubscription[] _whenCommitingSubs;
 
-        public static bool Any
-        {
-            get
-            {
-                return _whenCommitingSubs != null;
-            }
-        }
-
         public static void Fire(TransItems items)
         {
             var theList = _whenCommitingSubs;
             if (theList == null)
                 return;
 
-            var fields = items.Enlisted
-                .GroupBy(i => i.Owner)
-                .Select(grp => new TransactionField(grp.Key, grp.Any(i => i.HasChanges)))
-                .ToArray();
-            for (int i = 0; i < theList.Length; i++)
-                theList[i].Act(fields);
+            var fields = items.GetFields();
+            theList.Select(cs => (Action)(() => cs.Act(fields))).SafeRun();
         }
 
         public readonly Action<TransactionField[]> Act;

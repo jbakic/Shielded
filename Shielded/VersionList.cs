@@ -26,12 +26,7 @@ namespace Shielded
     internal enum VersionState
     {
         Checking,
-        /// <summary>
-        /// NB that being in this state does not neccessarily imply that this version
-        /// was committed - exceptions during the writing process, or a WhenCommitting
-        /// subscription which calls <see cref="Shield.Rollback"/> may still cause it
-        /// to get rolled back. This just means the version passed its check.
-        /// </summary>
+        // TODO: rename this.
         Commit,
         Rollback
     }
@@ -43,10 +38,8 @@ namespace Shielded
     /// </summary>
     internal abstract class WriteTicket : ReadTicket
     {
-        public VersionState State { get; protected set; }
-
-        public abstract void Commit();
-        public abstract void Rollback();
+//        public abstract void Commit();
+//        public abstract void Rollback();
 
         /// <summary>
         /// After writers complete a write, they must place into this field
@@ -68,34 +61,43 @@ namespace Shielded
         {
             public int ReaderCount;
             public VersionEntry Later;
+            public volatile VersionState State;
 
-            public readonly StampLocker Locker = new StampLocker();
             // only != null during Committing state
             public SimpleHashSet Enlisted;
             public SimpleHashSet CommEnlisted;
-
-            public override void Commit()
-            {
-                State = VersionState.Commit;
-                Enlisted = null;
-                CommEnlisted = null;
-                Locker.Release();
-                VersionList.MoveCurrent();
-            }
-
-            public override void Rollback()
-            {
-                State = VersionState.Rollback;
-                Enlisted = null;
-                CommEnlisted = null;
-                Locker.Release();
-                VersionList.MoveCurrent();
-            }
 
             public void SetStamp(long val)
             {
                 Stamp = val;
             }
+
+            public void Wait()
+            {
+                SpinWait.SpinUntil(() => State != VersionState.Checking);
+            }
+        }
+
+        public static void Commit(this WriteTicket ticket)
+        {
+            if (ticket == null)
+                return;
+            var entry = (VersionEntry)ticket;
+            entry.Enlisted = null;
+            entry.CommEnlisted = null;
+            entry.State = VersionState.Commit;
+            VersionList.MoveCurrent();
+        }
+
+        public static void Rollback(this WriteTicket ticket)
+        {
+            if (ticket == null)
+                return;
+            var entry = (VersionEntry)ticket;
+            entry.Enlisted = null;
+            entry.CommEnlisted = null;
+            entry.State = VersionState.Rollback;
+            VersionList.MoveCurrent();
         }
 
         private static volatile VersionEntry _current;
@@ -103,7 +105,8 @@ namespace Shielded
 
         static VersionList()
         {
-            _oldestRead = _current = new VersionEntry() { Changes = Enumerable.Empty<IShielded>() };
+            // base version, has 0 stamp, and no changes
+            _oldestRead = _current = new VersionEntry();
         }
 
         /// <summary>
@@ -140,9 +143,10 @@ namespace Shielded
         /// <summary>
         /// After no reading will be done for the given reader ticket, release it with this method.
         /// </summary>
-        public static void ReleaseReaderTicket(ReadTicket ticket)
+        public static void ReleaseReaderTicket(ref ReadTicket ticket)
         {
             var node = (VersionEntry)ticket;
+            ticket = null;
             Interlocked.Decrement(ref node.ReaderCount);
         }
         
@@ -194,6 +198,9 @@ namespace Shielded
 
                 if (toTrim == null)
                     return;
+
+                old.Changes = null;
+                _oldestRead = old;
                 var version = old.Stamp;
 #if USE_STD_HASHSET
                 foreach (var sh in toTrim)
@@ -209,7 +216,8 @@ namespace Shielded
             }
         }
 
-        public static void NewVersion(SimpleHashSet enlisted, SimpleHashSet commEnlisted, out WriteTicket ticket)
+        public static void NewVersion(SimpleHashSet enlisted, SimpleHashSet commEnlisted,
+            out WriteTicket ticket)
         {
             var newNode = new VersionEntry { Enlisted = enlisted, CommEnlisted = commEnlisted };
             ticket = newNode;
@@ -220,7 +228,7 @@ namespace Shielded
                 {
                     var later = current.Later;
                     if (IsConflict(newNode, later) && later.State == VersionState.Checking)
-                        later.Locker.WaitUntil(() => later.State != VersionState.Checking);
+                        later.Wait();
                     current = later;
                 }
                 var newStamp = current.Stamp + 1;

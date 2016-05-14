@@ -46,7 +46,7 @@ namespace ConsoleTests
             Console.WriteLine(sp.Elapsed + " Reading values mutable dictionary");
         }
          
-        private static void ReadItemsShielded(ShieldedDict<long, object> ld, int iterations)
+        private static void ReadItemsShielded(ShieldedDictNc<long, object> ld, int iterations)
         {
             var sp = Stopwatch.StartNew();
              
@@ -101,9 +101,9 @@ namespace ConsoleTests
             return dic;
         }
 
-        private static ShieldedDict<long, object> ShieldedDicAdd(int iterations)
+        private static ShieldedDictNc<long, object> ShieldedDicAdd(int iterations)
         {
-            var tmp = new ShieldedDict<long, object>();
+            var tmp = new ShieldedDictNc<long, object>();
 
             var sp = Stopwatch.StartNew();
             var rnd = new Random(32);
