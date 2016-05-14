@@ -610,12 +610,7 @@ repeatCommutes: if (brokeInCommutes)
 #endif
                 }
 
-//<<<<<<< HEAD
                 try
-//=======
-//                var writeStamp = ctx.WriteStamp = new WriteStamp(ctx);
-//                lock (_checkLock)
-//>>>>>>> 3da3781d2b545b5f61e8050815f85c33950fa3e4
                 {
                     VersionList.NewVersion(
                         enlistedClone,

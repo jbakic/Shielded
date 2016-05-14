@@ -26,7 +26,6 @@ namespace Shielded
     internal enum VersionState
     {
         Checking,
-        // TODO: rename this.
         Commit,
         Rollback
     }
@@ -38,8 +37,8 @@ namespace Shielded
     /// </summary>
     internal abstract class WriteTicket : ReadTicket
     {
-//        public abstract void Commit();
-//        public abstract void Rollback();
+        public abstract void Commit();
+        public abstract void Rollback();
 
         /// <summary>
         /// After writers complete a write, they must place into this field
@@ -67,6 +66,22 @@ namespace Shielded
             public SimpleHashSet Enlisted;
             public SimpleHashSet CommEnlisted;
 
+            public override void Commit()
+            {
+                Enlisted = null;
+                CommEnlisted = null;
+                State = VersionState.Commit;
+                VersionList.MoveCurrent();
+            }
+
+            public override void Rollback()
+            {
+                Enlisted = null;
+                CommEnlisted = null;
+                State = VersionState.Rollback;
+                VersionList.MoveCurrent();
+            }
+
             public void SetStamp(long val)
             {
                 Stamp = val;
@@ -76,28 +91,6 @@ namespace Shielded
             {
                 SpinWait.SpinUntil(() => State != VersionState.Checking);
             }
-        }
-
-        public static void Commit(this WriteTicket ticket)
-        {
-            if (ticket == null)
-                return;
-            var entry = (VersionEntry)ticket;
-            entry.Enlisted = null;
-            entry.CommEnlisted = null;
-            entry.State = VersionState.Commit;
-            VersionList.MoveCurrent();
-        }
-
-        public static void Rollback(this WriteTicket ticket)
-        {
-            if (ticket == null)
-                return;
-            var entry = (VersionEntry)ticket;
-            entry.Enlisted = null;
-            entry.CommEnlisted = null;
-            entry.State = VersionState.Rollback;
-            VersionList.MoveCurrent();
         }
 
         private static volatile VersionEntry _current;
@@ -193,9 +186,6 @@ namespace Shielded
                     if (old.State != VersionState.Rollback)
                         toTrim.UnionWith(old.Changes);
                 }
-                old.Changes = null;
-                _oldestRead = old;
-
                 if (toTrim == null)
                     return;
 

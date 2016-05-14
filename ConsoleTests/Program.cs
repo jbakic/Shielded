@@ -51,12 +51,13 @@ namespace ConsoleTests
         {
             var randomizr = new Random();
             int transactionCounter;
-            int sleepTime = 0;
-            int taskCount = 100000;
+            int sleepTime = 1;
+            int taskCount = 10000;
 
             // a little warm up for Shielded
             var warmUp = new Shielded<int>();
-            Shield.InTransaction(() => warmUp.Value = warmUp + 1);
+            foreach (var i in Enumerable.Repeat(0, 100))
+                Shield.InTransaction(() => warmUp.Value = warmUp + 1);
 
             foreach (var i in Enumerable.Repeat(0, 5))
             {
@@ -1177,7 +1178,7 @@ namespace ConsoleTests
 
         public static void Main(string[] args)
         {
-            TimeTests();
+            //TimeTests();
 
             //ParallelAddWithSaving();
 
@@ -1195,7 +1196,7 @@ namespace ConsoleTests
 
             //TreePoolTest();
 
-            //SimpleOps();
+            SimpleOps();
 
             //MultiFieldOps();
 
