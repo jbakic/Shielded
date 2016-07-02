@@ -434,10 +434,9 @@ namespace Shielded
             {
                 try
                 {
-                    try {} finally
-                    {
-                        _context = new TransactionContextInternal();
-                    }
+                    _context = new TransactionContextInternal();
+                    _context.Open();
+
                     act();
                     if (CommitCheck())
                     {
@@ -675,12 +674,11 @@ repeatCommutes: if (brokeInCommutes)
             public ReadTicket ReadTicket;
             public WriteTicket WriteTicket;
             public WriteStamp WriteStamp;
-            public TransItems Items;
+            public TransItems Items = new TransItems();
             public bool CommitCheckDone;
 
-            public TransactionContextInternal()
+            public void Open()
             {
-                Items = new TransItems();
                 VersionList.GetReaderTicket(out ReadTicket);
             }
 
