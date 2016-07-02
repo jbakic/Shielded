@@ -434,7 +434,10 @@ namespace Shielded
             {
                 try
                 {
-                    _context = new TransactionContextInternal();
+                    try {} finally
+                    {
+                        _context = new TransactionContextInternal();
+                    }
                     act();
                     if (CommitCheck())
                     {
