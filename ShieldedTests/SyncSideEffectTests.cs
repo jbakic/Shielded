@@ -73,6 +73,20 @@ namespace ShieldedTests
             if (IsSorted(normalFx))
                 Assert.Inconclusive();
         }
+
+        [Test]
+        public void SyncSideEffectInReadOnlyTrans()
+        {
+            var x = new Shielded<int>(10);
+            bool didItRun = false;
+            Shield.InTransaction(() => {
+                int i = x;
+                // it will run even in a read-only transaction, even though such transactions
+                // do not lock anything, so it's really just like an ordinary side-effect.
+                Shield.SyncSideEffect(() => didItRun = true);
+            });
+            Assert.IsTrue(didItRun);
+        }
     }
 }
 

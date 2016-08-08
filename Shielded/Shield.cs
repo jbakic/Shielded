@@ -371,9 +371,11 @@ namespace Shielded
 
         /// <summary>
         /// Enlists a synchronized side effect. Such side effects are executed during a
-        /// commit, when individual transactional fields are still locked. They run right
-        /// after any triggered <see cref="WhenCommitting"/> subscriptions, under the
+        /// commit, when individual transactional fields are still locked. They run just
+        /// before any triggered <see cref="WhenCommitting"/> subscriptions, under the
         /// same conditions as they do. This can only be called within transactions.
+        /// If the transaction is read-only, this will still work, but it will not be in
+        /// sync with anything - please note that a read-only transaction locks nothing.
         /// </summary>
         public static void SyncSideEffect(Action fx)
         {
@@ -791,10 +793,10 @@ repeatCommutes: if (brokeInCommutes)
 
             public void DoCommit()
             {
+                Items.SyncFx.SafeRun();
                 if (Items.HasChanges)
                 {
                     CommittingSubscription.Fire(Items);
-                    Items.SyncFx.SafeRun();
                     CommitWChanges();
                 }
                 else
