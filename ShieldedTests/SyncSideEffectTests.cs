@@ -114,11 +114,10 @@ namespace ShieldedTests
             Shield.InTransaction(() =>
                 x.Commute((ref int _) => {
                     OneTimeConflict(ref t, x);
-                    Shield.SideEffect(() =>
-                        {
-                            Assert.IsFalse(didItRun);
-                            didItRun = true;
-                        });
+                    Shield.SideEffect(() => {
+                        Assert.IsFalse(didItRun);
+                        didItRun = true;
+                    });
                 }));
             Assert.IsTrue(didItRun);
 
@@ -127,11 +126,10 @@ namespace ShieldedTests
             Shield.InTransaction(() =>
                 x.Commute((ref int _) => {
                     OneTimeConflict(ref t, x);
-                    Shield.SyncSideEffect(() =>
-                        {
-                            Assert.IsFalse(didItRun);
-                            didItRun = true;
-                        });
+                    Shield.SyncSideEffect(() => {
+                        Assert.IsFalse(didItRun);
+                        didItRun = true;
+                    });
                 }));
             Assert.IsTrue(didItRun);
         }
