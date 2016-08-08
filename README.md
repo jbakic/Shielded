@@ -106,7 +106,9 @@ red-black tree implementation).
     [System.Collections.Immutable](https://msdn.microsoft.com/en-us/library/mt452182%28v=vs.110%29.aspx).
 * To perform **side-effects** (IO, and most other operations which are not
 shielded) you use the SideEffect method of the Shield class, which takes
-optional onCommit and onRollback lambdas.
+optional onCommit and onRollback lambdas, or the **SyncSideEffect** method which
+allows you to execute code during a commit, while the changed fields are still
+locked.
 * **Conditional transactions**: Method Shield.Conditional allows you
 to define something similar to a database AFTER trigger. It receives a test, and
 an action to perform, both lambdas. It runs the test, makes a note of
@@ -125,7 +127,8 @@ interested in, just before that transaction will commit.
     to commit into it.
 * **Custom commit operations**: You can integrate your own code into the commit process,
 to execute while the shielded fields, that are being written, are held locked.
-    * Using Shield.WhenCommitting, you subscribe for any commit, or based on
+    * Already mentioned Shield.SyncSideEffect does this on the level of one transaction.
+    * Using Shield.WhenCommitting, you subscribe globally for any commit, or based on
     the type of field being written. These subscriptions should never throw!
     * Shield.RunToCommit runs a transaction just up to commit, and allows you to
     commit/rollback later, or from another thread. This is useful for asynchronous
