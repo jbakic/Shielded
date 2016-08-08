@@ -2,6 +2,8 @@
 using NUnit.Framework;
 using Shielded;
 using System.Threading;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace ShieldedTests
 {
@@ -25,6 +27,51 @@ namespace ShieldedTests
                     Assert.AreEqual(10, a);
                 });
             });
+        }
+
+        private bool IsSorted(int[] coll)
+        {
+            for (int i = 0; i < coll.Length - 1; i++)
+                if (coll[i] > coll[i + 1])
+                    return false;
+            return true;
+        }
+
+        [Test]
+        public void OrderedSideEffects()
+        {
+            int numRuns = 10000;
+            var x = new Shielded<int>();
+
+            var normalFx = new int[numRuns];
+            int place = -1;
+            ParallelEnumerable.Repeat(0, numRuns).ForAll(_ => {
+                Shield.InTransaction(() => {
+                    int old = x;
+                    x.Value = old + 1;
+                    Shield.SideEffect(() => {
+                        int taken = Interlocked.Increment(ref place);
+                        normalFx[taken] = old;
+                    });
+                });
+            });
+
+            var syncFx = new int[numRuns];
+            place = -1;
+            ParallelEnumerable.Repeat(0, numRuns).ForAll(_ => {
+                Shield.InTransaction(() => {
+                    int old = x;
+                    x.Value = old + 1;
+                    Shield.SyncSideEffect(() => {
+                        int taken = Interlocked.Increment(ref place);
+                        syncFx[taken] = old;
+                    });
+                });
+            });
+
+            Assert.IsTrue(IsSorted(syncFx));
+            if (IsSorted(normalFx))
+                Assert.Inconclusive();
         }
     }
 }
