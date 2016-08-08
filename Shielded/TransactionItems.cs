@@ -13,6 +13,7 @@ namespace Shielded
 #endif
         public bool HasChanges;
         public List<SideEffect> Fx;
+        public List<Action> SyncFx;
         public List<Commute> Commutes;
 
         /// <summary>

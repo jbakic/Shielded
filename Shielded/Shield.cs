@@ -370,6 +370,22 @@ namespace Shielded
         }
 
         /// <summary>
+        /// Enlists a synchronized side effect. Such side effects are executed during a
+        /// commit, when individual transactional fields are still locked. They run right
+        /// after any triggered <see cref="WhenCommitting"/> subscriptions, under the
+        /// same conditions as they do. This can only be called within transactions.
+        /// </summary>
+        public static void SyncSideEffect(Action fx)
+        {
+            AssertInTransaction();
+            if (fx == null)
+                throw new ArgumentNullException();
+            if (_context.Items.SyncFx == null)
+                _context.Items.SyncFx = new List<Action>();
+            _context.Items.SyncFx.Add(fx);
+        }
+
+        /// <summary>
         /// Executes the function in a transaction, and returns its final result.
         /// Transactions may, in case of conflicts, get repeated from beginning. Your
         /// delegate should be ready for this. If you wish to do IO or similar
@@ -778,6 +794,7 @@ repeatCommutes: if (brokeInCommutes)
                 if (Items.HasChanges)
                 {
                     CommittingSubscription.Fire(Items);
+                    Items.SyncFx.SafeRun();
                     CommitWChanges();
                 }
                 else
