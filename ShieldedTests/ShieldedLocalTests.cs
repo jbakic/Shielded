@@ -61,7 +61,6 @@ namespace ShieldedTests
             Assert.IsTrue(didItRun);
 
             using (var continuation = Shield.RunToCommit(Timeout.Infinite, () => {
-                x.Value = 2;
                 local.Value = 20;
             }))
             {
