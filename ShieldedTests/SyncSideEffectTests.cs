@@ -45,29 +45,33 @@ namespace ShieldedTests
 
             var normalFx = new int[numRuns];
             int place = -1;
-            ParallelEnumerable.Repeat(0, numRuns).ForAll(_ => {
-                Shield.InTransaction(() => {
-                    int old = x;
-                    x.Value = old + 1;
-                    Shield.SideEffect(() => {
-                        int taken = Interlocked.Increment(ref place);
-                        normalFx[taken] = old;
+            ParallelEnumerable.Repeat(0, numRuns)
+                .WithExecutionMode(ParallelExecutionMode.ForceParallelism)
+                .ForAll(_ => {
+                    Shield.InTransaction(() => {
+                        int old = x;
+                        x.Value = old + 1;
+                        Shield.SideEffect(() => {
+                            int taken = Interlocked.Increment(ref place);
+                            normalFx[taken] = old;
+                        });
                     });
                 });
-            });
 
             var syncFx = new int[numRuns];
             place = -1;
-            ParallelEnumerable.Repeat(0, numRuns).ForAll(_ => {
-                Shield.InTransaction(() => {
-                    int old = x;
-                    x.Value = old + 1;
-                    Shield.SyncSideEffect(() => {
-                        int taken = Interlocked.Increment(ref place);
-                        syncFx[taken] = old;
+            ParallelEnumerable.Repeat(0, numRuns)
+                .WithExecutionMode(ParallelExecutionMode.ForceParallelism)
+                .ForAll(_ => {
+                    Shield.InTransaction(() => {
+                        int old = x;
+                        x.Value = old + 1;
+                        Shield.SyncSideEffect(() => {
+                            int taken = Interlocked.Increment(ref place);
+                            syncFx[taken] = old;
+                        });
                     });
                 });
-            });
 
             Assert.IsTrue(IsSorted(syncFx));
             if (IsSorted(normalFx))
@@ -85,6 +89,50 @@ namespace ShieldedTests
                 // do not lock anything, so it's really just like an ordinary side-effect.
                 Shield.SyncSideEffect(() => didItRun = true);
             });
+            Assert.IsTrue(didItRun);
+        }
+
+        private static void OneTimeConflict<T>(ref Thread t, Shielded<T> field)
+        {
+            if (t != null)
+                return;
+            t = new Thread(() => Shield.InTransaction(() =>
+                field.Value = default(T)));
+            t.Start();
+            t.Join();
+        }
+
+        [Test]
+        public void SideEffectsInCommutes()
+        {
+            // due to running in an isolated context, side-effects from commutes get
+            // separately tracked, but must eventually execute just like any other
+            // SideEffect. this basically tests a part of TransactionItems.UnionWith().
+            var x = new Shielded<int>();
+            bool didItRun = false;
+            Thread t = null;
+            Shield.InTransaction(() =>
+                x.Commute((ref int _) => {
+                    OneTimeConflict(ref t, x);
+                    Shield.SideEffect(() =>
+                        {
+                            Assert.IsFalse(didItRun);
+                            didItRun = true;
+                        });
+                }));
+            Assert.IsTrue(didItRun);
+
+            didItRun = false;
+            t = null;
+            Shield.InTransaction(() =>
+                x.Commute((ref int _) => {
+                    OneTimeConflict(ref t, x);
+                    Shield.SyncSideEffect(() =>
+                        {
+                            Assert.IsFalse(didItRun);
+                            didItRun = true;
+                        });
+                }));
             Assert.IsTrue(didItRun);
         }
     }
