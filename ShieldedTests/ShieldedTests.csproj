@@ -48,6 +48,7 @@
     <Compile Include="RunToCommitTests.cs" />
     <Compile Include="SyncSideEffectTests.cs" />
     <Compile Include="ShieldedLocalTests.cs" />
+    <Compile Include="OldStateTests.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

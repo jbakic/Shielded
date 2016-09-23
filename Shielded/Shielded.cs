@@ -110,7 +110,7 @@ namespace Shielded
                     return _current.Value;
 
                 CheckLockAndEnlist(false);
-                if (!_locals.HasValue)
+                if (!_locals.HasValue || Shield.ReadingOldState)
                     return CurrentTransactionOldValue().Value;
                 else if (_current.Version > Shield.ReadStamp)
                     throw new TransException("Writable read collision.");

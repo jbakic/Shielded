@@ -484,6 +484,44 @@ namespace Shielded
             throw new TransException("Requested rollback and retry.");
         }
 
+        [ThreadStatic]
+        private static bool _readOld;
+
+        internal static bool ReadingOldState
+        {
+            get
+            {
+                return _readOld;
+            }
+        }
+
+        /// <summary>
+        /// Executes the delegate in a context where every read returns the value as
+        /// it was at transaction opening. Writes still work, even though their
+        /// effects cannot be seen in this context. And please note that
+        /// <see cref="Shielded&lt;T&gt;.Modify"/> will not be affected and will expose
+        /// the last written value.
+        /// </summary>
+        public static void ReadOldState(Action act)
+        {
+            if (_readOld)
+            {
+                act();
+                return;
+            }
+
+            AssertInTransaction();
+            try
+            {
+                _readOld = true;
+                act();
+            }
+            finally
+            {
+                _readOld = false;
+            }
+        }
+
         /// <summary>
         /// Runs the action, and returns a set of IShieldeds that the action enlisted.
         /// It will make sure to restore original enlisted items, merged with the ones

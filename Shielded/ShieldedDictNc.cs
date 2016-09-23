@@ -127,7 +127,7 @@ namespace Shielded
             ItemKeeper v, curr;
             var locals = PrepareLocals();
             bool hasLocal;
-            if (!(hasLocal = locals.Items.TryGetValue(key, out v)) || v == null)
+            if (!(hasLocal = locals.Items.TryGetValue(key, out v)) || v == null || Shield.ReadingOldState)
             {
                 if (!hasLocal)
                     locals.Items.Add(key, null);
