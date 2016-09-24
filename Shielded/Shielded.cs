@@ -75,7 +75,7 @@ namespace Shielded
 
         /// <summary>
         /// Gets the value that this Shielded contained at transaction opening. During
-        /// a transaction, this is constant.
+        /// a transaction, this is constant. See also <see cref="Shield.ReadOldState"/>.
         /// </summary>
         public T GetOldValue()
         {
