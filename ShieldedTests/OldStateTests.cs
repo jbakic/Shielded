@@ -23,7 +23,6 @@ namespace ShieldedTests
                     a.Value = 30;
                     Assert.AreEqual(10, a);
                     a.Modify((ref int x) =>
-                        // TODO: is this ok? kinda weird.
                         Assert.AreEqual(30, x));
                 });
                 Assert.AreEqual(30, a.Value);
