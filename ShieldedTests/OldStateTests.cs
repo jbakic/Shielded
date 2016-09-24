@@ -39,9 +39,11 @@ namespace ShieldedTests
                 { 3, 3 },
             });
             Shield.InTransaction(() => {
+                Assert.AreEqual(1, dict[1]);
                 dict[2] = 102;
                 Assert.AreEqual(102, dict[2]);
                 Shield.ReadOldState(() => {
+                    Assert.AreEqual(1, dict[1]);
                     Assert.AreEqual(2, dict[2]);
                     var values = dict.Values;
                     Assert.AreEqual(3, values.Count);
@@ -49,8 +51,10 @@ namespace ShieldedTests
                     dict[2] = 22;
                     Assert.AreEqual(2, dict[2]);
                 });
+                Assert.AreEqual(1, dict[1]);
                 Assert.AreEqual(22, dict[2]);
             });
+            Assert.AreEqual(1, dict[1]);
             Assert.AreEqual(22, dict[2]);
         }
 
