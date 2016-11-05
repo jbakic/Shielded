@@ -34,6 +34,13 @@ namespace Shielded
         /// The state of the commute.
         /// </summary>
         public CommuteState State;
+
+        public Commute(Action perform, ICommutableShielded[] affecting)
+        {
+            State = CommuteState.Ok;
+            Perform = perform;
+            Affecting = affecting;
+        }
     }
 }
 

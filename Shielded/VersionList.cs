@@ -119,11 +119,7 @@ namespace Shielded
                 if (!tookFlag) return;
 
                 var old = _oldestRead;
-#if USE_STD_HASHSET
-                ISet<IShielded> toTrim = null;
-#else
                 SimpleHashSet toTrim = null;
-#endif
                 while (old != _current && Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
                 {
                     // we do not want to move "old" to an element which still has not finished writing, since
@@ -134,11 +130,7 @@ namespace Shielded
                     old = old.Later;
 
                     if (toTrim == null)
-#if USE_STD_HASHSET
-                        toTrim = new HashSet<IShielded>();
-#else
                         toTrim = new SimpleHashSet();
-#endif
                     toTrim.UnionWith(old.Changes);
                 }
                 if (toTrim == null)
@@ -147,12 +139,7 @@ namespace Shielded
                 old.Changes = null;
                 _oldestRead = old;
                 var version = old.Stamp;
-#if USE_STD_HASHSET
-                foreach (var sh in toTrim)
-                    sh.TrimCopies(version);
-#else
                 toTrim.TrimCopies(version);
-#endif
             }
             finally
             {

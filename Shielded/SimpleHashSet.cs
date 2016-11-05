@@ -6,6 +6,67 @@ using System.Linq;
 
 namespace Shielded
 {
+#if USE_STD_HASHSET
+
+    internal class SimpleHashSet : HashSet<IShielded>
+    {
+        /// <summary>
+        /// Performs the commit check on the enlisted items.
+        /// </summary>
+        public bool CanCommit(WriteStamp ws)
+        {
+            foreach (var item in this)
+                if (!item.CanCommit(ws))
+                    return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Commits the enlisted items.
+        /// </summary>
+        public List<IShielded> Commit()
+        {
+            List<IShielded> changes = new List<IShielded>();
+            foreach (var item in this)
+            {
+                if (item.HasChanges)
+                    changes.Add(item);
+                item.Commit();
+            }
+            return changes;
+        }
+
+        /// <summary>
+        /// Commits items without preparing a list of changed ones, to use
+        /// when you know that there are no changes.
+        /// </summary>
+        public void CommitWoChanges()
+        {
+            foreach (var item in this)
+                item.Commit();
+        }
+
+        /// <summary>
+        /// Rolls the enlisted items back.
+        /// </summary>
+        public void Rollback()
+        {
+            foreach (var item in this)
+                item.Rollback();
+        }
+
+        /// <summary>
+        /// Helper for trimming.
+        /// </summary>
+        public void TrimCopies(long minOpenTransaction)
+        {
+            foreach (var item in this)
+                item.TrimCopies(minOpenTransaction);
+        }
+    }
+
+#else
+
     internal class SimpleHashSet : ISet<IShielded>
     {
         private int _count;
@@ -297,5 +358,7 @@ namespace Shielded
         #endregion
 
     }
+
+#endif
 }
 

@@ -6,11 +6,7 @@ namespace Shielded
 {
     internal class TransItems
     {
-#if USE_STD_HASHSET
-        public HashSet<IShielded> Enlisted = new HashSet<IShielded>();
-#else
         public SimpleHashSet Enlisted = new SimpleHashSet();
-#endif
         public bool HasChanges;
         public List<SideEffect> Fx;
         public List<Action> SyncFx;
