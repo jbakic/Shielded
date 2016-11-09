@@ -744,7 +744,6 @@ repeatCommutes: if (brokeInCommutes)
 
             private int _completing;
 
-            // returns true iff it wins the flag, and the lambda returns true.
             private bool Sync(Action act)
             {
                 var effect = false;
