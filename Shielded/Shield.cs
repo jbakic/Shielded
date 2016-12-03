@@ -778,10 +778,7 @@ repeatCommutes: if (brokeInCommutes)
                     finally
                     {
                         if (Shield._context != null)
-                        {
                             DoRollback();
-                            Shield._context = null;
-                        }
                     }
                 });
             }
@@ -829,12 +826,10 @@ repeatCommutes: if (brokeInCommutes)
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
                 return Sync(() => {
-                    using (this) try
-                    {
-                        Shield._context = this;
-                    }
+                    using (this) try { }
                     finally
                     {
+                        Shield._context = this;
                         DoRollback();
                     }
                 });
