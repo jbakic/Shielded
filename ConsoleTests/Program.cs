@@ -1185,7 +1185,7 @@ namespace ConsoleTests
 
             //ControlledRace();
 
-            DictionaryTest();
+            //DictionaryTest();
 
             //BetShopTest();
 
@@ -1211,7 +1211,7 @@ namespace ConsoleTests
 
             //SequentialTests.Run();
 
-            //new ActorTestRun().Start();
+            new ActorTestRun().Start();
         }
     }
 }
