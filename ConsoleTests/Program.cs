@@ -1185,7 +1185,7 @@ namespace ConsoleTests
 
             //ControlledRace();
 
-            //DictionaryTest();
+            DictionaryTest();
 
             //BetShopTest();
 
@@ -1193,7 +1193,7 @@ namespace ConsoleTests
 
             //TreeTest();
 
-            DictionaryPoolTest();
+            //DictionaryPoolTest();
 
             //SimpleOps();
 
