@@ -451,7 +451,7 @@ namespace Shielded
                     _context.Open();
 
                     act();
-                    if (CommitCheck())
+                    if (!_rollback.HasValue && CommitCheck())
                     {
                         onChecked();
                         return;
@@ -467,6 +467,8 @@ namespace Shielded
             }
         }
 
+        private static readonly ShieldedLocal<bool> _rollback = new ShieldedLocal<bool>();
+
         /// <summary>
         /// Rolls the transaction back and retries it from the beginning. If you don't
         /// want the transaction to repeat, throw and catch an exception yourself.
@@ -476,6 +478,7 @@ namespace Shielded
             AssertInTransaction();
             if (_context.CommitCheckDone)
                 throw new InvalidOperationException("Rollback not allowed for checked transactions.");
+            _rollback.Value = true;
             throw new TransException("Requested rollback and retry.");
         }
 

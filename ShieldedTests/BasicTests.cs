@@ -280,6 +280,23 @@ namespace ShieldedTests
             Shield.InTransaction(() => a.Modify((ref int x) => x++));
             Assert.AreEqual(3, eventCount);
         }
+
+        [Test]
+        public void StoppedRollbackTest()
+        {
+            var i = new Shielded<int>();
+            int retryCount = 0;
+            Shield.InTransaction(() => {
+                retryCount++;
+                try
+                {
+                    i.Value = 10;
+                    if (retryCount == 1)
+                        Shield.Rollback();
+                }
+                catch (TransException) { }
+            });
+            Assert.AreEqual(2, retryCount);
+        }
     }
 }
-
