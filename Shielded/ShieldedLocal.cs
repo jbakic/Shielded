@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Shielded
 {
@@ -10,8 +11,6 @@ namespace Shielded
     /// </summary>
     public class ShieldedLocal<T>
     {
-        private TransactionalStorage<T> _storage = new TransactionalStorage<T>();
-
         /// <summary>
         /// Returns true if there is a value written in this local in this transaction.
         /// </summary>
@@ -20,7 +19,8 @@ namespace Shielded
             get
             {
                 Shield.AssertInTransaction();
-                return _storage.HasValue;
+                var store = Shield.Context.Storage;
+                return store != null && store.ContainsKey(this);
             }
         }
 
@@ -32,15 +32,17 @@ namespace Shielded
         {
             get
             {
-                Shield.AssertInTransaction();
-                if (!_storage.HasValue)
+                if (!HasValue)
                     throw new InvalidOperationException("ShieldedLocal has no value.");
-                return _storage.Value;
+                return (T)Shield.Context.Storage[this];
             }
             set
             {
                 Shield.AssertInTransaction();
-                _storage.Value = value;
+                var ctx = Shield.Context;
+                if (ctx.Storage == null)
+                    ctx.Storage = new Dictionary<object, object>();
+                ctx.Storage[this] = value;
             }
         }
 
@@ -58,8 +60,8 @@ namespace Shielded
         /// </summary>
         public void Release()
         {
-            Shield.AssertInTransaction();
-            _storage.Release();
+            if (HasValue)
+                Shield.Context.Storage.Remove(this);
         }
     }
 }

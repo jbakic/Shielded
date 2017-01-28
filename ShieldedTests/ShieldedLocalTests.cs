@@ -78,6 +78,21 @@ namespace ShieldedTests
             });
             Assert.IsTrue(didItRun);
         }
+
+
+        [Test]
+        public void ResetOnRollback()
+        {
+            var local = new ShieldedLocal<int>();
+            int retryCount = 0;
+            Shield.InTransaction(() => {
+                retryCount++;
+                Assert.False(local.HasValue);
+                local.Value = 10;
+                if (retryCount == 1)
+                    Shield.Rollback();
+            });
+        }
     }
 }
 
