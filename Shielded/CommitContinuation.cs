@@ -101,9 +101,10 @@ namespace Shielded
         /// </summary>
         public void Dispose()
         {
-            if (_timer != null)
+            var timer = _timer;
+            if (timer != null)
             {
-                _timer.Dispose();
+                timer.Dispose();
                 _timer = null;
             }
             if (!Completed)
