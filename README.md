@@ -104,6 +104,8 @@ suffer from the Write Skew issue.
 red-black tree implementation).
     * It is possible to use this library with immutable collections from
     [System.Collections.Immutable](https://msdn.microsoft.com/en-us/library/mt452182%28v=vs.110%29.aspx).
+* **Transaction-local storage**: ShieldedLocal<> allows storing anything
+in the transaction context, visible only from within that transaction.
 * To perform **side-effects** (IO, and most other operations which are not
 shielded) you use the SideEffect method of the Shield class, which takes
 optional onCommit and onRollback lambdas, or the **SyncSideEffect** method which
