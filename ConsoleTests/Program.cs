@@ -1195,7 +1195,7 @@ namespace ConsoleTests
 
             //DictionaryPoolTest();
 
-            //SimpleOps();
+            SimpleOps();
 
             //MultiFieldOps();
 
@@ -1211,7 +1211,7 @@ namespace ConsoleTests
 
             //SequentialTests.Run();
 
-            new ActorTestRun().Start();
+            //new ActorTestRun().Start();
         }
     }
 }

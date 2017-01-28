@@ -27,34 +27,51 @@ namespace Shielded
 
         private class LocalDict
         {
-            public Dictionary<TKey, ItemKeeper> Items = new Dictionary<TKey, ItemKeeper>();
+            public Dictionary<TKey, ItemKeeper> Items;
             public bool HasChanges;
             public bool Locked;
+
+            public LocalDict(IEqualityComparer<TKey> comparer)
+            {
+                Items = new Dictionary<TKey, ItemKeeper>(comparer);
+            }
         }
 
+        private readonly IEqualityComparer<TKey> _comparer;
         private readonly ConcurrentDictionary<TKey, ItemKeeper> _dict;
-        private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps =
-            new ConcurrentDictionary<TKey, WriteStamp>();
+        private readonly ConcurrentDictionary<TKey, WriteStamp> _writeStamps;
         private readonly TransactionalStorage<LocalDict> _localDict = new TransactionalStorage<LocalDict>();
         private readonly object _owner;
 
         /// <summary>
-        /// Initializes a new instance with the given initial contents.
+        /// Initializes a new instance.
         /// </summary>
         /// <param name="items">Initial items.</param>
         /// <param name="owner">If this is given, then in WhenCommitting subscriptions
         /// this shielded will report its owner instead of itself.</param>
-        public ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items = null, object owner = null)
+        /// <param name="comparer">Equality comparer for keys.</param>
+        public ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items = null, object owner = null,
+            IEqualityComparer<TKey> comparer = null)
         {
-            _dict = items == null ? new ConcurrentDictionary<TKey, ItemKeeper>() :
+            _comparer = comparer ?? EqualityComparer<TKey>.Default;
+            _dict = items == null ? new ConcurrentDictionary<TKey, ItemKeeper>(_comparer) :
                 new ConcurrentDictionary<TKey, ItemKeeper>(
                     items.Select(kvp =>
-                        new KeyValuePair<TKey, ItemKeeper>(kvp.Key, new ItemKeeper() { Value = kvp.Value })));
+                        new KeyValuePair<TKey, ItemKeeper>(kvp.Key, new ItemKeeper() { Value = kvp.Value })), _comparer);
+            _writeStamps = new ConcurrentDictionary<TKey, WriteStamp>(_comparer);
             _owner = owner ?? this;
         }
 
-        internal ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items, object owner, out int count)
-            : this(items, owner)
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
+        /// <param name="comparer">Equality comparer for keys.</param>
+        public ShieldedDictNc(IEqualityComparer<TKey> comparer)
+            : this(null, null, comparer) { }
+
+        internal ShieldedDictNc(IEnumerable<KeyValuePair<TKey, TItem>> items, object owner,
+            IEqualityComparer<TKey> comparer, out int count)
+            : this(items, owner, comparer)
         {
             count = _dict.Count;
         }
@@ -104,7 +121,7 @@ namespace Shielded
             if (_localDict.HasValue)
                 locals = _localDict.Value;
             else
-                _localDict.Value = locals = new LocalDict();
+                _localDict.Value = locals = new LocalDict(_comparer);
             return locals;
         }
 
@@ -367,7 +384,7 @@ namespace Shielded
         {
             Shield.AssertInTransaction();
             var keys = _localDict.HasValue ?
-                _dict.Keys.Union(_localDict.Value.Items.Keys) : _dict.Keys;
+                _dict.Keys.Union(_localDict.Value.Items.Keys, _comparer) : _dict.Keys;
             foreach (var key in keys)
             {
                 var v = Read(key);
