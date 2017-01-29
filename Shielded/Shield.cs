@@ -59,7 +59,7 @@ namespace Shielded
 
 
         [ThreadStatic]
-        private static ICommutableShielded _blockEnlist;
+        private static IShielded _blockEnlist;
         [ThreadStatic]
         private static bool _enforceTracking;
         [ThreadStatic]
@@ -169,7 +169,7 @@ namespace Shielded
         /// The strict version of EnlistCommute, which will monitor that the code in
         /// perform does not enlist anything except the one item, affecting.
         /// </summary>
-        internal static void EnlistStrictCommute(Action perform, ICommutableShielded affecting)
+        internal static void EnlistStrictCommute(Action perform, IShielded affecting)
         {
             EnlistCommute(() => {
                 // if a strict commute is enlisted from within another strict commute...
@@ -201,7 +201,7 @@ namespace Shielded
         /// not access, otherwise this commute must degenerate - it gets executed
         /// now, or at the moment when any of these IShieldeds enlists.
         /// </summary>
-        internal static void EnlistCommute(Action perform, params ICommutableShielded[] affecting)
+        internal static void EnlistCommute(Action perform, params IShielded[] affecting)
         {
             if (affecting == null)
                 throw new ArgumentException();
@@ -572,8 +572,7 @@ namespace Shielded
                     _context.Items = commutedItems = new TransItems();
                     try
                     {
-                        for (int i = 0; i < commutes.Count; i++)
-                            commutes[i].Perform();
+                        commutes.ForEach(comm => comm.Perform());
                         return;
                     }
                     catch (TransException)

@@ -8,7 +8,7 @@ namespace Shielded
     /// and the language does the necessary cloning. If T is a class, then only
     /// the reference itself is protected.
     /// </summary>
-    public class Shielded<T> : ICommutableShielded
+    public class Shielded<T> : IShielded
     {
         private class ValueKeeper
         {

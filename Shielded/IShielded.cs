@@ -28,7 +28,5 @@ namespace Shielded
 
         void TrimCopies(long smallestOpenTransactionId);
     }
-
-    internal interface ICommutableShielded : IShielded {}
 }
 
