@@ -561,15 +561,16 @@ namespace Shielded
         /// </summary>
         static void RunCommutes(out TransItems commutedItems)
         {
-            var oldItems = _context.Items;
+            var ctx = _context;
+            var oldItems = ctx.Items;
             var commutes = oldItems.Commutes;
             Shield._blockCommute = true;
             try
             {
                 while (true)
                 {
-                    _context.ReadTicket = VersionList.GetUntrackedReadStamp();
-                    _context.Items = commutedItems = new TransItems();
+                    ctx.ReadTicket = VersionList.GetUntrackedReadStamp();
+                    ctx.Items = commutedItems = new TransItems();
                     try
                     {
                         commutes.ForEach(comm => comm.Perform());
@@ -584,7 +585,7 @@ namespace Shielded
             }
             finally
             {
-                _context.Items = oldItems;
+                ctx.Items = oldItems;
                 Shield._blockCommute = false;
             }
         }
