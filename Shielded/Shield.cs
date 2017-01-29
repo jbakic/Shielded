@@ -527,7 +527,7 @@ namespace Shielded
         /// all thread-local state is cleared on transaction exit. The isolated action
         /// may still cause outer transaction's commutes to degenerate.
         /// </summary>
-        internal static ISet<IShielded> IsolatedRun(Action act)
+        internal static SimpleHashSet IsolatedRun(Action act)
         {
             var isolated = new SimpleHashSet();
             var originalItems = _context.Items.Enlisted;

@@ -12,7 +12,7 @@ namespace Shielded
     /// </summary>
     internal class CommitSubscription : IDisposable, IShielded
     {
-        private readonly Shielded<ISet<IShielded>> _items = new Shielded<ISet<IShielded>>();
+        private readonly Shielded<SimpleHashSet> _items = new Shielded<SimpleHashSet>();
         private readonly Func<bool> Test;
         private readonly Action Trans;
         private readonly CommitSubscriptionContext Context;
