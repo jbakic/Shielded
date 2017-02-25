@@ -728,13 +728,15 @@ repeatCommutes: if (brokeInCommutes)
                 }
             }
 
+            private static readonly IShielded[] EmptyChanges = new IShielded[0];
+
             private void Complete(bool committed)
             {
                 try { }
                 finally
                 {
                     if (WriteTicket != null && WriteTicket.Changes == null)
-                        WriteTicket.Changes = Enumerable.Empty<IShielded>();
+                        WriteTicket.Changes = EmptyChanges;
                     if (ReadTicket != null)
                         VersionList.ReleaseReaderTicket(ref ReadTicket);
                     if (WriteStamp != null && WriteStamp.Locked)
