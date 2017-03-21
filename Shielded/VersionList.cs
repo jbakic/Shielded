@@ -120,13 +120,12 @@ namespace Shielded
 
                 var old = _oldestRead;
                 SimpleHashSet toTrim = null;
-                while (old != _current && Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
+                while (old != _current && old.Later.Changes != null &&
+                    Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
                 {
-                    // we do not want to move "old" to an element which still has not finished writing, since
-                    // we must maintain the invariant that says _oldestRead.Changes have already been trimmed.
-                    if (old.Later.Changes == null)
-                        break;
-                    // likewise, thanks to that same invariant, we first move forward, then take Changes...
+                    // NB any transaction that holds a WriteTicker with Changes == null also
+                    // has a ReadTicket with a smaller stamp. but we don't depend on that here.
+
                     old = old.Later;
 
                     if (toTrim == null)
