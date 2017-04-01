@@ -219,18 +219,18 @@ namespace Shielded
             newCurrent.Older = _current;
             newCurrent.Version = _writerStamp.Version.Value;
             _current = newCurrent;
-            _locals.Release();
             _writerStamp = null;
+            _locals.Release();
         }
 
         void IShielded.Rollback()
         {
             if (!_locals.HasValue)
                 return;
-            _locals.Release();
             var ws = _writerStamp;
             if (ws != null && ws.Locker == Shield.Context)
                 _writerStamp = null;
+            _locals.Release();
         }
         
         void IShielded.TrimCopies(long smallestOpenTransactionId)
