@@ -33,7 +33,7 @@ namespace Shielded
         /// versions. It is crucial to set it to something != null, otherwise
         /// trimming will never get past this version!
         /// </summary>
-        public IEnumerable<IShielded> Changes;
+        public volatile IEnumerable<IShielded> Changes;
     }
 
     /// <summary>
