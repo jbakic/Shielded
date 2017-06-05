@@ -298,5 +298,66 @@ namespace ShieldedTests
             });
             Assert.AreEqual(2, retryCount);
         }
+
+        [Test]
+        public void SideEffectDisruptsCommit()
+        {
+            var a = new Shielded<int>();
+
+            using (var cont = Shield.RunToCommit(Timeout.Infinite, () => {
+                a.Value = a + 1;
+            }))
+            {
+                cont.InContext(() =>
+                    Shield.SideEffect(() => { throw new Exception(); }));
+
+                Assert.Throws<AggregateException>(
+                    cont.Commit);
+
+                Assert.IsTrue(cont.Completed);
+                Assert.IsTrue(cont.Committed);
+                Assert.AreEqual(1, a);
+            }
+        }
+
+        [Test]
+        public void SyncSideEffectDisruptsCommit()
+        {
+            var a = new Shielded<int>();
+
+            using (var cont = Shield.RunToCommit(Timeout.Infinite, () => {
+                a.Value = a + 1;
+            }))
+            {
+                cont.InContext(() =>
+                    Shield.SyncSideEffect(() => { throw new Exception(); }));
+
+                Assert.Throws<AggregateException>(
+                    cont.Commit);
+
+                Assert.IsTrue(cont.Completed);
+                Assert.IsFalse(cont.Committed);
+                Assert.AreEqual(0, a);
+            }
+        }
+
+        [Test]
+        public void WhenCommittingDisruptsCommit()
+        {
+            var a = new Shielded<int>();
+
+            using (Shield.WhenCommitting(a, _ => { throw new Exception(); }))
+            using (var cont = Shield.RunToCommit(Timeout.Infinite, () => {
+                a.Value = a + 1;
+            }))
+            {
+                Assert.Throws<AggregateException>(
+                    cont.Commit);
+
+                Assert.IsTrue(cont.Completed);
+                Assert.IsFalse(cont.Committed);
+                Assert.AreEqual(0, a);
+            }
+        }
     }
 }
