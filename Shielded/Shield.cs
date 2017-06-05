@@ -60,7 +60,7 @@ namespace Shielded
 
 
         [ThreadStatic]
-        private static ICommutableShielded _blockEnlist;
+        private static IShielded _blockEnlist;
         [ThreadStatic]
         private static bool _enforceTracking;
         [ThreadStatic]
@@ -170,7 +170,7 @@ namespace Shielded
         /// The strict version of EnlistCommute, which will monitor that the code in
         /// perform does not enlist anything except the one item, affecting.
         /// </summary>
-        internal static void EnlistStrictCommute(Action perform, ICommutableShielded affecting)
+        internal static void EnlistStrictCommute(Action perform, IShielded affecting)
         {
             EnlistCommute(() => {
                 // if a strict commute is enlisted from within another strict commute...
@@ -202,28 +202,23 @@ namespace Shielded
         /// not access, otherwise this commute must degenerate - it gets executed
         /// now, or at the moment when any of these IShieldeds enlists.
         /// </summary>
-        internal static void EnlistCommute(Action perform, params ICommutableShielded[] affecting)
+        internal static void EnlistCommute(Action perform, params IShielded[] affecting)
         {
             if (affecting == null)
                 throw new ArgumentException();
-            if (_blockEnlist != null &&
-                (affecting.Length != 1 || affecting[0] != _blockEnlist))
-                throw new InvalidOperationException("No shielded field access is allowed in this context.");
-            AssertInTransaction();
+            if (_blockCommute)
+                perform(); // Enlist will check for any access violations
 
+            AssertInTransaction();
             var items = _context.Items;
-            if (_blockCommute || items.Enlisted.Overlaps(affecting))
-                perform(); // immediate degeneration. should be some warning.
+            if (items.Enlisted.Overlaps(affecting))
+                perform();
             else
             {
                 items.HasChanges = true;
                 if (items.Commutes == null)
                     items.Commutes = new List<Commute>();
-                items.Commutes.Add(new Commute()
-                {
-                    Perform = perform,
-                    Affecting = affecting
-                });
+                items.Commutes.Add(new Commute(perform, affecting));
             }
         }
 
@@ -371,6 +366,24 @@ namespace Shielded
         }
 
         /// <summary>
+        /// Enlists a synchronized side effect. Such side effects are executed during a
+        /// commit, when individual transactional fields are still locked. They run just
+        /// before any triggered <see cref="WhenCommitting"/> subscriptions, under the
+        /// same conditions as they do. This can only be called within transactions.
+        /// If the transaction is read-only, this will still work, but it will not be in
+        /// sync with anything - please note that a read-only transaction locks nothing.
+        /// </summary>
+        public static void SyncSideEffect(Action fx)
+        {
+            if (fx == null)
+                throw new ArgumentNullException();
+            AssertInTransaction();
+            if (_context.Items.SyncFx == null)
+                _context.Items.SyncFx = new List<Action>();
+            _context.Items.SyncFx.Add(fx);
+        }
+
+        /// <summary>
         /// Executes the function in a transaction, and returns its final result.
         /// Transactions may, in case of conflicts, get repeated from beginning. Your
         /// delegate should be ready for this. If you wish to do IO or similar
@@ -436,8 +449,10 @@ namespace Shielded
                 try
                 {
                     _context = new TransactionContextInternal();
+                    _context.Open();
+
                     act();
-                    if (CommitCheck())
+                    if (!_rollback.HasValue && CommitCheck())
                     {
                         onChecked();
                         return;
@@ -453,6 +468,8 @@ namespace Shielded
             }
         }
 
+        private static readonly ShieldedLocal<bool> _rollback = new ShieldedLocal<bool>();
+
         /// <summary>
         /// Rolls the transaction back and retries it from the beginning. If you don't
         /// want the transaction to repeat, throw and catch an exception yourself.
@@ -462,7 +479,46 @@ namespace Shielded
             AssertInTransaction();
             if (_context.CommitCheckDone)
                 throw new InvalidOperationException("Rollback not allowed for checked transactions.");
+            _rollback.Value = true;
             throw new TransException("Requested rollback and retry.");
+        }
+
+        [ThreadStatic]
+        private static bool _readOld;
+
+        internal static bool ReadingOldState
+        {
+            get
+            {
+                return _readOld;
+            }
+        }
+
+        /// <summary>
+        /// Executes the delegate in a context where every read returns the value as
+        /// it was at transaction opening. Writes still work, even though their
+        /// effects cannot be seen in this context. And please note that
+        /// <see cref="Shielded&lt;T&gt;.Modify"/> will not be affected and will expose
+        /// the last written value.
+        /// </summary>
+        public static void ReadOldState(Action act)
+        {
+            if (_readOld)
+            {
+                act();
+                return;
+            }
+
+            AssertInTransaction();
+            try
+            {
+                _readOld = true;
+                act();
+            }
+            finally
+            {
+                _readOld = false;
+            }
         }
 
         /// <summary>
@@ -472,35 +528,15 @@ namespace Shielded
         /// all thread-local state is cleared on transaction exit. The isolated action
         /// may still cause outer transaction's commutes to degenerate.
         /// </summary>
-        internal static ISet<IShielded> IsolatedRun(Action act)
+        internal static SimpleHashSet IsolatedRun(Action act)
         {
-            var isolated = new TransItems();
-            isolated.Commutes = _context.Items.Commutes;
-            WithTransactionContext(isolated, act);
-            return isolated.Enlisted;
-        }
-
-        #region Commit & rollback
-
-        /// <summary>
-        /// Create a local transaction context by replacing local context's item container with
-        /// <paramref name="isolatedItems"/> and setting <see cref="Shield._blockCommute"/> to <c>true</c>,
-        /// then perform <paramref name="act"/> and return with restored state. Forces all IShieldeds to
-        /// enlist, regardless of previous enlist status.
-        /// </summary>
-        /// <param name="isolatedItems">The instance which temporarily replaces local context's item container.</param>
-        /// <param name="act">The action to execute in the context.</param>
-        /// <param name="merge">Whether to merge the isolated items into the original items when done. Defaults to <c>true</c>.
-        /// If items are left unmerged, take care to handle TransExceptions and roll back the items yourself!</param>
-        private static void WithTransactionContext(
-            TransItems isolatedItems, Action act, bool merge = true)
-        {
-            var originalItems = _context.Items;
+            var isolated = new SimpleHashSet();
+            var originalItems = _context.Items.Enlisted;
             var oldEnforce = _enforceTracking;
             var oldBlock = _blockCommute;
             try
             {
-                Shield._context.Items = isolatedItems;
+                Shield._context.Items.Enlisted = isolated;
                 Shield._blockCommute = true;
                 Shield._enforceTracking = true;
 
@@ -508,12 +544,15 @@ namespace Shielded
             }
             finally
             {
-                if (merge) originalItems.UnionWith(isolatedItems);
-                Shield._context.Items = originalItems;
+                originalItems.UnionWith(isolated);
+                Shield._context.Items.Enlisted = originalItems;
                 Shield._blockCommute = oldBlock;
                 Shield._enforceTracking = oldEnforce;
             }
+            return isolated;
         }
+
+        #region Commit & rollback
 
         /// <summary>
         /// Executes the commutes, returning through the out param the set of items that the
@@ -523,31 +562,32 @@ namespace Shielded
         /// </summary>
         static void RunCommutes(out TransItems commutedItems)
         {
-            var commutes = _context.Items.Commutes;
-            Action commuteRunner = () => {
-                for (int i = 0; i < commutes.Count; i++)
-                    commutes[i].Perform();
-            };
-
-            while (true)
+            var ctx = _context;
+            var oldItems = ctx.Items;
+            var commutes = oldItems.Commutes;
+            Shield._blockCommute = true;
+            try
             {
-                _context.ReadTicket = VersionList.GetUntrackedReadStamp();
-                commutedItems = new TransItems();
-                try
+                while (true)
                 {
-                    WithTransactionContext(commutedItems, commuteRunner, merge: false);
-                    return;
+                    ctx.ReadTicket = VersionList.GetUntrackedReadStamp();
+                    ctx.Items = commutedItems = new TransItems();
+                    try
+                    {
+                        commutes.ForEach(comm => comm.Perform());
+                        return;
+                    }
+                    catch (TransException)
+                    {
+                        commutedItems.Enlisted.Rollback();
+                        commutedItems = null;
+                    }
                 }
-                catch (TransException)
-                {
-#if USE_STD_HASHSET
-                    foreach (var item in commutedItems.Enlisted)
-                        item.Rollback();
-#else
-                    commutedItems.Enlisted.Rollback();
-#endif
-                    commutedItems = null;
-                }
+            }
+            finally
+            {
+                ctx.Items = oldItems;
+                Shield._blockCommute = false;
             }
         }
 
@@ -592,12 +632,7 @@ namespace Shielded
                     .Run();
             }
 
-            var enlistedClone =
-#if USE_STD_HASHSET
-                new HashSet<IShielded>(items.Enlisted);
-#else
-                ((SimpleHashSet)items.Enlisted).SharingClone();
-#endif
+            var enlistedClone = items.Enlisted.SharingClone();
 
             try
             {
@@ -619,25 +654,13 @@ repeatCommutes: if (brokeInCommutes)
                     var writeStamp = ctx.WriteStamp = new WriteStamp(ctx, ctx.WriteTicket.Stamp);
 
                     if (brokeInCommutes)
-#if USE_STD_HASHSET
-                        foreach (var item in commutedItems.Enlisted)
-                            if (!item.CanCommit(writeStamp))
-                                goto repeatCommutes;
-#else
-                    if (!commutedItems.Enlisted.CanCommit(writeStamp))
+                        if (!commutedItems.Enlisted.CanCommit(writeStamp))
                             goto repeatCommutes;
-#endif
 
                     ctx.ReadTicket = oldReadTicket;
                     brokeInCommutes = false;
-#if USE_STD_HASHSET
-                    foreach (var item in items.Enlisted)
-                        if (!item.CanCommit(writeStamp))
-                            return false;
-#else
                     if (!items.Enlisted.CanCommit(writeStamp))
                         return false;
-#endif
 
                     commit = true;
                 }
@@ -645,19 +668,10 @@ repeatCommutes: if (brokeInCommutes)
                 {
                     if (!commit)
                     {
-#if USE_STD_HASHSET
-                        if (commutedItems != null)
-                            foreach (var item in commutedItems.Enlisted)
-                                item.Rollback();
-                        if (!brokeInCommutes)
-                            foreach (var item in items.Enlisted)
-                                item.Rollback();
-#else
                         if (commutedItems != null)
                             commutedItems.Enlisted.Rollback();
                         if (!brokeInCommutes)
                             items.Enlisted.Rollback();
-#endif
                         ctx.WriteTicket.Rollback();
                     }
                     else
@@ -681,12 +695,11 @@ repeatCommutes: if (brokeInCommutes)
             public ReadTicket ReadTicket;
             public WriteTicket WriteTicket;
             public WriteStamp WriteStamp;
-            public TransItems Items;
+            public TransItems Items = new TransItems();
             public bool CommitCheckDone;
 
-            public TransactionContextInternal()
+            public void Open()
             {
-                Items = new TransItems();
                 VersionList.GetReaderTicket(out ReadTicket);
             }
 
@@ -719,13 +732,15 @@ repeatCommutes: if (brokeInCommutes)
                 }
             }
 
+            private static readonly IShielded[] EmptyChanges = new IShielded[0];
+
             private void Complete(bool committed)
             {
                 try { }
                 finally
                 {
                     if (WriteTicket != null && WriteTicket.Changes == null)
-                        WriteTicket.Changes = Enumerable.Empty<IShielded>();
+                        WriteTicket.Changes = EmptyChanges;
                     if (ReadTicket != null)
                         VersionList.ReleaseReaderTicket(ref ReadTicket);
                     if (WriteStamp != null && WriteStamp.Locked)
@@ -738,7 +753,6 @@ repeatCommutes: if (brokeInCommutes)
 
             private int _completing;
 
-            // returns true iff it wins the flag, and the lambda returns true.
             private bool Sync(Action act)
             {
                 var effect = false;
@@ -773,16 +787,14 @@ repeatCommutes: if (brokeInCommutes)
                     finally
                     {
                         if (Shield._context != null)
-                        {
                             DoRollback();
-                            Shield._context = null;
-                        }
                     }
                 });
             }
 
             public void DoCommit()
             {
+                Items.SyncFx.SafeRun();
                 if (Items.HasChanges)
                 {
                     CommittingSubscription.Fire(Items);
@@ -795,12 +807,7 @@ repeatCommutes: if (brokeInCommutes)
 
             private void CommitWoChanges()
             {
-#if USE_STD_HASHSET
-                foreach (var item in Items.Enlisted)
-                    item.Commit();
-#else
                 Items.Enlisted.CommitWoChanges();
-#endif
                 Complete(true);
                 if (Items.Fx != null)
                     Items.Fx.Select(f => f.OnCommit).SafeRun();
@@ -813,16 +820,7 @@ repeatCommutes: if (brokeInCommutes)
                 try { }
                 finally
                 {
-#if USE_STD_HASHSET
-                    trigger = new List<IShielded>();
-                    foreach (var item in Items.Enlisted)
-                    {
-                        if (item.HasChanges) trigger.Add(item);
-                        item.Commit();
-                    }
-#else
                     trigger = Items.Enlisted.Commit();
-#endif
                     WriteTicket.Changes = trigger;
                 }
 
@@ -837,12 +835,10 @@ repeatCommutes: if (brokeInCommutes)
                 if (Shield._context != null)
                     throw new InvalidOperationException("Operation not allowed in a transaction.");
                 return Sync(() => {
-                    using (this) try
-                    {
-                        Shield._context = this;
-                    }
+                    using (this) try { }
                     finally
                     {
+                        Shield._context = this;
                         DoRollback();
                     }
                 });
@@ -850,12 +846,7 @@ repeatCommutes: if (brokeInCommutes)
 
             public void DoRollback()
             {
-#if USE_STD_HASHSET
-                foreach (var item in Items.Enlisted)
-                    item.Rollback();
-#else
                 Items.Enlisted.Rollback();
-#endif
                 DoCheckFailed();
             }
 

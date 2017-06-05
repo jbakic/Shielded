@@ -374,6 +374,81 @@ namespace ShieldedTests
             Assert.IsTrue(hashKeys.SetEquals(dict.Keys));
             Assert.IsTrue(hashValues.SetEquals(dict.Values));
         }
+
+        class OddsAndEvens : IEqualityComparer<int>
+        {
+            public bool Equals(int x, int y)
+            {
+                return (x & 1) == (y & 1);
+            }
+
+            public int GetHashCode(int x)
+            {
+                return x & 1;
+            }
+        }
+
+        [Test]
+        public void EqualityComparerTest()
+        {
+            var dict = new ShieldedDict<int, object>(new OddsAndEvens());
+
+            int retryCount = 0;
+            Thread oneTime = null;
+            Shield.InTransaction(() => {
+                retryCount++;
+                dict[1] = new object();
+                dict[2] = new object();
+
+                if (oneTime == null)
+                {
+                    oneTime = new Thread(() => {
+                        Assert.IsFalse(Shield.IsInTransaction);
+                        Assert.IsFalse(dict.ContainsKey(2));
+                        Assert.IsFalse(dict.ContainsKey(4));
+                        Shield.InTransaction(() => dict[4] = new object());
+                    });
+                    oneTime.Start();
+                    oneTime.Join();
+                }
+
+                Assert.IsNotNull(dict[2]);
+                Assert.IsNotNull(dict[4]);
+                Assert.AreSame(dict[2], dict[4]);
+                Assert.AreNotSame(dict[1], dict[2]);
+            });
+            Assert.AreEqual(2, retryCount);
+
+            object x2 = null;
+            var t2 = new Thread(() => {
+                x2 = dict[2];
+                Assert.AreSame(dict[2], dict[4]);
+                Assert.AreNotSame(dict[1], dict[2]);
+            });
+            t2.Start();
+            t2.Join();
+            Assert.IsNotNull(x2);
+            Assert.IsNotNull(dict[2]);
+            Assert.AreSame(dict[2], dict[4]);
+            Assert.AreNotSame(dict[1], dict[2]);
+        }
+
+        [Test]
+        public void EqComparerAndEnumeration()
+        {
+            var dict = Shield.InTransaction(() => new ShieldedDict<int, object>(new OddsAndEvens()) {
+                { 1, new object() },
+                { 2, new object() },
+            });
+            Shield.InTransaction(() => {
+                var newOne = dict[4] = new object();
+                int count = 0;
+                foreach (var kvp in dict)
+                    count++;
+                Assert.AreEqual(2, count);
+                Assert.AreSame(newOne, dict[2]);
+            });
+        }
     }
 }
 

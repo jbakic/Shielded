@@ -33,6 +33,8 @@ namespace Shielded
         {
             if (_handlers != null)
                 _handlers.Remove(handler);
+            else
+                throw new InvalidOperationException("Not subscribed.");
         }
 
         /// <summary>

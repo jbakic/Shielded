@@ -18,18 +18,27 @@ namespace Shielded
         private readonly Shielded<int> _count;
 
         /// <summary>
-        /// Initializes a new instance with the given initial contents.
+        /// Initializes a new instance.
         /// </summary>
         /// <param name="items">Initial items.</param>
         /// <param name="owner">If this is given, then in WhenCommitting subscriptions
         /// this shielded will report its owner instead of itself.</param>
-        public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items = null, object owner = null)
+        /// <param name="comparer">Equality comparer for keys.</param>
+        public ShieldedDict(IEnumerable<KeyValuePair<TKey, TItem>> items = null, object owner = null,
+            IEqualityComparer<TKey> comparer = null)
         {
             owner = owner ?? this;
             int count;
-            _dict = new ShieldedDictNc<TKey, TItem>(items, owner, out count);
+            _dict = new ShieldedDictNc<TKey, TItem>(items, owner, comparer, out count);
             _count = new Shielded<int>(count, owner);
         }
+
+        /// <summary>
+        /// Initializes a new instance.
+        /// </summary>
+        /// <param name="comparer">Equality comparer for keys.</param>
+        public ShieldedDict(IEqualityComparer<TKey> comparer)
+            : this(null, null, comparer) { }
 
         /// <summary>
         /// An enumerable of keys for which the current transaction made changes in the dictionary.

@@ -481,10 +481,10 @@ namespace ConsoleTests
             public Guid Id = Guid.NewGuid();
         }
 
-        public static void TreePoolTest()
+        public static void DictionaryPoolTest()
         {
             int numThreads = Environment.ProcessorCount;
-            int numItems = 500000;
+            int numItems = 1000000;
             var tree = new ShieldedDictNc<int, int>();
             var barrier = new Barrier(numThreads + 1);
             var counter = 0;
@@ -550,7 +550,7 @@ namespace ConsoleTests
 
             barrier.SignalAndWait();
             time = _timer.ElapsedMilliseconds;
-            Console.WriteLine(" {0} ms.", time);
+            Console.WriteLine("\nTOTAL: {0} ms, at {1} ops/s", time, numItems * 1000 / time);
 
             Console.WriteLine("\nReading sequentially...");
             time = _timer.ElapsedMilliseconds;
@@ -1194,7 +1194,7 @@ namespace ConsoleTests
 
             //TreeTest();
 
-            //TreePoolTest();
+            //DictionaryPoolTest();
 
             SimpleOps();
 

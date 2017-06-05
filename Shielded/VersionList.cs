@@ -46,7 +46,7 @@ namespace Shielded
         /// versions. It is crucial to set it to something != null, otherwise
         /// trimming will never get past this version!
         /// </summary>
-        public IEnumerable<IShielded> Changes;
+        public volatile IEnumerable<IShielded> Changes;
     }
 
     /// <summary>
@@ -158,33 +158,18 @@ namespace Shielded
                 if (!tookFlag) return;
 
                 var old = _oldestRead;
-#if USE_STD_HASHSET
-                ISet<IShielded> toTrim = null;
-#else
                 SimpleHashSet toTrim = null;
-#endif
-                while (old != _current && Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
+                while (old != _current && old.Later.Changes != null &&
+                    Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
                 {
-                    if (old.Later.State == VersionState.Rollback)
-                    {
-                        old = old.Later;
-                        continue;
-                    }
-                    // we do not want to move "old" to an element which still has not finished writing, since
-                    // we must maintain the invariant that says _oldestRead.Changes have already been trimmed.
-                    if (old.Later.Changes == null)
-                        break;
-                    // likewise, thanks to that same invariant, we first move forward, then take Changes...
+                    // NB any transaction that holds a WriteTicker with Changes == null also
+                    // has a ReadTicket with a smaller stamp. but we don't depend on that here.
+
                     old = old.Later;
 
                     if (toTrim == null)
-#if USE_STD_HASHSET
-                        toTrim = new HashSet<IShielded>();
-#else
                         toTrim = new SimpleHashSet();
-#endif
-                    if (old.State != VersionState.Rollback)
-                        toTrim.UnionWith(old.Changes);
+                    toTrim.UnionWith(old.Changes);
                 }
                 if (toTrim == null)
                     return;
@@ -192,12 +177,7 @@ namespace Shielded
                 old.Changes = null;
                 _oldestRead = old;
                 var version = old.Stamp;
-#if USE_STD_HASHSET
-                foreach (var sh in toTrim)
-                    sh.TrimCopies(version);
-#else
                 toTrim.TrimCopies(version);
-#endif
             }
             finally
             {

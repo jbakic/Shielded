@@ -265,7 +265,7 @@ namespace Shielded.ProxyGen
             // using Modify has a huge advantage - if a class is big, we don't want to be passing
             // copies of the underlying struct around.
             mp.SetStatements.Add(new CodeSnippetStatement(
-                string.Format("{0}.Modify((ref {1} a) => a.{2} = value);",
+                string.Format("{0}.Modify((ref {1} a) => a.@{2} = value);",
                     ShieldedField, structType, pi.Name)));
             
             if (changeMethod != null)

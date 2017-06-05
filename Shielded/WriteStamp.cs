@@ -73,7 +73,7 @@ namespace Shielded
         {
             _released = true;
             Thread.MemoryBarrier();
-            if (_lockers > 0)
+            if (Interlocked.Decrement(ref _lockers) >= 0)
                 lock (this)
                     Monitor.PulseAll(this);
         }

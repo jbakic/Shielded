@@ -11,22 +11,20 @@ namespace ConsoleTests
 {
     /// <summary>
     /// A simple wrapper for a BlockingQueue and a thread which consumes items
-    /// from the queue as they get added. Only sending of messages is transactional,
-    /// it conflicts with other transactions wanting to send a message to the same
-    /// actor, and the actor is guaranteed to receive mesages exactly in the order
-    /// the sendings were committed in. The consuming lambda is ran out of transaction.
+    /// from the queue as they get added. Sending messages is transactional, but
+    /// non-conflicting. Transactions wanting to send a msg will conflict only if
+    /// they conflict in some other Shielded fields, in which case their msgs will
+    /// be ordered as their Shielded writes are.
+    /// The consuming lambda is executed out of transaction.
     /// </summary>
     public class ShieldedActor<T> : IDisposable
     {
-        private readonly Shielded<IEnumerable<T>> _addGate;
-        private IDisposable _subscription;
         private readonly BlockingCollection<T> _queue;
         private readonly string _name;
 
         public ShieldedActor(string name, Action<T> consumer)
         {
             _name = name;
-            _addGate = new Shielded<IEnumerable<T>>(this);
             _queue = new BlockingCollection<T>();
 
             Task.Factory.StartNew(() => {
@@ -41,33 +39,25 @@ namespace ConsoleTests
                     Dispose();
                 }
             }, TaskCreationOptions.LongRunning);
-
-            _subscription = Shield.WhenCommitting(this, hasChanges => {
-                foreach (var item in _addGate.Value)
-                    _queue.Add(item);
-                _addGate.Value = null;
-            });
         }
 
         public void Dispose()
         {
-            if (_subscription != null)
-            {
-                _subscription.Dispose();
-                _queue.CompleteAdding();
-                _subscription = null;
-            }
+            _queue.CompleteAdding();
         }
 
         public void Send(IEnumerable<T> items)
         {
-            Shield.InTransaction(() =>
-                _addGate.Modify((ref IEnumerable<T> v) => v = v != null ? v.Concat(items) : items));
+            Shield.InTransaction(() => Shield.SyncSideEffect(() => {
+                foreach (var item in items)
+                    _queue.Add(item);
+            }));
         }
 
         public void Send(T item)
         {
-            Send(new[] { item });
+            Shield.InTransaction(() => Shield.SyncSideEffect(() =>
+                _queue.Add(item)));
         }
 
         public int MessagesWaiting

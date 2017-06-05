@@ -5,9 +5,9 @@ using System.Collections.Generic;
 namespace Shielded
 {
     /// <summary>
-    /// Transactional storage, but very specialized, and thus internal.
+    /// Transactional storage, internal.
     /// </summary>
-    internal class TransactionalStorage<T> where T : class
+    internal class TransactionalStorage<T>
     {
         // These two are faster, immediate storage, which can be used by one transaction only.
         // If there is more than one, transactional storage is used by the others.
@@ -46,6 +46,10 @@ namespace Shielded
                 if (holder == ctx || holder == null)
                 {
                     _heldValue = value;
+                    // if we're just now taking over local fields, what if we already had
+                    // something in the dictionary?
+                    if (holder == null && ctx.Storage != null)
+                        ctx.Storage.Remove(this);
                 }
                 else
                 {
@@ -64,7 +68,7 @@ namespace Shielded
             var ctx = Shield.Context;
             if (_holderContext == ctx)
             {
-                _heldValue = null;
+                _heldValue = default(T);
                 _holderContext = null;
             }
             else if (ctx.Storage != null)

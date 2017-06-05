@@ -8,7 +8,7 @@ namespace Shielded
     /// and the language does the necessary cloning. If T is a class, then only
     /// the reference itself is protected.
     /// </summary>
-    public class Shielded<T> : ICommutableShielded
+    public class Shielded<T> : IShielded
     {
         private class ValueKeeper
         {
@@ -81,7 +81,7 @@ namespace Shielded
 
         /// <summary>
         /// Gets the value that this Shielded contained at transaction opening. During
-        /// a transaction, this is constant.
+        /// a transaction, this is constant. See also <see cref="Shield.ReadOldState"/>.
         /// </summary>
         public T GetOldValue()
         {
@@ -116,7 +116,7 @@ namespace Shielded
                     return _current.Value;
 
                 CheckLockAndEnlist(false);
-                if (!_locals.HasValue)
+                if (!_locals.HasValue || Shield.ReadingOldState)
                     return CurrentTransactionOldValue().Value;
                 else if (_current.Version > Shield.ReadStamp)
                     throw new TransException("Writable read collision.");
@@ -225,18 +225,18 @@ namespace Shielded
             newCurrent.Older = _current;
             newCurrent.Version = _writerStamp.Version;
             _current = newCurrent;
-            _locals.Release();
             _writerStamp = null;
+            _locals.Release();
         }
 
         void IShielded.Rollback()
         {
             if (!_locals.HasValue)
                 return;
-            _locals.Release();
             var ws = _writerStamp;
             if (ws != null && ws.Locker == Shield.Context)
                 _writerStamp = null;
+            _locals.Release();
         }
         
         void IShielded.TrimCopies(long smallestOpenTransactionId)

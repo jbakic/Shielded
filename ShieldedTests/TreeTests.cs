@@ -140,21 +140,18 @@ namespace ShieldedTests
         [Test]
         public void RangeTest()
         {
-            ShieldedTree<int, object> tree = null;
-            Shield.InTransaction(() => {
-                // initializer syntax calls Add, so is allowed only in transaction.
-                tree = new ShieldedTree<int, object>() {
-                    { 1, null },
-                    { 1, null },
-                    { 2, null },
-                    { 4, null },
-                    { 5, null },
-                    { 7, null },
-                    { 9, null },
-                    { 15, null },
-                    { 19, null },
-                    { 22, null },
-                };
+            // initializer syntax calls Add, so is allowed only in transaction.
+            var tree = Shield.InTransaction(() => new ShieldedTree<int, object>() {
+                { 1, null },
+                { 1, null },
+                { 2, null },
+                { 4, null },
+                { 5, null },
+                { 7, null },
+                { 9, null },
+                { 15, null },
+                { 19, null },
+                { 22, null },
             });
 
             Assert.Throws<InvalidOperationException>(() => {
@@ -174,21 +171,18 @@ namespace ShieldedTests
         [Test]
         public void RangeDescendingTest()
         {
-            ShieldedTree<int, object> tree = null;
-            Shield.InTransaction(() => {
-                // initializer syntax calls Add, so is allowed only in transaction.
-                tree = new ShieldedTree<int, object>() {
-                    { 1, null },
-                    { 1, null },
-                    { 2, null },
-                    { 4, null },
-                    { 5, null },
-                    { 7, null },
-                    { 9, null },
-                    { 15, null },
-                    { 19, null },
-                    { 22, null },
-                };
+            // initializer syntax calls Add, so is allowed only in transaction.
+            var tree = Shield.InTransaction(() => new ShieldedTree<int, object>() {
+                { 1, null },
+                { 1, null },
+                { 2, null },
+                { 4, null },
+                { 5, null },
+                { 7, null },
+                { 9, null },
+                { 15, null },
+                { 19, null },
+                { 22, null },
             });
 
             Assert.Throws<InvalidOperationException>(() => {
@@ -245,14 +239,10 @@ namespace ShieldedTests
         [Test]
         public void ClearTest()
         {
-            ShieldedTree<string, object> tree = null;
-            Shield.InTransaction(() => {
-                // initializer syntax calls Add, so is allowed only in transaction.
-                tree = new ShieldedTree<string, object>() {
-                    { "key a", null },
-                    { "key b", null },
-                    { "key c", null },
-                };
+            var tree = Shield.InTransaction(() => new ShieldedTree<string, object>() {
+                { "key a", null },
+                { "key b", null },
+                { "key c", null },
             });
 
             Assert.Throws<InvalidOperationException>(tree.Clear);
@@ -273,13 +263,10 @@ namespace ShieldedTests
         [Test]
         public void ContainsTest()
         {
-            ShieldedTree<string, object> tree = null;
-            Shield.InTransaction(() => {
-                tree = new ShieldedTree<string, object>() {
-                    { "key a", null },
-                    { "key b", null },
-                    { "key c", null },
-                };
+            var tree = Shield.InTransaction(() => new ShieldedTree<string, object>() {
+                { "key a", null },
+                { "key b", null },
+                { "key c", null },
             });
 
             Assert.IsTrue(tree.ContainsKey("key a"));
@@ -313,13 +300,10 @@ namespace ShieldedTests
         [Test]
         public void RemoveTest()
         {
-            ShieldedTree<string, object> tree = null;
-            Shield.InTransaction(() => {
-                tree = new ShieldedTree<string, object>() {
-                    { "key a", null },
-                    { "key b", null },
-                    { "key c", null },
-                };
+            var tree = Shield.InTransaction(() => new ShieldedTree<string, object>() {
+                { "key a", null },
+                { "key b", null },
+                { "key c", null },
             });
 
             Assert.Throws<InvalidOperationException>(() =>
@@ -354,11 +338,8 @@ namespace ShieldedTests
         public void TryGetValueTest()
         {
             var objectA = new object();
-            ShieldedTree<string, object> tree = null;
-            Shield.InTransaction(() => {
-                tree = new ShieldedTree<string, object>() {
-                    { "key a", objectA },
-                };
+            var tree = Shield.InTransaction(() => new ShieldedTree<string, object>() {
+                { "key a", objectA },
             });
 
             object x;
@@ -379,13 +360,10 @@ namespace ShieldedTests
             var objectA = new object();
             var objectB = new object();
             var objectC = new object();
-            ShieldedTree<string, object> tree = null;
-            Shield.InTransaction(() => {
-                tree = new ShieldedTree<string, object>() {
-                    { "key a", objectA },
-                    { "key b", objectB },
-                    { "key c", objectC },
-                };
+            var tree = Shield.InTransaction(() => new ShieldedTree<string, object>() {
+                { "key a", objectA },
+                { "key b", objectB },
+                { "key c", objectC },
             });
             var hashKeys = new HashSet<string>(new string[] { "key a", "key b", "key c" });
             var hashValues = new HashSet<object>(new object[] { objectA, objectB, objectC });
