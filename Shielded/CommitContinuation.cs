@@ -6,9 +6,8 @@ namespace Shielded
     /// <summary>
     /// An object used to commit a transaction at a later time, or from another
     /// thread. Returned by <see cref="Shield.RunToCommit"/>. The transaction has
-    /// been checked, and is OK to commit. This class is thread-safe - it makes
-    /// sure only one thread can initiate a commit, but any number of threads
-    /// may try a rollback in parallel.
+    /// been checked, and is OK to commit. This class is thread-safe, but may throw
+    /// <see cref="ContinuationCompletedException"/> if another thread has completed it.
     /// </summary>
     public abstract class CommitContinuation : IDisposable
     {
