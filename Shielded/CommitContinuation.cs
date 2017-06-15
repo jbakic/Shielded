@@ -97,7 +97,7 @@ namespace Shielded
 
         private Timer _timer;
 
-        internal void StartTimer(int ms)
+        internal virtual void StartTimer(int ms)
         {
             _timer = new Timer(_ => Dispose(), null, ms, Timeout.Infinite);
         }

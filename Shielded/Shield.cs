@@ -737,7 +737,13 @@ repeatCommutes: if (brokeInCommutes)
                 }
             }
 
-            private object _lock = new object();
+            private object _lock;
+
+            internal override void StartTimer(int ms)
+            {
+                _lock = new object();
+                base.StartTimer(ms);
+            }
 
             private bool Sync(Action act)
             {
