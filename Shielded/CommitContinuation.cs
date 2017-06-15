@@ -68,6 +68,7 @@ namespace Shielded
         /// <summary>
         /// Meta-info on the fields affected by this transaction.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public abstract TransactionField[] Fields
         {
             get;
