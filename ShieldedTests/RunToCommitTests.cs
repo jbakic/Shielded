@@ -140,12 +140,16 @@ namespace ShieldedTests
             using (var cont = Shield.RunToCommit(0, () => a.Value = 5))
             {
                 Thread.Sleep(100);
+
                 Assert.IsFalse(cont.TryCommit());
-            }
-            using (var cont = Shield.RunToCommit(0, () => a.Value = 5))
-            {
-                Thread.Sleep(100);
+                Assert.Throws<ContinuationCompletedException>(cont.Commit);
+
                 Assert.IsFalse(cont.TryRollback());
+                Assert.Throws<ContinuationCompletedException>(cont.Rollback);
+
+                Assert.Throws<ContinuationCompletedException>(() => { var _ = cont.Fields; });
+                Assert.Throws<ContinuationCompletedException>(() => cont.InContext(() => { }));
+                Assert.Throws<ContinuationCompletedException>(() => cont.InContext(fields => { }));
             }
         }
     }

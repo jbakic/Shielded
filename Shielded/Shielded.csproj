@@ -75,6 +75,7 @@
     <Compile Include="TransactionContext.cs" />
     <Compile Include="TransactionalStorage.cs" />
     <Compile Include="ShieldedLocal.cs" />
+    <Compile Include="ContinuationCompletedException.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>

@@ -704,7 +704,7 @@ repeatCommutes: if (brokeInCommutes)
                 get
                 {
                     if (Completed)
-                        throw new InvalidOperationException("Transaction is completed.");
+                        throw new ContinuationCompletedException();
                     if (_fields == null)
                         InContext(() => _fields = Items.GetFields());
                     return _fields;
@@ -715,7 +715,7 @@ repeatCommutes: if (brokeInCommutes)
             public override void InContext(Action act)
             {
                 if (!Sync(act))
-                    throw new InvalidOperationException("Transaction is completed.");
+                    throw new ContinuationCompletedException();
             }
 
             private static readonly IShielded[] EmptyChanges = new IShielded[0];

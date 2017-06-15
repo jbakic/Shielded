@@ -34,12 +34,13 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Commit the transaction held in this continuation. Throws if it's already completing/ed.
+        /// Commit the transaction held in this continuation. Throws if it's already completed.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public virtual void Commit()
         {
             if (!TryCommit())
-                throw new InvalidOperationException("Transaction already completing or completed.");
+                throw new ContinuationCompletedException();
         }
 
         /// <summary>
@@ -49,12 +50,13 @@ namespace Shielded
         public abstract bool TryCommit();
 
         /// <summary>
-        /// Roll back the transaction held in this continuation. Throws if already completing/ed.
+        /// Roll back the transaction held in this continuation. Throws if already completed.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public virtual void Rollback()
         {
             if (!TryRollback())
-                throw new InvalidOperationException("Transaction already completing or completed.");
+                throw new ContinuationCompletedException();
         }
 
         /// <summary>
@@ -75,8 +77,10 @@ namespace Shielded
         /// Run the action inside the transaction context, with information on the
         /// transaction's access pattern given in its argument. Access is limited to
         /// exactly what the main transaction already did. Throws if the continuation
-        /// has completed, dangerous if it is completing.
+        /// has completed. Synchronizes with any other threads concurrently
+        /// trying to commit or rollback.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public void InContext(Action<TransactionField[]> act)
         {
             InContext(() => act(Fields));
@@ -85,8 +89,10 @@ namespace Shielded
         /// <summary>
         /// Run the action inside the transaction context. Access is limited to
         /// exactly what the main transaction already did. Throws if the continuation
-        /// has completed, dangerous if it is completing.
+        /// has completed. Synchronizes with any other threads concurrently
+        /// trying to commit or rollback.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public abstract void InContext(Action act);
 
         private Timer _timer;
@@ -97,7 +103,7 @@ namespace Shielded
         }
 
         /// <summary>
-        /// If not <see cref="Completed"/>, calls <see cref="Rollback"/>.
+        /// If not <see cref="Completed"/>, calls <see cref="TryRollback"/>.
         /// </summary>
         public void Dispose()
         {
