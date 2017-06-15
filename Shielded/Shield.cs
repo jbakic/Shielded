@@ -714,18 +714,8 @@ repeatCommutes: if (brokeInCommutes)
 
             public override void InContext(Action act)
             {
-                if (Completed)
+                if (!Sync(act))
                     throw new InvalidOperationException("Transaction is completed.");
-                var oldContext = Shield._context;
-                try
-                {
-                    Shield._context = this;
-                    act();
-                }
-                finally
-                {
-                    Shield._context = oldContext;
-                }
             }
 
             private static readonly IShielded[] EmptyChanges = new IShielded[0];
@@ -747,26 +737,27 @@ repeatCommutes: if (brokeInCommutes)
                 }
             }
 
-            private int _completing;
+            private object _lock = new object();
 
             private bool Sync(Action act)
             {
-                var effect = false;
+                if (Completed)
+                    return false;
+                var oldContext = Shield._context;
                 try
                 {
-                    try { } finally
+                    Shield._context = this;
+                    lock (_lock)
                     {
-                        effect = Interlocked.CompareExchange(ref _completing, 1, 0) == 0;
+                        if (Completed)
+                            return false;
+                        act();
+                        return true;
                     }
-                    if (!effect || Completed)
-                        return false;
-                    act();
-                    return true;
                 }
                 finally
                 {
-                    if (effect)
-                        Interlocked.Exchange(ref _completing, 0);
+                    Shield._context = oldContext;
                 }
             }
 
@@ -777,7 +768,6 @@ repeatCommutes: if (brokeInCommutes)
                 return Sync(() => {
                     using (this) try
                     {
-                        Shield._context = this;
                         DoCommit();
                     }
                     finally
@@ -834,7 +824,6 @@ repeatCommutes: if (brokeInCommutes)
                     using (this) try { }
                     finally
                     {
-                        Shield._context = this;
                         DoRollback();
                     }
                 });
