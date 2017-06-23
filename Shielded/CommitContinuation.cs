@@ -6,9 +6,8 @@ namespace Shielded
     /// <summary>
     /// An object used to commit a transaction at a later time, or from another
     /// thread. Returned by <see cref="Shield.RunToCommit"/>. The transaction has
-    /// been checked, and is OK to commit. This class is thread-safe - it makes
-    /// sure only one thread can initiate a commit, but any number of threads
-    /// may try a rollback in parallel.
+    /// been checked, and is OK to commit. This class is thread-safe, but may throw
+    /// <see cref="ContinuationCompletedException"/> if another thread has completed it.
     /// </summary>
     public abstract class CommitContinuation : IDisposable
     {
@@ -34,12 +33,13 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Commit the transaction held in this continuation. Throws if it's already completing/ed.
+        /// Commit the transaction held in this continuation. Throws if it's already completed.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public virtual void Commit()
         {
             if (!TryCommit())
-                throw new InvalidOperationException("Transaction already completing or completed.");
+                throw new ContinuationCompletedException();
         }
 
         /// <summary>
@@ -49,12 +49,13 @@ namespace Shielded
         public abstract bool TryCommit();
 
         /// <summary>
-        /// Roll back the transaction held in this continuation. Throws if already completing/ed.
+        /// Roll back the transaction held in this continuation. Throws if already completed.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public virtual void Rollback()
         {
             if (!TryRollback())
-                throw new InvalidOperationException("Transaction already completing or completed.");
+                throw new ContinuationCompletedException();
         }
 
         /// <summary>
@@ -66,6 +67,7 @@ namespace Shielded
         /// <summary>
         /// Meta-info on the fields affected by this transaction.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public abstract TransactionField[] Fields
         {
             get;
@@ -75,8 +77,10 @@ namespace Shielded
         /// Run the action inside the transaction context, with information on the
         /// transaction's access pattern given in its argument. Access is limited to
         /// exactly what the main transaction already did. Throws if the continuation
-        /// has completed, dangerous if it is completing.
+        /// has completed. Synchronizes with any other threads concurrently
+        /// trying to commit or rollback.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public void InContext(Action<TransactionField[]> act)
         {
             InContext(() => act(Fields));
@@ -85,19 +89,21 @@ namespace Shielded
         /// <summary>
         /// Run the action inside the transaction context. Access is limited to
         /// exactly what the main transaction already did. Throws if the continuation
-        /// has completed, dangerous if it is completing.
+        /// has completed. Synchronizes with any other threads concurrently
+        /// trying to commit or rollback.
         /// </summary>
+        /// <exception cref="ContinuationCompletedException"/>
         public abstract void InContext(Action act);
 
         private Timer _timer;
 
-        internal void StartTimer(int ms)
+        internal virtual void StartTimer(int ms)
         {
             _timer = new Timer(_ => Dispose(), null, ms, Timeout.Infinite);
         }
 
         /// <summary>
-        /// If not <see cref="Completed"/>, calls <see cref="Rollback"/>.
+        /// If not <see cref="Completed"/>, calls <see cref="TryRollback"/>.
         /// </summary>
         public void Dispose()
         {

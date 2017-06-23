@@ -621,7 +621,6 @@ namespace ConsoleTests
 
         static void SimpleOps()
         {
-            long time;
             _timer = Stopwatch.StartNew();
             var numItems = 1000000;
             var repeatsPerTrans = 50;
