@@ -119,7 +119,7 @@ namespace Shielded
             set
             {
                 PrepareForWriting(false).Value = value;
-                Changed.Raise(this, EventArgs.Empty);
+                RaiseChanged();
             }
         }
 
@@ -140,7 +140,7 @@ namespace Shielded
         public void Modify(ModificationDelegate d)
         {
             d(ref PrepareForWriting(true).Value);
-            Changed.Raise(this, EventArgs.Empty);
+            RaiseChanged();
         }
 
         /// <summary>
@@ -155,7 +155,7 @@ namespace Shielded
         {
             Shield.EnlistStrictCommute(
                 () => perform(ref PrepareForWriting(true).Value), this);
-            Changed.Raise(this, EventArgs.Empty);
+            RaiseChanged();
         }
 
         /// <summary>
@@ -167,7 +167,7 @@ namespace Shielded
         public void Commute(Action perform)
         {
             Shield.EnlistStrictCommute(perform, this);
-            Changed.Raise(this, EventArgs.Empty);
+            RaiseChanged();
         }
 
         /// <summary>
@@ -176,7 +176,27 @@ namespace Shielded
         /// after the commute is enlisted, and your handler can easily cause commutes to
         /// degenerate.
         /// </summary>
-        public readonly ShieldedEvent<EventArgs> Changed = new ShieldedEvent<EventArgs>();
+        public ShieldedEvent<EventArgs> Changed
+        {
+            get
+            {
+                var ev = _changed;
+                if (ev == null)
+                {
+                    var newObj = new ShieldedEvent<EventArgs>();
+                    ev = Interlocked.CompareExchange(ref _changed, newObj, null) ?? newObj;
+                }
+                return ev;
+            }
+        }
+        private ShieldedEvent<EventArgs> _changed;
+
+        private void RaiseChanged()
+        {
+            var ev = _changed;
+            if (ev != null)
+                ev.Raise(this, EventArgs.Empty);
+        }
 
         /// <summary>
         /// Returns the current <see cref="Value"/>.
