@@ -148,7 +148,9 @@ namespace ShieldedTests
                 Assert.Throws<ContinuationCompletedException>(cont.Rollback);
 
                 Assert.Throws<ContinuationCompletedException>(() => { var _ = cont.Fields; });
-                Assert.Throws<ContinuationCompletedException>(() => cont.InContext(() => { }));
+                Assert.IsFalse(cont.TryInContext(() => { }));
+                Assert.Throws<ContinuationCompletedException>(() => cont.InContext(fields => { }));
+                Assert.IsFalse(cont.TryInContext(() => { }));
                 Assert.Throws<ContinuationCompletedException>(() => cont.InContext(fields => { }));
             }
         }

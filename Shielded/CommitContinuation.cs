@@ -87,13 +87,35 @@ namespace Shielded
         }
 
         /// <summary>
+        /// Try to run the action inside the transaction context, with information on the
+        /// transaction's access pattern given in its argument. Access is limited to
+        /// exactly what the main transaction already did. Synchronizes with any other
+        /// threads concurrently trying to commit or rollback.
+        /// </summary>
+        public bool TryInContext(Action<TransactionField[]> act)
+        {
+            return TryInContext(() => act(Fields));
+        }
+
+        /// <summary>
         /// Run the action inside the transaction context. Access is limited to
         /// exactly what the main transaction already did. Throws if the continuation
         /// has completed. Synchronizes with any other threads concurrently
         /// trying to commit or rollback.
         /// </summary>
         /// <exception cref="ContinuationCompletedException"/>
-        public abstract void InContext(Action act);
+        public virtual void InContext(Action act)
+        {
+            if (!TryInContext(act))
+                throw new ContinuationCompletedException();
+        }
+
+        /// <summary>
+        /// Try to run the action inside the transaction context. Access is limited to
+        /// exactly what the main transaction already did. Synchronizes with any other
+        /// threads concurrently trying to commit or rollback.
+        /// </summary>
+        public abstract bool TryInContext(Action act);
 
         private Timer _timer;
 

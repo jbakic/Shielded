@@ -712,10 +712,9 @@ repeatCommutes: if (brokeInCommutes)
             }
             private TransactionField[] _fields;
 
-            public override void InContext(Action act)
+            public override bool TryInContext(Action act)
             {
-                if (!Sync(act))
-                    throw new ContinuationCompletedException();
+                return Sync(act);
             }
 
             private static readonly IShielded[] EmptyChanges = new IShielded[0];
