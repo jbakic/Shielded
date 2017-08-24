@@ -451,7 +451,10 @@ namespace Shielded
                     _context.Open();
 
                     act();
-                    if (!_rollback.HasValue && CommitCheck())
+
+                    if (_rollback.HasValue)
+                        continue;
+                    if (CommitCheck())
                     {
                         onChecked();
                         return;

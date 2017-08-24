@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -288,6 +289,14 @@ namespace ShieldedTests
             int retryCount = 0;
             Shield.InTransaction(() => {
                 retryCount++;
+                Shield.SideEffect(null, () => {
+                    var localStore = i.GetType()
+                        .GetField("_locals", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .GetValue(i);
+                    Assert.IsNull(localStore.GetType()
+                        .GetField("_holderContext", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .GetValue(localStore));
+                });
                 try
                 {
                     i.Value = 10;
