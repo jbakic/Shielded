@@ -223,7 +223,7 @@ namespace Shielded
                 return;
             var newCurrent = _locals.Value;
             newCurrent.Older = _current;
-            newCurrent.Version = _writerStamp.Version;
+            newCurrent.Version = _writerStamp.Version.Value;
             _current = newCurrent;
             _writerStamp = null;
             _locals.Release();

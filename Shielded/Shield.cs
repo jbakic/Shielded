@@ -645,13 +645,14 @@ repeatCommutes: if (brokeInCommutes)
 #endif
                 }
 
+                var writeStamp = ctx.WriteStamp = new WriteStamp(ctx);
+                CheckTicket checkTicket = null;
                 try
                 {
-                    VersionList.NewVersion(
+                    VersionList.EnterCheck(
                         enlistedClone,
                         commutedItems != null ? commutedItems.Enlisted : null,
-                        out ctx.WriteTicket);
-                    var writeStamp = ctx.WriteStamp = new WriteStamp(ctx, ctx.WriteTicket.Stamp);
+                        out checkTicket);
 
                     if (brokeInCommutes)
                         if (!commutedItems.Enlisted.CanCommit(writeStamp))
@@ -668,14 +669,18 @@ repeatCommutes: if (brokeInCommutes)
                 {
                     if (!commit)
                     {
+                        if (checkTicket != null)
+                            checkTicket.Release();
                         if (commutedItems != null)
                             commutedItems.Enlisted.Rollback();
                         if (!brokeInCommutes)
                             items.Enlisted.Rollback();
-                        ctx.WriteTicket.Rollback();
                     }
                     else
-                        ctx.WriteTicket.Commit();
+                    {
+                        checkTicket.Release();
+                        VersionList.NewVersion(writeStamp, out ctx.WriteTicket);
+                    }
                 }
                 return true;
             }

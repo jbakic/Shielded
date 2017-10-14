@@ -21,25 +21,12 @@ namespace Shielded
     }
 
     /// <summary>
-    /// State of a <see cref="WriteTicket"/>.
-    /// </summary>
-    internal enum VersionState
-    {
-        Checking,
-        Commit,
-        Rollback
-    }
-
-    /// <summary>
     /// Issued by the <see cref="VersionList"/> static class to writers, telling
     /// them which version number to use when writing, and allwing them to
     /// report changes they make back to the VersionList.
     /// </summary>
     internal abstract class WriteTicket : ReadTicket
     {
-        public abstract void Commit();
-        public abstract void Rollback();
-
         /// <summary>
         /// After writers complete a write, they must place into this field
         /// an enumerable of the fields they changed. Needed for trimming old
@@ -47,6 +34,31 @@ namespace Shielded
         /// trimming will never get past this version!
         /// </summary>
         public volatile IEnumerable<IShielded> Changes;
+    }
+
+    /// <summary>
+    /// Taken for the duration of a commit check.
+    /// </summary>
+    internal abstract class CheckTicket
+    {
+        public SimpleHashSet Enlisted;
+        public SimpleHashSet CommEnlisted;
+
+        protected CheckTicket(SimpleHashSet enlisted, SimpleHashSet commEnlisted)
+        {
+            Enlisted = enlisted;
+            CommEnlisted = commEnlisted;
+        }
+
+        public bool Done { get; private set; }
+
+        public void Release()
+        {
+            Done = true;
+            Enlisted = null;
+            CommEnlisted = null;
+            VersionList.OnCheckTicketReleased();
+        }
     }
 
     /// <summary>
@@ -59,42 +71,32 @@ namespace Shielded
         private class VersionEntry : WriteTicket
         {
             public int ReaderCount;
-            public VersionEntry Later;
-            public volatile VersionState State;
-
-            // only != null during Committing state
-            public SimpleHashSet Enlisted;
-            public SimpleHashSet CommEnlisted;
-
-            public override void Commit()
-            {
-                Enlisted = null;
-                CommEnlisted = null;
-                State = VersionState.Commit;
-                VersionList.MoveCurrent();
-            }
-
-            public override void Rollback()
-            {
-                Enlisted = null;
-                CommEnlisted = null;
-                State = VersionState.Rollback;
-                VersionList.MoveCurrent();
-            }
+            public VersionEntry Next;
 
             public void SetStamp(long val)
             {
                 Stamp = val;
             }
+        }
+
+        private class CheckEntry : CheckTicket
+        {
+            public CheckEntry Next;
+
+            public CheckEntry(SimpleHashSet enlisted, SimpleHashSet commEnlisted)
+                : base(enlisted, commEnlisted)
+            { }
 
             public void Wait()
             {
-                SpinWait.SpinUntil(() => State != VersionState.Checking);
+                SpinWait.SpinUntil(() => Done);
             }
         }
 
         private static volatile VersionEntry _current;
         private static VersionEntry _oldestRead;
+
+        private static CheckEntry _checkListHead;
 
         static VersionList()
         {
@@ -159,13 +161,13 @@ namespace Shielded
 
                 var old = _oldestRead;
                 SimpleHashSet toTrim = null;
-                while (old != _current && old.Later.Changes != null &&
+                while (old != _current && old.Next.Changes != null &&
                     Interlocked.CompareExchange(ref old.ReaderCount, int.MinValue, 0) == 0)
                 {
                     // NB any transaction that holds a WriteTicker with Changes == null also
                     // has a ReadTicket with a smaller stamp. but we don't depend on that here.
 
-                    old = old.Later;
+                    old = old.Next;
 
                     if (toTrim == null)
                         toTrim = new SimpleHashSet();
@@ -186,31 +188,43 @@ namespace Shielded
             }
         }
 
-        public static void NewVersion(SimpleHashSet enlisted, SimpleHashSet commEnlisted,
-            out WriteTicket ticket)
+        public static void EnterCheck(SimpleHashSet enlisted, SimpleHashSet commEnlisted,
+            out CheckTicket ticket)
         {
-            var newNode = new VersionEntry { Enlisted = enlisted, CommEnlisted = commEnlisted };
+            var newNode = new CheckEntry(enlisted, commEnlisted);
             ticket = newNode;
-            var current = _current;
+
+            var first = _checkListHead;
+            CheckEntry alreadyChecked = null, lastNotDone = newNode;
             do
             {
-                while (current.Later != null)
+                var current = newNode.Next = first;
+                while (current != null && current != alreadyChecked)
                 {
-                    var later = current.Later;
-                    if (IsConflict(newNode, later) && later.State == VersionState.Checking)
-                        later.Wait();
-                    current = later;
+                    if (!current.Done)
+                    {
+                        if (IsPotentialConflict(newNode, current))
+                            current.Wait();
+                        else
+                            lastNotDone = current;
+                    }
+                    current = current.Next;
                 }
-                var newStamp = current.Stamp + 1;
-                newNode.SetStamp(newStamp);
-            } while (Interlocked.CompareExchange(ref current.Later, newNode, null) != null);
+                if (current == null)
+                    lastNotDone.Next = null;
+                // the only times _checkListHead changes is when some new item is added to the head,
+                // and when it gets set to null in OnCheckTicketReleased. thus, in case we repeat this loop,
+                // either we will encounter this alreadyChecked item again and stop checking there, or all
+                // the elements we see in the repetition must be new to us.
+                alreadyChecked = first;
+            } while ((first = Interlocked.CompareExchange(ref _checkListHead, newNode, alreadyChecked)) != alreadyChecked);
         }
 
-        private static bool IsConflict(VersionEntry newEntry, VersionEntry oldEntry)
+        private static bool IsPotentialConflict(CheckEntry newEntry, CheckEntry oldEntry)
         {
             var oldEnlisted = oldEntry.Enlisted;
             var oldCommEnlisted = oldEntry.CommEnlisted;
-            if (oldEntry.State != VersionState.Checking || oldEnlisted == null)
+            if (oldEnlisted == null)
                 return false;
             return
                 newEntry.Enlisted.Overlaps(oldEnlisted) ||
@@ -220,17 +234,41 @@ namespace Shielded
                         (oldCommEnlisted != null && newEntry.CommEnlisted.Overlaps(oldCommEnlisted))));
         }
 
+        public static void OnCheckTicketReleased()
+        {
+            var oldHead = _checkListHead;
+            var current = oldHead;
+            while (current != null)
+            {
+                if (!current.Done)
+                    return;
+                current = current.Next;
+            }
+            Interlocked.CompareExchange(ref _checkListHead, null, oldHead);
+        }
+
+        public static void NewVersion(WriteStamp stamp, out WriteTicket ticket)
+        {
+            var newNode = new VersionEntry();
+            ticket = newNode;
+            var current = _current;
+            do
+            {
+                while (current.Next != null)
+                    current = current.Next;
+                var newStamp = current.Stamp + 1;
+                newNode.SetStamp(newStamp);
+                stamp.Version = newStamp;
+            } while (Interlocked.CompareExchange(ref current.Next, newNode, null) != null);
+            MoveCurrent();
+        }
+
         private static void MoveCurrent()
         {
-            while (true)
-            {
-                var current = _current;
-                if (current.Later == null || current.Later.State == VersionState.Checking)
-                    break;
-                while (current.Later != null && current.Later.State != VersionState.Checking)
-                    current = current.Later;
-                _current = current;
-            }
+            var current = _current;
+            while (current.Next != null)
+                current = current.Next;
+            _current = current;
         }
     }
 }

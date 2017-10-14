@@ -20,19 +20,18 @@ namespace Shielded
         /// version (i.e. their <see cref="Shield.ReadStamp"/> is greater
         /// or equal to this value) must wait for the lock to be released.
         /// </summary>
-        public readonly long Version;
+        public long? Version;
 
-        public WriteStamp(TransactionContext locker, long version)
+        public WriteStamp(TransactionContext locker)
         {
             Locker = locker;
-            Version = version;
         }
 
         public bool Locked
         {
             get
             {
-                return !_released;
+                return !_released && Version != null;
             }
         }
 
