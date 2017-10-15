@@ -669,17 +669,17 @@ repeatCommutes: if (brokeInCommutes)
                 {
                     if (!commit)
                     {
-                        if (checkTicket != null)
-                            checkTicket.Release();
                         if (commutedItems != null)
                             commutedItems.Enlisted.Rollback();
                         if (!brokeInCommutes)
                             items.Enlisted.Rollback();
+                        if (checkTicket != null)
+                            checkTicket.Release();
                     }
                     else
                     {
-                        checkTicket.Release();
                         VersionList.NewVersion(writeStamp, out ctx.WriteTicket);
+                        checkTicket.Release();
                     }
                 }
                 return true;

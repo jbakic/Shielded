@@ -237,13 +237,15 @@ namespace Shielded
         public static void OnCheckTicketReleased()
         {
             var oldHead = _checkListHead;
+            if (oldHead == null)
+                return;
             var current = oldHead;
-            while (current != null)
+            do
             {
                 if (!current.Done)
                     return;
                 current = current.Next;
-            }
+            } while (current != null);
             Interlocked.CompareExchange(ref _checkListHead, null, oldHead);
         }
 
@@ -265,10 +267,15 @@ namespace Shielded
 
         private static void MoveCurrent()
         {
-            var current = _current;
-            while (current.Next != null)
-                current = current.Next;
-            _current = current;
+            while (true)
+            {
+                var current = _current;
+                if ((current = current.Next) == null)
+                    return;
+                while (current.Next != null)
+                    current = current.Next;
+                _current = current;
+            }
         }
     }
 }
