@@ -67,7 +67,7 @@ namespace Shielded
 
 #else
 
-    internal class SimpleHashSet : ISet<IShielded>
+    internal class SimpleHashSet : ICollection<IShielded>
     {
         private int _count;
 
@@ -254,80 +254,43 @@ namespace Shielded
         }
         #endregion
 
-        #region ISet implementation
+        #region Partial ISet impl
         public bool Add(IShielded item)
         {
             return AddInternal(item);
         }
 
-        void ISet<IShielded>.ExceptWith(IEnumerable<IShielded> other)
+        public bool Overlaps(SimpleHashSet other)
         {
-            throw new System.NotImplementedException();
-        }
-
-        void ISet<IShielded>.IntersectWith(IEnumerable<IShielded> other)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        bool ISet<IShielded>.IsProperSubsetOf(IEnumerable<IShielded> other)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        bool ISet<IShielded>.IsProperSupersetOf(IEnumerable<IShielded> other)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        bool ISet<IShielded>.IsSubsetOf(IEnumerable<IShielded> other)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        bool ISet<IShielded>.IsSupersetOf(IEnumerable<IShielded> other)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public bool Overlaps(IEnumerable<IShielded> other)
-        {
-            var otherAsSet = other as SimpleHashSet;
-            if (otherAsSet == null)
-                return other.Any(Contains);
-            if ((otherAsSet._bloom & this._bloom) == 0)
+            if ((other._bloom & this._bloom) == 0)
                 return false;
-            for (int i = 0; i < otherAsSet._array.Length; i++)
-                if (otherAsSet._array[i] != null && Contains(otherAsSet._array[i]))
+            for (int i = 0; i < other._array.Length; i++)
+                if (other._array[i] != null && Contains(other._array[i]))
                     return true;
             return false;
         }
 
-        public bool SetEquals(IEnumerable<IShielded> other)
+        public bool Overlaps(IShielded[] other)
         {
-            var otherAsSet = other as SimpleHashSet;
-            if (otherAsSet == null)
-            {
-                int counter = 0;
-                foreach (var item in other)
-                {
-                    if (++counter > _count || !Contains(item))
-                        return false;
-                }
-                return counter == _count;
-            }
-
-            if (otherAsSet._bloom != this._bloom || otherAsSet._count != _count)
-                return false;
-            for (int i = 0; i < otherAsSet._array.Length; i++)
-                if (otherAsSet._array[i] != null && !Contains(otherAsSet._array[i]))
-                    return false;
-            return true;
+            for (int i = 0; i < other.Length; i++)
+                if (Contains(other[i]))
+                    return true;
+            return false;
         }
 
-        void ISet<IShielded>.SymmetricExceptWith(IEnumerable<IShielded> other)
+        public bool Overlaps(IEnumerable<IShielded> other)
         {
-            throw new System.NotImplementedException();
+            return other.Any(Contains);
+        }
+
+        public bool SetEquals(SimpleHashSet other)
+        {
+            if (other._bloom != this._bloom || other._count != _count)
+                return false;
+            for (int i = 0; i < other._array.Length; i++)
+                if (other._array[i] != null && !Contains(other._array[i]))
+                    return false;
+            return true;
         }
 
         public void UnionWith(SimpleHashSet otherAsSet)
@@ -356,7 +319,6 @@ namespace Shielded
                 AddInternal(item);
         }
         #endregion
-
     }
 
 #endif
