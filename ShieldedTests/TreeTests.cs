@@ -16,11 +16,11 @@ namespace ShieldedTests
             var objectA = new object();
             var objectB = new object();
             var objectC = new object();
-            var tree = new ShieldedTree<string, object>();
-            Shield.InTransaction(() => {
-                tree.Add("key a", objectA);
-                tree.Add("key b", objectB);
-                tree.Add("key c", objectC);
+            var tree = Shield.InTransaction(() => new ShieldedTree<string, object>()
+            {
+                { "key a", objectA },
+                { "key b", objectB },
+                { "key c", objectC },
             });
             Assert.AreEqual(3, tree.Count);
             Assert.AreEqual(objectA, tree["key a"]);
@@ -66,7 +66,7 @@ namespace ShieldedTests
         [Test]
         public void EnumerationTest()
         {
-            var ordinaryDict = new Dictionary<int, object>() {
+            var sortedList = new SortedList<int, object>() {
                 { 1, new object() },
                 { 2, new object() },
                 { 3, new object() },
@@ -79,31 +79,18 @@ namespace ShieldedTests
             };
             var tree = new ShieldedTree<int, object>();
             Shield.InTransaction(() => {
-                foreach (var kvp in ordinaryDict)
+                foreach (var kvp in sortedList)
                     tree.Add(kvp.Key, kvp.Value);
             });
 
-            Shield.InTransaction(() => {
-                int lastSeen = -1;
-                int count = 0;
-                var checkSet = new HashSet<int>();
-                foreach (var kvp in tree)
-                {
-                    Assert.IsTrue(checkSet.Add(kvp.Key));
-                    Assert.IsTrue(ordinaryDict.ContainsKey(kvp.Key));
-                    Assert.AreEqual(ordinaryDict[kvp.Key], kvp.Value);
-                    Assert.Greater(kvp.Key, lastSeen);
-                    lastSeen = kvp.Key;
-                    count++;
-                }
-                Assert.AreEqual(ordinaryDict.Count, count);
-            });
+            Shield.InTransaction(() =>
+                Assert.IsTrue(sortedList.SequenceEqual(tree)));
         }
 
         [Test]
         public void DescendingEnumerationTest()
         {
-            var ordinaryDict = new Dictionary<int, object>() {
+            var sortedList = new SortedList<int, object>() {
                 { 1, new object() },
                 { 2, new object() },
                 { 3, new object() },
@@ -116,25 +103,12 @@ namespace ShieldedTests
             };
             var tree = new ShieldedTree<int, object>();
             Shield.InTransaction(() => {
-                foreach (var kvp in ordinaryDict)
+                foreach (var kvp in sortedList)
                     tree.Add(kvp.Key, kvp.Value);
             });
 
-            Shield.InTransaction(() => {
-                int lastSeen = int.MaxValue;
-                int count = 0;
-                var checkSet = new HashSet<int>();
-                foreach (var kvp in tree.Descending)
-                {
-                    Assert.IsTrue(checkSet.Add(kvp.Key));
-                    Assert.IsTrue(ordinaryDict.ContainsKey(kvp.Key));
-                    Assert.AreEqual(ordinaryDict[kvp.Key], kvp.Value);
-                    Assert.Less(kvp.Key, lastSeen);
-                    lastSeen = kvp.Key;
-                    count++;
-                }
-                Assert.AreEqual(ordinaryDict.Count, count);
-            });
+            Shield.InTransaction(() =>
+                Assert.IsTrue(sortedList.Reverse().SequenceEqual(tree.Descending)));
         }
 
         [Test]
@@ -155,8 +129,7 @@ namespace ShieldedTests
             });
 
             Assert.Throws<InvalidOperationException>(() => {
-                foreach (var kvp in tree.Range(1, 5))
-                    Assert.Fail();
+                foreach (var kvp in tree.Range(1, 5)) ;
             });
 
             Shield.InTransaction(() => {
@@ -186,8 +159,7 @@ namespace ShieldedTests
             });
 
             Assert.Throws<InvalidOperationException>(() => {
-                foreach (var kvp in tree.RangeDescending(5, 1))
-                    Assert.Fail();
+                foreach (var kvp in tree.RangeDescending(5, 1)) ;
             });
 
             Shield.InTransaction(() => {
@@ -232,8 +204,8 @@ namespace ShieldedTests
                 Assert.IsTrue(expectedValues.SetEquals(tree.Range(1, 1).Select(kvp => kvp.Value)));
             });
             Assert.AreEqual(3, tree.Count);
-            Shield.InTransaction(
-                () => Assert.IsTrue(expectedValues.SetEquals(tree.Range(1, 1).Select(kvp => kvp.Value))));
+            Shield.InTransaction(() =>
+                Assert.IsTrue(expectedValues.SetEquals(tree.Range(1, 1).Select(kvp => kvp.Value))));
         }
 
         [Test]
@@ -287,14 +259,9 @@ namespace ShieldedTests
 
             var array = new KeyValuePair<int, object>[1100];
             ((ICollection<KeyValuePair<int, object>>)tree).CopyTo(array, 100);
-            var expected = 1;
-            foreach (var kvp in array.Skip(100))
-            {
-                Assert.IsTrue(tree.ContainsKey(kvp.Key));
-                Assert.AreEqual(expected, kvp.Key);
-                Assert.AreEqual(tree[kvp.Key], kvp.Value);
-                expected++;
-            }
+
+            Shield.InTransaction(() =>
+                Assert.IsTrue(array.Skip(100).SequenceEqual(tree)));
         }
 
         [Test]
@@ -365,11 +332,11 @@ namespace ShieldedTests
                 { "key b", objectB },
                 { "key c", objectC },
             });
-            var hashKeys = new HashSet<string>(new string[] { "key a", "key b", "key c" });
-            var hashValues = new HashSet<object>(new object[] { objectA, objectB, objectC });
+            var keys = new[] { "key a", "key b", "key c" };
+            var values = new[] { objectA, objectB, objectC };
 
-            Assert.IsTrue(hashKeys.SetEquals(tree.Keys));
-            Assert.IsTrue(hashValues.SetEquals(tree.Values));
+            Assert.IsTrue(keys.SequenceEqual(tree.Keys));
+            Assert.IsTrue(values.SequenceEqual(tree.Values));
         }
     }
 }

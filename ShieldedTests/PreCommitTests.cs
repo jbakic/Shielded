@@ -40,8 +40,8 @@ namespace ShieldedTests
                 }, TaskCreationOptions.LongRunning)).ToArray());
             Assert.AreEqual(50, preCommitFails);
             Assert.AreEqual(2550, x);
-            // just to confirm validity of test! not really a fail if this fails.
-            Assert.Greater(transactionCount, 100);
+            if (transactionCount == 100)
+                Assert.Inconclusive();
         }
 
         public class ValidationException : Exception {}
@@ -90,6 +90,7 @@ namespace ShieldedTests
 
             var barrier = new Barrier(2);
 
+            // first, the version with no prioritization. the slow thread will repeat.
             int slowThread1Repeats = 0;
             var slowThread1 = new Thread(() => {
                 barrier.SignalAndWait();
@@ -121,48 +122,55 @@ namespace ShieldedTests
             Assert.Greater(slowThread1Repeats, 1);
             Assert.AreEqual(999, x);
 
-            // now, we introduce prioritization.
-            // this condition gets triggered before any attempt to write into x
-            int ownerThreadId = -1;
+            // now, we introduce prioritization, using a simple lock
+            var lockObj = new object();
+
+            // this condition gets triggered just before any attempt to commit into x
             Shield.PreCommit(() => { int a = x; return true; }, () => {
-                var threadId = ownerThreadId;
-                if (threadId > -1 && threadId != Thread.CurrentThread.ManagedThreadId)
-                    // we'll cause lower prio threads to busy wait. we could also
-                    // add, e.g., an onRollback SideEffect which would wait for
-                    // a certain signal before continuing the next iteration..
-                    // (NB that Shield.SideEffect would, of course, have to be called
-                    // before calling Rollback.)
-                    Shield.Rollback();
+                // the simplest way to block low prio writers is just:
+                //lock (lockObj) { }
+                // but then the actual commit happens outside of the lock and may yet
+                // cause a conflict with someone just taking the lock. still, it's safer!
+                // and might be good enough for cases where a repetition won't hurt.
+                bool taken = false;
+                Action release = () =>
+                {
+                    if (taken)
+                    {
+                        Monitor.Exit(lockObj);
+                        taken = false;
+                    }
+                };
+                // a bit of extra safety by using sync for the commit case.
+                Shield.SyncSideEffect(release);
+                Shield.SideEffect(null, release);
+
+                Monitor.Enter(lockObj, ref taken);
             });
 
-            // this will pass due to ownerThreadId == -1
+            // not yet locked, so this is ok.
             Shield.InTransaction(() => x.Value = 0);
 
             int slowThread2Repeats = 0;
             var slowThread2 = new Thread(() => {
-                try
+                barrier.SignalAndWait();
+                lock (lockObj)
                 {
-                    barrier.SignalAndWait();
-                    Interlocked.Exchange(ref ownerThreadId, Thread.CurrentThread.ManagedThreadId);
-                    Shield.InTransaction(() => {
+                    Shield.InTransaction(() =>
+                    {
                         Interlocked.Increment(ref slowThread2Repeats);
                         int a = x;
                         Thread.Sleep(100);
                         x.Value = a - 1;
                     });
                 }
-                finally
-                {
-                    Interlocked.Exchange(ref ownerThreadId, -1);
-                }
             });
             slowThread2.Start();
 
-            conditional = Shield.Conditional(() => { int i = x; return true; },
-                () => {
-                    barrier.SignalAndWait();
-                    conditional.Dispose();
-                });
+            conditional = Shield.Conditional(() => { int i = x; return true; }, () => {
+                barrier.SignalAndWait();
+                conditional.Dispose();
+            });
 
             foreach (int i in Enumerable.Range(1, 1000))
             {
@@ -195,7 +203,7 @@ namespace ShieldedTests
                 {
                     Interlocked.Increment(ref failVisibleCount);
                     // this will always fail to commit, confirming that the transaction
-                    // is already bound to fail. but, the failVisibleCount will be >0.
+                    // is already bound to fail. but, the failVisibleCount might be >0.
                     failCommitCount.Modify((ref int n) => n++);
                 }
             });

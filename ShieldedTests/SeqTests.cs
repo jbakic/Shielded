@@ -250,6 +250,7 @@ namespace ShieldedTests
                     oneTimer.Start();
                     oneTimer.Join();
                 }
+                // the difference is here - seq2:
                 var b = seq2.Any();
             });
             Assert.AreEqual(2, transactionCount);
@@ -299,11 +300,12 @@ namespace ShieldedTests
             var seq = new ShieldedSeq<int>(Enumerable.Range(1, 10).ToArray());
             Shield.InTransaction(() => 
                 // handling the exception here means the transaction will commit.
-                Assert.Throws<InvalidOperationException>(() => seq.RemoveAll(i => {
-                    if (i == 5)
-                        throw new InvalidOperationException();
-                    return true;
-                })));
+                Assert.Throws<InvalidOperationException>(() =>
+                    seq.RemoveAll(i => {
+                        if (i == 5)
+                            throw new InvalidOperationException();
+                        return true;
+                    })));
             Assert.AreEqual(5, seq[0]);
             Assert.AreEqual(6, seq.Count);
         }

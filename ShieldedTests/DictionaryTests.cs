@@ -75,22 +75,16 @@ namespace ShieldedTests
 
             Task.WaitAll(
                 Enumerable.Range(0, 1000).Select(i => Task.Factory.StartNew(() =>
-                {
-                    Shield.InTransaction(() =>
-                    {
+                    Shield.InTransaction(() => {
                         Interlocked.Increment(ref transactionCount);
                         var a = dict[i % 100];
                         Thread.Sleep(5);
                         dict[i % 100] = a + 1;
-                    });
-                }, TaskCreationOptions.LongRunning)).ToArray());
+                    }), TaskCreationOptions.LongRunning)).ToArray());
 
-            Shield.InTransaction(() => {
-                var values = dict.Values;
-                foreach (var value in values)
-                    Assert.AreEqual(10, value);
-            });
-            Assert.Greater(transactionCount, 100);
+            Assert.IsTrue(dict.Values.SequenceEqual(Enumerable.Repeat(10, 100)));
+            if (transactionCount == 100)
+                Assert.Inconclusive();
         }
 
         [Test]
@@ -100,14 +94,11 @@ namespace ShieldedTests
             int transactionCount = 0;
             Task.WaitAll(
                 Enumerable.Range(1, 100).Select(i => Task.Factory.StartNew(() =>
-                {
-                    Shield.InTransaction(() =>
-                    {
+                    Shield.InTransaction(() => {
                         Interlocked.Increment(ref transactionCount);
                         dict[i] = new object();
                         Thread.Sleep(5);
-                    });
-                }, TaskCreationOptions.LongRunning)).ToArray());
+                    }), TaskCreationOptions.LongRunning)).ToArray());
             Assert.AreEqual(100, transactionCount);
         }
 
@@ -189,17 +180,7 @@ namespace ShieldedTests
                 // tested for how well he manages thread-local data. So, we add some changes here.
                 dict.Add(2, addedObject);
                 dict.Remove(666999);
-
-                int count = 0;
-                var checkSet = new HashSet<int>();
-                foreach (var kvp in dict)
-                {
-                    Assert.IsTrue(checkSet.Add(kvp.Key));
-                    Assert.IsTrue(ordinaryDict.ContainsKey(kvp.Key));
-                    Assert.AreEqual(ordinaryDict[kvp.Key], kvp.Value);
-                    count++;
-                }
-                Assert.AreEqual(3, count);
+                Assert.IsTrue(dict.OrderBy(kvp => kvp.Key).SequenceEqual(ordinaryDict.OrderBy(kvp => kvp.Key)));
             });
         }
 
@@ -232,10 +213,10 @@ namespace ShieldedTests
         [Test]
         public void ClearTest()
         {
-            var dict = new ShieldedDict<string, object>(new KeyValuePair<string, object>[] {
-                new KeyValuePair<string, object>("key a", null),
-                new KeyValuePair<string, object>("key b", null),
-                new KeyValuePair<string, object>("key c", null),
+            var dict = Shield.InTransaction(() => new ShieldedDict<string, object>() {
+                { "key a", null },
+                { "key b", null },
+                { "key c", null },
             });
 
             Assert.Throws<InvalidOperationException>(dict.Clear);
@@ -256,10 +237,10 @@ namespace ShieldedTests
         [Test]
         public void ContainsTest()
         {
-            var dict = new ShieldedDict<string, object>(new KeyValuePair<string, object>[] {
-                new KeyValuePair<string, object>("key a", null),
-                new KeyValuePair<string, object>("key b", null),
-                new KeyValuePair<string, object>("key c", null),
+            var dict = Shield.InTransaction(() => new ShieldedDict<string, object>() {
+                { "key a", null },
+                { "key b", null },
+                { "key c", null },
             });
 
             Assert.IsTrue(dict.ContainsKey("key a"));
@@ -293,22 +274,17 @@ namespace ShieldedTests
             // this works out of transaction (and consequently, so do ToArray and ToList), by opening
             // a transaction itself. that could not be done when you do a foreach.
             ((ICollection<KeyValuePair<int, object>>)dict).CopyTo(array, 100);
-            var keys = new HashSet<int>();
-            foreach (var kvp in array.Skip(100))
-            {
-                Assert.IsTrue(dict.ContainsKey(kvp.Key));
-                Assert.IsTrue(keys.Add(kvp.Key));
-                Assert.AreEqual(dict[kvp.Key], kvp.Value);
-            }
+
+            Assert.IsTrue(array.Skip(100).OrderBy(kvp => kvp.Key).SequenceEqual(dict.OrderBy(kvp => kvp.Key)));
         }
 
         [Test]
         public void RemoveTest()
         {
-            var dict = new ShieldedDict<string, object>(new KeyValuePair<string, object>[] {
-                new KeyValuePair<string, object>("key a", null),
-                new KeyValuePair<string, object>("key b", null),
-                new KeyValuePair<string, object>("key c", null),
+            var dict = Shield.InTransaction(() => new ShieldedDict<string, object>() {
+                { "key a", null },
+                { "key b", null },
+                { "key c", null },
             });
 
             Assert.Throws<InvalidOperationException>(() =>
@@ -341,8 +317,8 @@ namespace ShieldedTests
         public void TryGetValueTest()
         {
             var objectA = new object();
-            var dict = new ShieldedDict<string, object>(new KeyValuePair<string, object>[] {
-                new KeyValuePair<string, object>("key a", objectA),
+            var dict = Shield.InTransaction(() => new ShieldedDict<string, object>() {
+                { "key a", objectA },
             });
 
             object x;
@@ -363,10 +339,10 @@ namespace ShieldedTests
             var objectA = new object();
             var objectB = new object();
             var objectC = new object();
-            var dict = new ShieldedDict<string, object>(new KeyValuePair<string, object>[] {
-                new KeyValuePair<string, object>("key a", objectA),
-                new KeyValuePair<string, object>("key b", objectB),
-                new KeyValuePair<string, object>("key c", objectC),
+            var dict = Shield.InTransaction(() => new ShieldedDict<string, object>() {
+                { "key a", objectA },
+                { "key b", objectB },
+                { "key c", objectC },
             });
             var hashKeys = new HashSet<string>(new string[] { "key a", "key b", "key c" });
             var hashValues = new HashSet<object>(new object[] { objectA, objectB, objectC });

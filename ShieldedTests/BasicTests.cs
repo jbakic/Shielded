@@ -16,7 +16,7 @@ namespace ShieldedTests
         [Test]
         public void TransactionSafetyTest()
         {
-            Shielded<int> a = new Shielded<int>(5);
+            var a = new Shielded<int>(5);
             Assert.AreEqual(5, a);
 
             Assert.Throws<InvalidOperationException>(() =>
@@ -84,9 +84,10 @@ namespace ShieldedTests
                         Assert.IsFalse(committed);
                     }
                 }, TaskCreationOptions.LongRunning)).ToArray());
+
             Assert.AreEqual(4950, x);
-            // just to confirm validity of test! not really a fail if this fails.
-            Assert.Greater(transactionCount, 100);
+            if (transactionCount == 100)
+                Assert.Inconclusive();
         }
 
         [Test]
@@ -129,7 +130,7 @@ namespace ShieldedTests
                     () => {
                         throw new IgnoreMe();
                     });
-                    // in case Assign() becomes commutative, we use Modify() to ensure conflict.
+                    // in case the Value setter becomes commutative, we use Modify to ensure conflict.
                     x.Modify((ref DateTime d) => d = DateTime.UtcNow);
                     var t = new Thread(() =>
                         Shield.InTransaction(() =>

@@ -15,11 +15,10 @@ namespace ShieldedTests
         public void BasicRunToCommit()
         {
             var a = new Shielded<int>(5);
-            using (var cont = Shield.RunToCommit(5000,
-                () => {
-                    if (a == 5)
-                        a.Value = 20;
-                }))
+            using (var cont = Shield.RunToCommit(5000, () => {
+                if (a == 5)
+                    a.Value = 20;
+            }))
             {
                 int runCount = 0, insideIfCount = 0;
                 var t = new Thread(() => Shield.InTransaction(() => {
@@ -50,22 +49,6 @@ namespace ShieldedTests
                 Assert.IsTrue(cont.Committed);
             }
             Assert.AreEqual(20, a);
-        }
-
-        [Test]
-        public void RunToCommitAndFail()
-        {
-            var a = new Shielded<int>(5);
-            using (Shield.WhenCommitting(_ => Shield.Rollback()))
-            {
-                using (var cont = Shield.RunToCommit(5000, () => a.Value = 10))
-                {
-                    // RunToCommit guarantees that Shielded will allow the commit, but cannot
-                    // guarantee for any WhenCommitting subscriptions.
-                    Assert.Throws<AggregateException>(cont.Commit);
-                    Assert.IsTrue(cont.Completed);
-                }
-            }
         }
 
         [Test]
@@ -149,8 +132,8 @@ namespace ShieldedTests
 
                 Assert.Throws<ContinuationCompletedException>(() => { var _ = cont.Fields; });
                 Assert.IsFalse(cont.TryInContext(() => { }));
-                Assert.Throws<ContinuationCompletedException>(() => cont.InContext(fields => { }));
-                Assert.IsFalse(cont.TryInContext(() => { }));
+                Assert.Throws<ContinuationCompletedException>(() => cont.InContext(() => { }));
+                Assert.IsFalse(cont.TryInContext(fields => { }));
                 Assert.Throws<ContinuationCompletedException>(() => cont.InContext(fields => { }));
             }
         }

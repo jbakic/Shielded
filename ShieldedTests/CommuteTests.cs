@@ -17,19 +17,17 @@ namespace ShieldedTests
             Shield.InTransaction(() => a.Commute((ref int n) => n++));
             Assert.AreEqual(1, a);
 
-            Shield.InTransaction(() =>
-                {
-                    Assert.AreEqual(1, a);
-                    a.Commute((ref int n) => n++);
-                    Assert.AreEqual(2, a);
-                });
+            Shield.InTransaction(() => {
+                Assert.AreEqual(1, a);
+                a.Commute((ref int n) => n++);
+                Assert.AreEqual(2, a);
+            });
             Assert.AreEqual(2, a);
 
-            Shield.InTransaction(() =>
-                {
-                    a.Commute((ref int n) => n++);
-                    Assert.AreEqual(3, a);
-                });
+            Shield.InTransaction(() => {
+                a.Commute((ref int n) => n++);
+                Assert.AreEqual(3, a);
+            });
             Assert.AreEqual(3, a);
 
             int transactionCount = 0, commuteCount = 0;
@@ -48,9 +46,9 @@ namespace ShieldedTests
 
             Shield.InTransaction(() => {
                 a.Commute((ref int n) => n -= 3);
-                a.Commute((ref int n) => n--);
+                a.Commute((ref int n) => n *= 2);
             });
-            Assert.AreEqual(99, a);
+            Assert.AreEqual(200, a);
         }
 
         [Test]
@@ -78,8 +76,8 @@ namespace ShieldedTests
             // may be detected before the commute lambda actually gets to execute, so the
             // trans count can be greater than commute count.
             Assert.GreaterOrEqual(transactionCount, commuteCount/2);
-            // classic, just to confirm there was at least one conflict.
-            Assert.Greater(commuteCount, numInc);
+            if (commuteCount == numInc)
+                Assert.Inconclusive();
         }
 
         [Test]
