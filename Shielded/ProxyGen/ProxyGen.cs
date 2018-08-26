@@ -21,7 +21,6 @@ namespace Shielded.ProxyGen
         const string ShieldedValueProperty = "Value";
         const string CommuteMethod = "Commute";
         const string OnChangedMethod = "OnChanged";
-        const string ShieldedDll = "Shielded.dll";
 
         /// <summary>
         /// Prepare the specified types.
@@ -39,7 +38,6 @@ namespace Shielded.ProxyGen
                 .Where(t => !proxies.ContainsKey(t))
                 .ToArray();
             var compiledAssembly = MakeAssembly(cu => {
-                cu.ReferencedAssemblies.Add(ShieldedDll);
                 foreach (var loc in unpreparedTypes.SelectMany(GetReferences).Distinct())
                     cu.ReferencedAssemblies.Add(loc);
 
@@ -53,10 +51,13 @@ namespace Shielded.ProxyGen
 
         private static IEnumerable<string> GetReferences(Type t)
         {
-            return t.GetInterfaces()
-                .Select(i => i.Assembly.Location)
-                .Concat(new[] { t.BaseType.Assembly.Location, t.Assembly.Location })
-                .Distinct();
+            var result = t.Assembly.GetReferencesRecursive();
+            result.Add(t.Assembly.GetName().Name, t.Assembly);
+            var shieldedAsm = typeof(Shielded<>).Assembly;
+            var shieldedAsmName = shieldedAsm.GetName().Name;
+            if (!result.ContainsKey(shieldedAsmName))
+                result.Add(shieldedAsmName, shieldedAsm);
+            return result.Values.Select(a => a.Location);
         }
 
         public static bool IsProxy(Type t)
@@ -80,7 +81,6 @@ namespace Shielded.ProxyGen
             var compiledAssembly = MakeAssembly(cu => {
                 foreach (var assembly in GetReferences(t))
                     cu.ReferencedAssemblies.Add(assembly);
-                cu.ReferencedAssemblies.Add(ShieldedDll);
                 PrepareType(t, cu);
             });
             return compiledAssembly.GetTypes()[0];

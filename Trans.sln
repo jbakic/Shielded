@@ -1,11 +1,15 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2003
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shielded", "Shielded\Shielded.csproj", "{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleTests", "ConsoleTests\ConsoleTests.csproj", "{C217F353-1145-4062-9D76-B0FC90854883}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShieldedTests", "ShieldedTests\ShieldedTests.csproj", "{7BBF29FE-3683-4290-B39D-485E7DEE5388}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExternRefForProxyTest", "ExternRefForProxyTest\ExternRefForProxyTest.csproj", "{38AE2FF7-6232-4638-A366-8F757AE36D66}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,25 +17,35 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C217F353-1145-4062-9D76-B0FC90854883}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C217F353-1145-4062-9D76-B0FC90854883}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C217F353-1145-4062-9D76-B0FC90854883}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C217F353-1145-4062-9D76-B0FC90854883}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C217F353-1145-4062-9D76-B0FC90854883}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C217F353-1145-4062-9D76-B0FC90854883}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C217F353-1145-4062-9D76-B0FC90854883}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C217F353-1145-4062-9D76-B0FC90854883}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7BBF29FE-3683-4290-B39D-485E7DEE5388}.Release|Any CPU.Build.0 = Release|Any CPU
+		{38AE2FF7-6232-4638-A366-8F757AE36D66}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{38AE2FF7-6232-4638-A366-8F757AE36D66}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{38AE2FF7-6232-4638-A366-8F757AE36D66}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{38AE2FF7-6232-4638-A366-8F757AE36D66}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5F8A645F-718A-4D90-BF80-D656AB743A66}
 	EndGlobalSection
 	GlobalSection(MonoDevelopProperties) = preSolution
 		Policies = $0
 		$0.DotNetNamingPolicy = $1
 		$1.DirectoryNamespaceAssociation = PrefixedHierarchical
 		$1.ResourceNamePolicy = FileFormatDefault
-		$0.TextStylePolicy = $2
+		$0.TextStylePolicy = $4
 		$2.inheritsSet = VisualStudio
 		$2.inheritsScope = text/plain
 		$2.scope = text/x-csharp
@@ -65,7 +79,6 @@ Global
 		$3.inheritsSet = Mono
 		$3.inheritsScope = text/x-csharp
 		$3.scope = text/x-csharp
-		$0.TextStylePolicy = $4
 		$4.inheritsSet = VisualStudio
 		$4.inheritsScope = text/plain
 		$4.scope = text/plain

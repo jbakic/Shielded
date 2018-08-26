@@ -45,6 +45,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
+    <Compile Include="ProxyGen\ReferenceResolver.cs" />
     <Compile Include="TransException.cs" />
     <Compile Include="IShielded.cs" />
     <Compile Include="SideEffect.cs" />
@@ -78,9 +79,7 @@
     <Compile Include="ContinuationCompletedException.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
-  <ItemGroup>
-    <Folder Include="ProxyGen\" />
-  </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
     <None Include="ProxyGen\README.txt" />
   </ItemGroup>

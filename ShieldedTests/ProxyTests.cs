@@ -204,6 +204,13 @@ namespace ShieldedTests
             var e4 = Factory.NewShielded<Entity4>();
             AssertTransactional(e4);
         }
+
+        [Test]
+        public void ProxyWithImmutableCollTest()
+        {
+            var e = Factory.NewShielded<EntityWithExternalProperty>();
+            AssertTransactional(e);
+        }
     }
 }
 

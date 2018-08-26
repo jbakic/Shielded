@@ -1,4 +1,6 @@
-﻿using System;
+﻿using ExternRefForProxyTest;
+using System;
+using System.Collections.Immutable;
 
 namespace ShieldedTests
 {
@@ -22,6 +24,13 @@ namespace ShieldedTests.ProxyTestEntities
     {
         public virtual Guid Id { get; set; }
         public virtual string Name { get; set; }
+    }
+
+    public class EntityWithExternalProperty : IIdentifiable<Guid>
+    {
+        public virtual Guid Id { get; set; }
+        public virtual AnExternalClass External { get; set; }
+        public virtual ImmutableArray<int> ImmutableArray { get; set; }
     }
 }
 
