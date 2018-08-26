@@ -47,6 +47,16 @@ namespace Shielded
         }
 
         /// <summary>
+        /// Returns the current <see cref="Value"/>, or the default(T) if no value
+        /// is currently stored, i.e. if <see cref="HasValue"/> is false.
+        /// </summary>
+        /// <returns></returns>
+        public T GetValueOrDefault()
+        {
+            return HasValue ? Value : default(T);
+        }
+
+        /// <summary>
         /// Returns the current <see cref="Value"/>.
         /// </summary>
         public static implicit operator T(ShieldedLocal<T> local)

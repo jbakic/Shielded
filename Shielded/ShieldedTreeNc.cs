@@ -643,8 +643,18 @@ namespace Shielded
         /// </summary>
         public bool Remove(KeyValuePair<TKey, TValue> item)
         {
-            var target = RangeInternal(item.Key, item.Key).FirstOrDefault(n =>
-                EqualityComparer<TValue>.Default.Equals(n.Value.Value, item.Value));
+            return Remove(item.Key, item.Value);
+        }
+
+        /// <summary>
+        /// Remove the given key-value pair from the tree. Checks both the key and
+        /// value, which may be useful due to the tree supporting multiple entries
+        /// with the same key.
+        /// </summary>
+        public bool Remove(TKey key, TValue value)
+        {
+            var target = RangeInternal(key, key).FirstOrDefault(n =>
+                EqualityComparer<TValue>.Default.Equals(n.Value.Value, value));
             if (target == null)
                 return false;
             RemoveInternal(target);
@@ -750,6 +760,17 @@ namespace Shielded
                     () => ((IEnumerable<KeyValuePair<TKey, TValue>>)this)
                         .Select(kvp => kvp.Value)
                         .ToList());
+            }
+        }
+
+        /// <summary>
+        /// Returns true if tree is empty. More efficient than any enumerator if not.
+        /// </summary>
+        public bool IsEmpty
+        {
+            get
+            {
+                return _head.Value == null;
             }
         }
     }

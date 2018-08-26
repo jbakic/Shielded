@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Linq;
+using System.Reflection;
 
 namespace Shielded
 {
@@ -461,13 +462,28 @@ namespace Shielded
                     }
                     _context.DoCheckFailed();
                 }
-                catch (TransException) { }
+                catch (Exception ex) when (IsTransException(ex)) { }
                 finally
                 {
                     if (_context != null)
                         _context.DoRollback();
                 }
             }
+        }
+
+        /// <summary>
+        /// Helper for checking if an exception is <see cref="TransException"/>, or an
+        /// aggregate or target invocation exception which contain a TransException. Checks
+        /// them recursively. Such an exception causes a retry of the current transaction.
+        /// </summary>
+        /// <param name="ex">Exception to check.</param>
+        /// <returns>True if the exception is or contains a <see cref="TransException"/>.</returns>
+        public static bool IsTransException(Exception ex)
+        {
+            return
+                ex is TransException ||
+                ex is TargetInvocationException ti && IsTransException(ti.InnerException) ||
+                ex is AggregateException aggr && aggr.InnerExceptions.Any(IsTransException);
         }
 
         private static readonly ShieldedLocal<bool> _rollback = new ShieldedLocal<bool>();
@@ -521,6 +537,20 @@ namespace Shielded
             {
                 _readOld = false;
             }
+        }
+
+        /// <summary>
+        /// Executes the delegate in a context where every read returns the value as
+        /// it was at transaction opening. Writes still work, even though their
+        /// effects cannot be seen in this context. And please note that
+        /// <see cref="Shielded&lt;T&gt;.Modify"/> will not be affected and will expose
+        /// the last written value.
+        /// </summary>
+        public static T ReadOldState<T>(Func<T> act)
+        {
+            T retVal = default(T);
+            Shield.ReadOldState(() => { retVal = act(); });
+            return retVal;
         }
 
         /// <summary>
@@ -634,6 +664,8 @@ namespace Shielded
                             items.Commutes.SelectMany(c => c.Affecting)) :
                         items.Enlisted.Where(HasChanges))
                     .Run();
+                // in case a new commute sub was made
+                brokeInCommutes = items.Commutes != null && items.Commutes.Count > 0;
             }
 
             try
