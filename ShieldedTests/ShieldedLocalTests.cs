@@ -93,6 +93,26 @@ namespace ShieldedTests
                     Shield.Rollback();
             });
         }
+
+        [Test]
+        public void GetDefaultValueTest()
+        {
+            var local = new ShieldedLocal<int>();
+
+            Assert.Throws<InvalidOperationException>(() => { var b = local.GetValueOrDefault(); });
+            Assert.Throws<InvalidOperationException>(() => { var b = local.GetValueOrDefault(42); });
+
+            Shield.InTransaction(() =>
+            {
+                Assert.AreEqual(0, local.GetValueOrDefault());
+                Assert.AreEqual(42, local.GetValueOrDefault(42));
+
+                local.Value = 10;
+
+                Assert.AreEqual(10, local.GetValueOrDefault());
+                Assert.AreEqual(10, local.GetValueOrDefault(42));
+            });
+        }
     }
 }
 

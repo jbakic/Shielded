@@ -47,14 +47,10 @@ namespace Shielded
         }
 
         /// <summary>
-        /// Returns the current <see cref="Value"/>, or the default(T) if no value
+        /// Returns the current <see cref="Value"/>, or the given default if no value
         /// is currently stored, i.e. if <see cref="HasValue"/> is false.
         /// </summary>
-        /// <returns></returns>
-        public T GetValueOrDefault()
-        {
-            return HasValue ? Value : default(T);
-        }
+        public T GetValueOrDefault(T defaultValue = default) => HasValue ? Value : defaultValue;
 
         /// <summary>
         /// Returns the current <see cref="Value"/>.

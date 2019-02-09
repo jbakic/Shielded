@@ -24,6 +24,14 @@ namespace Shielded
             }
         }
 
+        internal static bool CommitCheckDone
+        {
+            get
+            {
+                return _context.CommitCheckDone;
+            }
+        }
+
         /// <summary>
         /// Current transaction's read stamp, i.e. the latest version it can read.
         /// Thread-static. Throws if called out of transaction.

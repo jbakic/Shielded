@@ -150,7 +150,7 @@ namespace Shielded
                     locals.Items.Add(key, null);
                 v = CurrentTransactionOldValue(key);
             }
-            else if (_dict.TryGetValue(key, out curr) && curr.Version > Shield.ReadStamp)
+            else if (!Shield.CommitCheckDone && _dict.TryGetValue(key, out curr) && curr.Version > Shield.ReadStamp)
                 throw new TransException("Writable read collision.");
             return v;
         }
@@ -179,7 +179,7 @@ namespace Shielded
             {
                 ItemKeeper local = PrepareWrite(key);
                 ItemKeeper curr;
-                if (_dict.TryGetValue(key, out curr) && curr.Version > Shield.ReadStamp)
+                if (!Shield.CommitCheckDone && _dict.TryGetValue(key, out curr) && curr.Version > Shield.ReadStamp)
                     throw new TransException("Write collision.");
 
                 if (local == null)

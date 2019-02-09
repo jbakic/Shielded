@@ -254,5 +254,37 @@ namespace ShieldedTests
                         b.Value = 1;
                     })));
         }
+
+        [Test]
+        public void SyncSideEffectReadsCommute()
+        {
+            // in a SyncSideEffect you can read from a commuted field, but your ReadStamp has been set
+            // back to its original value, which is possibly lower than that field's last written
+            // value from some other, concurrent transaction. fields used to check for this, and roll back
+            // the transaction after it was already checked!
+            var a = new Shielded<int>();
+
+            int lastReadValue = 0;
+            Shield.InTransaction(() => {
+                a.Commute((ref int x) => x++);
+
+                var otherThread = new Thread(() => Shield.InTransaction(() =>
+                {
+                    a.Value = 10;
+                }));
+                otherThread.Start();
+                otherThread.Join();
+
+                Shield.SideEffect(null, () => Assert.Fail("Invalid rollback occurred."));
+                Shield.SyncSideEffect(() =>
+                {
+                    // here, the field's last written value has version 1, and our ReadStamp is 0.
+                    // however, the commute subtransaction had ReadStamp 1, and it checked out, so,
+                    // this should not be a problem.
+                    lastReadValue = a.Value;
+                });
+            });
+            Assert.AreEqual(11, lastReadValue);
+        }
     }
 }

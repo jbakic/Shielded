@@ -86,7 +86,7 @@ namespace Shielded
         private ValueKeeper PrepareForWriting(bool prepareOld)
         {
             CheckLockAndEnlist(true);
-            if (_current.Version > Shield.ReadStamp)
+            if (!Shield.CommitCheckDone && _current.Version > Shield.ReadStamp)
                 throw new TransException("Write collision.");
             if (_locals.HasValue)
                 return _locals.Value;
@@ -112,7 +112,7 @@ namespace Shielded
                 CheckLockAndEnlist(false);
                 if (!_locals.HasValue || Shield.ReadingOldState)
                     return CurrentTransactionOldValue().Value;
-                else if (_current.Version > Shield.ReadStamp)
+                else if (!Shield.CommitCheckDone && _current.Version > Shield.ReadStamp)
                     throw new TransException("Writable read collision.");
                 return _locals.Value.Value;
             }
