@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 // Change them to the values specific to your project.
 
 [assembly: AssemblyTitle("Shielded")]
-[assembly: AssemblyDescription("A strict, fast and mostly lock-free Software Transactional Memory implementation for the .NET Framework.")]
+[assembly: AssemblyDescription("A strict, fast and mostly lock-free Software Transactional Memory implementation for .NET")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("")]

@@ -64,7 +64,7 @@
       <Name>ExternRefForProxyTest</Name>
     </ProjectReference>
     <ProjectReference Include="..\Shielded\Shielded.csproj">
-      <Project>{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}</Project>
+      <Project>{3bde77c0-1538-4296-9012-f8814590d3da}</Project>
       <Name>Shielded</Name>
     </ProjectReference>
   </ItemGroup>

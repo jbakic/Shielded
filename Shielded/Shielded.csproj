@@ -1,86 +1,20 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{F0AAA222-0000-461C-81ED-70BCAAD2A2B9}</ProjectGuid>
-    <OutputType>Library</OutputType>
+    <TargetFrameworks>netstandard2.0;net4</TargetFrameworks>
     <RootNamespace>Shielded</RootNamespace>
-    <AssemblyName>Shielded</AssemblyName>
-    <PublishUrl>publish\</PublishUrl>
-    <Install>true</Install>
-    <InstallFrom>Disk</InstallFrom>
-    <UpdateEnabled>false</UpdateEnabled>
-    <UpdateMode>Foreground</UpdateMode>
-    <UpdateInterval>7</UpdateInterval>
-    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
-    <UpdatePeriodically>false</UpdatePeriodically>
-    <UpdateRequired>false</UpdateRequired>
-    <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
-    <IsWebBootstrapper>false</IsWebBootstrapper>
-    <UseApplicationTrust>false</UseApplicationTrust>
-    <BootstrapperEnabled>true</BootstrapperEnabled>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+    <GenerateAssemblyTitleAttribute>false</GenerateAssemblyTitleAttribute>
+    <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug</OutputPath>
-    <WarningLevel>4</WarningLevel>
-    <DebugSymbols>true</DebugSymbols>
-    <DocumentationFile>bin\Debug\Shielded.xml</DocumentationFile>
-    <DefineConstants>DEBUG;</DefineConstants>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release</OutputPath>
-    <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Release\Shielded.xml</DocumentationFile>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <Compile Remove="ProxyGen\**" />
+    <EmbeddedResource Remove="ProxyGen\**" />
+    <None Remove="ProxyGen\**" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="AssemblyInfo.cs" />
-    <Compile Include="ProxyGen\ReferenceResolver.cs" />
-    <Compile Include="TransException.cs" />
-    <Compile Include="IShielded.cs" />
-    <Compile Include="SideEffect.cs" />
-    <Compile Include="Shield.cs" />
-    <Compile Include="Shielded.cs" />
-    <Compile Include="ShieldedSeq.cs" />
-    <Compile Include="ShieldedTree.cs" />
-    <Compile Include="ShieldedEvent.cs" />
-    <Compile Include="Actions.cs" />
-    <Compile Include="SimpleHashSet.cs" />
-    <Compile Include="WriteStamp.cs" />
-    <Compile Include="VersionList.cs" />
-    <Compile Include="ProxyGen\Factory.cs" />
-    <Compile Include="ProxyGen\NothingToDo.cs" />
-    <Compile Include="ProxyGen\ProxyGen.cs" />
-    <Compile Include="ProxyGen\ProxyGenerationException.cs" />
-    <Compile Include="TransactionItems.cs" />
-    <Compile Include="Commute.cs" />
-    <Compile Include="TransactionField.cs" />
-    <Compile Include="CommittingSubscription.cs" />
-    <Compile Include="CommitSubscription.cs" />
-    <Compile Include="CommitSubscriptionContext.cs" />
-    <Compile Include="ShieldedDictNc.cs" />
-    <Compile Include="ShieldedDict.cs" />
-    <Compile Include="ShieldedSeqNc.cs" />
-    <Compile Include="ShieldedTreeNc.cs" />
-    <Compile Include="CommitContinuation.cs" />
-    <Compile Include="TransactionContext.cs" />
-    <Compile Include="TransactionalStorage.cs" />
-    <Compile Include="ShieldedLocal.cs" />
-    <Compile Include="ContinuationCompletedException.cs" />
-  </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
-  <ItemGroup />
-  <ItemGroup>
-    <None Include="ProxyGen\README.txt" />
-  </ItemGroup>
+
 </Project>
