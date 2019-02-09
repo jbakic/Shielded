@@ -6,10 +6,10 @@ Available on [NuGet](https://www.nuget.org/packages/Shielded).
 Shielded is a full-featured implementation of Software Transactional Memory
 in .NET. It provides a system (the Shield static class) for running in-memory
 transactions, and data structures which are aware of transactions. It can also
-generate transaction-aware proxy subclasses based on a POCO class type. The
-implementation is strict, with strong guarantees on safety. It is mostly
-lock-free, using only one major lock which is held during the pre-commit
-check.
+generate transaction-aware proxy subclasses based on a POCO class type (only
+supported on the .NET Framework, not on .NET Standard). The implementation is
+strict, with strong guarantees on safety. It is mostly lock-free, using only
+one major lock which is held during the pre-commit check.
 
 Here is a small example:
 
@@ -36,8 +36,8 @@ ParallelEnumerable.Range(0, 100000)
 
 Shielded works with value types, and the language automatically does the needed
 cloning. For ref types, it only makes the reference itself transactional.
-The class should then be immutable, or, if you have a class you want to make
-transactional:
+The class should then be immutable, or, if you're targetting the full .NET Framework,
+and if you have a class you want to make transactional:
 
 ```csharp
 public class TestClass {
@@ -58,7 +58,12 @@ The Factory creates a proxy sub-class, using CodeDom, which will have transactio
 overrides for all virtual properties of the base class that are public or protected.
 Due to CodeDom limitations, the getter and setter must have the same accessibility!
 The proxy objects are thread-safe (or, at least their virtual properties are), and
-can only be changed inside transactions. Usage is simple:
+can only be changed inside transactions.
+
+Since CodeDom is not available on .NET Standard, this feature is currently not
+supported if you're not targeting the full .NET Framework.
+
+Usage is simple:
 
 ```csharp
 var id = t.Id;
