@@ -512,7 +512,11 @@ namespace Shielded
         [ThreadStatic]
         private static bool _readOld;
 
-        internal static bool ReadingOldState
+        /// <summary>
+        /// Indicates whether we're inside a <see cref="ReadOldState"/> lambda right now. Outside of transactions
+        /// just returns false.
+        /// </summary>
+        public static bool ReadingOldState
         {
             get
             {
@@ -522,10 +526,9 @@ namespace Shielded
 
         /// <summary>
         /// Executes the delegate in a context where every read returns the value as
-        /// it was at transaction opening. Writes still work, even though their
-        /// effects cannot be seen in this context. And please note that
-        /// <see cref="Shielded&lt;T&gt;.Modify"/> will not be affected and will expose
-        /// the last written value.
+        /// it was at transaction opening. Writes still work! <see cref="Shielded&lt;T&gt;.Modify"/>
+        /// ignores this and will expose the last written value. <see cref="ShieldedLocal{T}"/>
+        /// ignores this.
         /// </summary>
         public static void ReadOldState(Action act)
         {

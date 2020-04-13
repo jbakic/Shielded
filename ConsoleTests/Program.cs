@@ -360,7 +360,7 @@ namespace ConsoleTests
             int numEvents = 100;
             var betShop = new BetShop(numEvents);
             var randomizr = new Random();
-            int reportEvery = 1000;
+            int reportEvery = 10000;
             var lastReport = new Shielded<int>(0);
             var lastTime = new Shielded<DateTime>(DateTime.UtcNow);
             long time;
@@ -379,7 +379,7 @@ namespace ConsoleTests
                     });
                 }))
             {
-                time = mtTest("bet shop w/ " + numEvents, 50000, i =>
+                time = mtTest("bet shop w/ " + numEvents, 100000, i =>
                 {
                     decimal payIn = (randomizr.Next(10) + 1m) * 1;
                     int event1Id = randomizr.Next(numEvents) + 1;
@@ -1174,6 +1174,25 @@ namespace ConsoleTests
             Console.WriteLine(a);
         }
 
+        private static void DictionaryLeakTest()
+        {
+            // meant to be run with the debugger. the ShieldedDict should not create empty items if the
+            // dictionary did not contain anything for that key before, and if it did, it should clean-up
+            // the empty items when cleaning up the dict. so, if you put a breakpoint at the end of this
+            // method, the underlying ConcurrentDictionary (dict._dict) must have 0 items.
+            var dict = new ShieldedDict<int, object>();
+
+            Shield.InTransaction(() =>
+            {
+                dict[1] = new object();
+            });
+            Shield.InTransaction(() =>
+            {
+                dict.Remove(1);
+                dict.Remove(2);
+            });
+        }
+
         public static void Main(string[] args)
         {
             //TimeTests();
@@ -1184,7 +1203,7 @@ namespace ConsoleTests
 
             //ControlledRace();
 
-            //DictionaryTest();
+            DictionaryTest();
 
             //BetShopTest();
 
@@ -1194,7 +1213,7 @@ namespace ConsoleTests
 
             //DictionaryPoolTest();
 
-            SimpleOps();
+            //SimpleOps();
 
             //MultiFieldOps();
 
@@ -1211,6 +1230,8 @@ namespace ConsoleTests
             //SequentialTests.Run();
 
             //new ActorTestRun().Start();
+
+            //DictionaryLeakTest();
         }
     }
 }

@@ -291,15 +291,20 @@ namespace Shielded
                         copyList.Add(kvp.Key);
 
                     var newCurrent = kvp.Value;
-                    newCurrent.Version = (long)version;
-                    newCurrent.Older = v;
-                    lock (_dict)
-                        _dict[kvp.Key] = newCurrent;
+                    // look at this negated - if the new value is empty, and the old value is null, then we
+                    // need not add anything to the underlying dict.
+                    if (!newCurrent.Empty || v != null)
+                    {
+                        newCurrent.Version = (long)version;
+                        newCurrent.Older = v;
+                        lock (_dict)
+                            _dict[kvp.Key] = newCurrent;
+                    }
 
                     WriteStamp ws;
                     _writeStamps.TryRemove(kvp.Key, out ws);
                 }
-                if (version.HasValue)
+                if (copyList.Count > 0)
                     _copies.Enqueue(Tuple.Create((long)version, copyList));
             }
             _localDict.Release();
@@ -331,7 +336,7 @@ namespace Shielded
             // NB the "smallest transaction" and others can freely read while
             // we're doing this.
             Tuple<long, List<TKey>> item;
-            while (_copies.TryPeek(out item) && item.Item1 < smallestOpenTransactionId)
+            while (_copies.TryPeek(out item) && item.Item1 <= smallestOpenTransactionId)
             {
                 _copies.TryDequeue(out item);
                 foreach (var key in item.Item2)
@@ -453,6 +458,7 @@ namespace Shielded
             {
                 var res = !keeper.Empty;
                 keeper.Empty = true;
+                keeper.Value = default;
                 return res;
             }
             var old = CurrentTransactionOldValue(key);
