@@ -5,12 +5,12 @@
     <RootNamespace>Shielded</RootNamespace>
     <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
     <LangVersion>latest</LangVersion>
-    <AssemblyVersion>4.4.8.0</AssemblyVersion>
-    <FileVersion>4.4.8.0</FileVersion>
+    <AssemblyVersion>4.4.9.0</AssemblyVersion>
+    <FileVersion>4.4.9.0</FileVersion>
     <Description>A strict, fast and mostly lock-free Software Transactional Memory implementation for .NET</Description>
     <Authors>Josip Bakić</Authors>
     <Copyright>Josip Bakić</Copyright>
-    <Version>4.4.8</Version>
+    <Version>4.4.9</Version>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
