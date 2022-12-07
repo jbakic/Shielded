@@ -17,8 +17,7 @@ namespace ShieldedTests
         public void TransactionSafetyTest()
         {
             var a = new Shielded<int>(5);
-            Assert.AreEqual(5, a);
-
+            Assert.AreEqual(5, a.Value);
             Assert.Throws<InvalidOperationException>(() =>
                 a.Modify((ref int n) => n = 10));
 
@@ -38,7 +37,7 @@ namespace ShieldedTests
 
                 Assert.IsTrue(Shield.IsInTransaction);
                 Assert.AreEqual(5, x1);
-                Assert.AreEqual(20, a);
+                Assert.AreEqual(20, a.Value);
             });
             Assert.IsFalse(Shield.IsInTransaction);
 
@@ -51,7 +50,7 @@ namespace ShieldedTests
             t2.Start();
             t2.Join();
             Assert.AreEqual(20, x2);
-            Assert.AreEqual(20, a);
+            Assert.AreEqual(20, a.Value);
         }
 
         [Test]
@@ -85,7 +84,7 @@ namespace ShieldedTests
                     }
                 }, TaskCreationOptions.LongRunning)).ToArray());
 
-            Assert.AreEqual(4950, x);
+            Assert.AreEqual(4950, x.Value);
             if (transactionCount == 100)
                 Assert.Inconclusive();
         }
@@ -251,12 +250,12 @@ namespace ShieldedTests
                 t2.Start();
                 t2.Join();
             });
-            Assert.AreEqual(0, eventCount);
+            Assert.AreEqual(0, eventCount.Value);
 
             Shield.InTransaction(() => {
                 a.Modify((ref int x) => x++);
             });
-            Assert.AreEqual(1, eventCount);
+            Assert.AreEqual(1, eventCount.Value);
 
             Thread tUnsub = null;
             Shield.InTransaction(() => {
@@ -277,10 +276,10 @@ namespace ShieldedTests
                 }
             });
             // the other thread must still see the subscription...
-            Assert.AreEqual(3, eventCount);
+            Assert.AreEqual(3, eventCount.Value);
 
             Shield.InTransaction(() => a.Modify((ref int x) => x++));
-            Assert.AreEqual(3, eventCount);
+            Assert.AreEqual(3, eventCount.Value);
         }
 
         [Test]
@@ -326,7 +325,7 @@ namespace ShieldedTests
 
                 Assert.IsTrue(cont.Completed);
                 Assert.IsTrue(cont.Committed);
-                Assert.AreEqual(1, a);
+                Assert.AreEqual(1, a.Value);
             }
         }
 
@@ -347,7 +346,7 @@ namespace ShieldedTests
 
                 Assert.IsTrue(cont.Completed);
                 Assert.IsFalse(cont.Committed);
-                Assert.AreEqual(0, a);
+                Assert.AreEqual(0, a.Value);
             }
         }
 
@@ -366,7 +365,7 @@ namespace ShieldedTests
 
                 Assert.IsTrue(cont.Completed);
                 Assert.IsFalse(cont.Committed);
-                Assert.AreEqual(0, a);
+                Assert.AreEqual(0, a.Value);
             }
         }
     }

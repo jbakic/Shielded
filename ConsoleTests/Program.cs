@@ -11,16 +11,23 @@ using Shielded.ProxyGen;
 
 namespace ConsoleTests
 {
-    public class SimpleEntity
+    [Shielded]
+    public class SimpleEntity : ICommutable, IChangedNotify
     {
         public virtual int Id { get; set; }
-        // by convention, overriden to execute the action as a commutable, non-conflicting operation
-        public virtual void Commute(Action a) { a(); }
-        // ...and this one gets called on every change. also called from commutes, in which case trying
-        // to access any other shielded field will throw.
-        protected void OnChanged(string property) { }
+
+        public virtual void Commute(Action a)
+        {
+            a();
+        }
+
+        public void OnChanged(string property)
+        {
+            //
+        }
     }
 
+    [Shielded]
     public class SmallEntity
     {
         public virtual int Id { get; set; }
@@ -1197,13 +1204,13 @@ namespace ConsoleTests
         {
             //TimeTests();
 
-            //ParallelAddWithSaving();
+            ParallelAddWithSaving();
 
             //OneTransaction();
 
             //ControlledRace();
 
-            DictionaryTest();
+            //DictionaryTest();
 
             //BetShopTest();
 

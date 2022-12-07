@@ -18,13 +18,13 @@ namespace ShieldedTests
             var a = new Shielded<int>(10);
             Shield.InTransaction(() => {
                 a.Value = 20;
-                Assert.AreEqual(20, a);
+                Assert.AreEqual(20, a.Value);
                 Assert.IsFalse(Shield.ReadingOldState);
                 Shield.ReadOldState(() => {
-                    Assert.AreEqual(10, a);
+                    Assert.AreEqual(10, a.Value);
                     Assert.IsTrue(Shield.ReadingOldState);
                     a.Value = 30;
-                    Assert.AreEqual(10, a);
+                    Assert.AreEqual(10, a.Value);
                     a.Modify((ref int x) =>
                         Assert.AreEqual(30, x));
                 });

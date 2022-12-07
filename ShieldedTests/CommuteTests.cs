@@ -4,6 +4,19 @@ using Shielded;
 using System.Linq;
 using System.Threading;
 
+//namespace NUnit.Framework
+//{
+//    public abstract partial class Assert
+//    {
+//        public static void AreEqual(int expected, int actual)
+//        {
+//            //Assert.AreEqual(expected: val1, actual: val2);
+//            //Assert.That(actual, Is.EqualTo(expected), null, null);
+//        }
+//    }
+//}
+
+
 namespace ShieldedTests
 {
     [TestFixture]
@@ -15,20 +28,20 @@ namespace ShieldedTests
             var a = new Shielded<int>();
 
             Shield.InTransaction(() => a.Commute((ref int n) => n++));
-            Assert.AreEqual(1, a);
+            Assert.AreEqual(1, a.Value);
 
             Shield.InTransaction(() => {
-                Assert.AreEqual(1, a);
+                Assert.AreEqual(1, a.Value);
                 a.Commute((ref int n) => n++);
-                Assert.AreEqual(2, a);
+                Assert.AreEqual(2, a.Value);
             });
-            Assert.AreEqual(2, a);
+            Assert.AreEqual(2, a.Value);
 
             Shield.InTransaction(() => {
                 a.Commute((ref int n) => n++);
-                Assert.AreEqual(3, a);
+                Assert.AreEqual(3, a.Value);
             });
-            Assert.AreEqual(3, a);
+            Assert.AreEqual(3, a.Value);
 
             int transactionCount = 0, commuteCount = 0;
             ParallelEnumerable.Repeat(1, 100).ForAll(i => Shield.InTransaction(() => {
@@ -39,7 +52,7 @@ namespace ShieldedTests
                     n++;
                 });
             }));
-            Assert.AreEqual(103, a);
+            Assert.AreEqual(103, a.Value);
             // commutes never conflict (!)
             Assert.AreEqual(100, transactionCount);
             Assert.Greater(commuteCount, 100);
@@ -48,7 +61,7 @@ namespace ShieldedTests
                 a.Commute((ref int n) => n -= 3);
                 a.Commute((ref int n) => n *= 2);
             });
-            Assert.AreEqual(200, a);
+            Assert.AreEqual(200, a.Value);
         }
 
         [Test]
@@ -71,7 +84,7 @@ namespace ShieldedTests
                 // would allow a degenerated commute to execute before checking the lock!
                 int x = a;
             }));
-            Assert.AreEqual(numInc, a);
+            Assert.AreEqual(numInc, a.Value);
             // degenerated commutes conflict, which means transaction will repeat. conflict
             // may be detected before the commute lambda actually gets to execute, so the
             // trans count can be greater than commute count.

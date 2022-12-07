@@ -2,6 +2,23 @@ using System;
 
 namespace Shielded
 {
+
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
+    public class ShieldedAttribute : Attribute { };
+
+    public interface ICommutable
+    {
+        // by convention, overriden to execute the action as a commutable, non-conflicting operation
+        void Commute(Action a);
+    }
+
+    public interface IChangedNotify
+    {
+        // ...and this one gets called on every change. also called from commutes, in which case trying
+        // to access any other shielded field will throw.
+        void OnChanged(string property);
+    }
+
     /// <summary>
     /// The <see cref="Shield"/> class tracks implementors of this interface.
     /// </summary>

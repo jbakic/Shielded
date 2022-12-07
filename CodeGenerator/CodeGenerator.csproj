@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Template\ShieldedPoco.liquid" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Scriban" Version="5.5.1" GeneratePathProperty="true" PrivateAssets="all"/>
+	<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.3">
+		<PrivateAssets>all</PrivateAssets>
+		<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+	</PackageReference>
+	<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.1.0" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="$(PKGScriban)\lib\netstandard2.0\Scriban.dll" Visible="false" />
+		<EmbeddedResource Include="$(ProjectPath)\..\Template\ShieldedPoco.liquid" Visible="true" />
+	</ItemGroup>
+
+</Project>

@@ -123,7 +123,7 @@ namespace ShieldedTests
             Assert.AreEqual(2, transactionCount);
             Assert.AreEqual("testing conflict...", newTest.Name);
             // it was first "conflicting", then "testing conflict..."
-            Assert.AreEqual(2, newTest.NameChanges);
+            Assert.AreEqual(2, newTest.NameChanges.Value);
             Assert.AreEqual(3, newTest.AnyPropertyChanges);
         }
 

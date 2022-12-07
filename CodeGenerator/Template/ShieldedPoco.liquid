@@ -1,0 +1,49 @@
+{{~ for use in usingspaces ~}}
+using {{use}};
+{{~ end ~}}
+
+namespace {{space}}
+{
+    internal class @{{name}} : {{super}}
+    { 
+		private Shielded.Shielded<@{{structname}}> _data;
+        
+        public @{{name}}()
+        {
+            this._data = new Shielded.Shielded<{{structname}}>(this);
+        }
+        
+        {{~for prop in props~}}
+        {{prop.declare}}
+        {
+            get
+            {
+                return this._data.Value.{{prop.name}};
+            }
+            set
+            {
+                base.{{prop.name}} = value;
+                _data.Modify((ref @{{structname}} a) => a.@{{prop.name}} = value);
+                {{~if ischangednotify~}}
+                this.OnChanged("{{prop.name}}");
+                {{~end~}}
+            }
+        }
+        {{~end~}}
+
+        {{~if iscommutable~}}
+        public override void Commute(System.Action a)
+        {
+            this._data.Commute(a);
+        }
+        {{~end~}}
+        
+        private struct @{{structname}}
+        {
+            {{~for prop in props~}}
+            {{prop.structdeclare}};
+            {{~end~}}
+        }
+	   
+	}
+}

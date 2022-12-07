@@ -39,7 +39,7 @@ namespace ShieldedTests
                     catch (InvalidOperationException) { }
                 }, TaskCreationOptions.LongRunning)).ToArray());
             Assert.AreEqual(50, preCommitFails);
-            Assert.AreEqual(2550, x);
+            Assert.AreEqual(2550, x.Value);
             if (transactionCount == 100)
                 Assert.Inconclusive();
         }
@@ -120,7 +120,7 @@ namespace ShieldedTests
             slowThread1.Join();
 
             Assert.Greater(slowThread1Repeats, 1);
-            Assert.AreEqual(999, x);
+            Assert.AreEqual(999, x.Value);
 
             // now, we introduce prioritization, using a simple lock
             var lockObj = new object();
@@ -181,7 +181,7 @@ namespace ShieldedTests
             slowThread2.Join();
 
             Assert.AreEqual(1, slowThread2Repeats);
-            Assert.AreEqual(999, x);
+            Assert.AreEqual(999, x.Value);
         }
 
         [Test]
@@ -226,7 +226,7 @@ namespace ShieldedTests
                 });
             thread.Join();
 
-            Assert.AreEqual(0, failCommitCount);
+            Assert.AreEqual(0, failCommitCount.Value);
             Assert.AreEqual(0, failVisibleCount);
         }
 
@@ -237,8 +237,8 @@ namespace ShieldedTests
             var b = new Shielded<int>();
             using (Shield.PreCommit(() => a == 0 || true, () => b.Commute((ref int n) => n++)))
                 Shield.InTransaction(() => a.Value = 1);
-            Assert.AreEqual(1, a);
-            Assert.AreEqual(1, b);
+            Assert.AreEqual(1, a.Value);
+            Assert.AreEqual(1, b.Value);
         }
     }
 }

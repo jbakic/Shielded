@@ -29,7 +29,7 @@ namespace ShieldedTests
             }
 
             Assert.AreEqual(1, commitCount);
-            Assert.AreEqual(0, x);
+            Assert.AreEqual(0, x.Value);
         }
 
         [Test]
@@ -171,13 +171,13 @@ namespace ShieldedTests
             using (Shield.WhenCommitting(a, _ => Assert.Fail()))
             {
                 Shield.InTransaction(() => b.Value = 10);
-                Assert.AreEqual(10, b);
+                Assert.AreEqual(10, b.Value);
             }
             var counter = 0;
             using (Shield.WhenCommitting(a, _ => counter++))
             {
                 Shield.InTransaction(() => a.Value = 10);
-                Assert.AreEqual(10, a);
+                Assert.AreEqual(10, a.Value);
                 Assert.AreEqual(1, counter);
             }
         }
