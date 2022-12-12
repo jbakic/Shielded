@@ -10,8 +10,7 @@ namespace CodeGenerator.Utils
 
         public static string LoadTemplate(string resourceName)
         {
-            string[] resourceNames = Assembly.GetExecutingAssembly().GetManifestResourceNames();
-            resourceName = $"CodeGenerator.Template.{resourceName}";
+            resourceName = $"Shielded.SourceGenerator.Template.{resourceName}";
             using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
             {
                 if (stream != null)
@@ -35,7 +34,7 @@ namespace CodeGenerator.Utils
                     return loadedAssembly;
                 }
 
-                string resourceName = $"CodeGenerator.{name.Name}.dll";
+                string resourceName = $"Shielded.SourceGenerator.{name.Name}.dll";
                 using (Stream resourceStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
                 {
                     if (resourceStream == null)

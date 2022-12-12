@@ -3,6 +3,9 @@ using System;
 namespace Shielded
 {
 
+    /// <summary>
+    /// Generate transaction-aware proxy subclasses for this POCO class
+    /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
     public class ShieldedAttribute : Attribute { };
 

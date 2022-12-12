@@ -1,14 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading;
 using Shielded;
 using Shielded.ProxyGen;
 using System.Diagnostics;
 
 namespace ConsoleTests
 {
+    [Shielded]
     public class Event
     {
         public virtual int Id { get; set; }
@@ -18,6 +14,7 @@ namespace ConsoleTests
             new ShieldedSeq<BetOffer>();
     }
 
+    [Shielded]
     public class BetOffer
     {
         public virtual int Id { get; set; }
@@ -26,6 +23,7 @@ namespace ConsoleTests
         public virtual decimal Odds { get; set; }
     }
 
+    [Shielded]
     public class Ticket
     {
         public virtual int Id { get; set; }
@@ -34,6 +32,7 @@ namespace ConsoleTests
         public virtual Bet[] Bets { get; set; }
     }
 
+    [Shielded]
     public class Bet
     {
         public virtual BetOffer Offer { get; set; }

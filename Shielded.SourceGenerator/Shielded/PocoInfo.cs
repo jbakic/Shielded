@@ -1,9 +1,11 @@
 ﻿using System.Collections.Generic;
-using System.Text;
 
 namespace CodeGenerator.Shielded
 {
 
+    /// <summary>
+    /// Properties can not use CamelCase, due to scriban limitations
+    /// </summary>
     public class PropertyInfo
     {
         public string Name { get; set; }
@@ -12,11 +14,18 @@ namespace CodeGenerator.Shielded
 
         public string Modifier { get; set; } = "public override ";
 
+        public string Gettermodifier { get; set; }
+
+        public string Settermodifier { get; set; }
+
         public string Declare { get { return Modifier + Type + " " + Name; } }
 
         public string Structdeclare { get { return "public " + Type + " " + Name; } }
     }
 
+    /// <summary>
+    /// Properties can not use CamelCase, due to scriban limitations
+    /// </summary>
     public class PocoInfo
     {
         public string Space { get; set; }

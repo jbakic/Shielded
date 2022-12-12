@@ -21,20 +21,20 @@ namespace ShieldedTests
             Shield.InTransaction(() => {
                 local.Value = 10;
                 Assert.IsTrue(local.HasValue);
-                Assert.AreEqual(10, local.Value);
+                AssertExt.AreEqual(10, local);
 
                 var t = new Thread(() => {
                     Shield.InTransaction(() => {
                         Assert.IsFalse(local.HasValue);
                         local.Value = 20;
                         Assert.IsTrue(local.HasValue);
-                        Assert.AreEqual(20, local.Value);
+                        AssertExt.AreEqual(20, local);
                     });
                 });
                 t.Start();
                 t.Join();
 
-                Assert.AreEqual(10, local.Value);
+                AssertExt.AreEqual(10, local);
                 local.Release();
                 Assert.IsFalse(local.HasValue);
                 Assert.Throws<InvalidOperationException>(() => { var i = local.Value; });
@@ -50,7 +50,7 @@ namespace ShieldedTests
             var didItRun = false;
             using (Shield.WhenCommitting(_ => {
                 didItRun = true;
-                Assert.AreEqual(10, local.Value);
+                AssertExt.AreEqual(10, local);
             }))
             {
                 Shield.InTransaction(() => {
@@ -65,7 +65,7 @@ namespace ShieldedTests
             }))
             {
                 continuation.InContext(() =>
-                    Assert.AreEqual(20, local.Value));
+                    AssertExt.AreEqual(20, local));
             }
 
             didItRun = false;
@@ -73,7 +73,7 @@ namespace ShieldedTests
                 local.Value = 30;
                 Shield.SyncSideEffect(() => {
                     didItRun = true;
-                    Assert.AreEqual(30, local.Value);
+                    AssertExt.AreEqual(30, local);
                 });
             });
             Assert.IsTrue(didItRun);

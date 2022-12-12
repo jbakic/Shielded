@@ -16,15 +16,9 @@ namespace ConsoleTests
     {
         public virtual int Id { get; set; }
 
-        public virtual void Commute(Action a)
-        {
-            a();
-        }
+        public virtual void Commute(Action a) { a(); }
 
-        public void OnChanged(string property)
-        {
-            //
-        }
+        public void OnChanged(string property) { }
     }
 
     [Shielded]
@@ -1204,7 +1198,7 @@ namespace ConsoleTests
         {
             //TimeTests();
 
-            ParallelAddWithSaving();
+            //ParallelAddWithSaving();
 
             //OneTransaction();
 
@@ -1212,7 +1206,7 @@ namespace ConsoleTests
 
             //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
             //BetShopPoolTest();
 

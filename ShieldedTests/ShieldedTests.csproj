@@ -1,9 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <Nullable>disable</Nullable>
 
     <IsPackable>false</IsPackable>
   </PropertyGroup>
@@ -16,9 +16,20 @@
     <PackageReference Include="coverlet.collector" Version="3.1.2" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\ExternRefForProxyTest\ExternRefForProxyTest.csproj" />
-    <ProjectReference Include="..\Shielded\Shielded.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\ExternRefForProxyTest\ExternRefForProxyTest.csproj" />
+		<ProjectReference Include="..\Shielded\Shielded.csproj" />
+		<ProjectReference Include="..\Shielded.SourceGenerator\Shielded.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+	</ItemGroup>
+
+	<!--if need gen files on the disk open blow comment-->
+	<PropertyGroup>
+		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+		<CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)\GeneratedFiles</CompilerGeneratedFilesOutputPath>
+	</PropertyGroup>
+
+	<Target Name="CleanSourceGeneratedFiles" AfterTargets="Clean">
+		<RemoveDir Directories="$(BaseIntermediateOutputPath)\GeneratedFiles" />
+	</Target>
 
 </Project>

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -62,6 +63,61 @@ namespace CodeGenerator.Utils
 
             var result = sb.ToString();
             return result;
+        }
+
+        /// <summary>
+        /// Find self or ancestors if has [ShieldAttribute]
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="semanticModel"></param>
+        /// <param name="attributeName"></param>
+        /// <returns></returns>
+        public static bool HasAttribute(this ClassDeclarationSyntax source, SemanticModel semanticModel, string attributeName)
+        {
+            INamedTypeSymbol typeSymbol = semanticModel.GetDeclaredSymbol(source);
+            do
+            {
+                foreach (var att in typeSymbol.GetAttributes())
+                {
+                    if (att.AttributeClass.ToString().Equals(attributeName))
+                    {
+                        return true;
+                    }
+                }
+                typeSymbol = typeSymbol.BaseType;
+            }
+            while (typeSymbol != null);
+            return false;
+        }
+
+        /// <summary>
+        /// Get all properties include ancestor's
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="semanticModel"></param>
+        /// <returns></returns>
+        public static List<IPropertySymbol> GetAllProperties(this ClassDeclarationSyntax source, SemanticModel semanticModel)
+        {
+            List<IPropertySymbol> properties = new List<IPropertySymbol>();
+            INamedTypeSymbol typeSymbol = semanticModel.GetDeclaredSymbol(source);
+            do
+            {
+                var result = typeSymbol.GetMembers().Where(s => s.Kind == SymbolKind.Property).ToList();
+                foreach (var p in result)
+                {
+                    if (p is IPropertySymbol ps)
+                        properties.Add(ps);
+                }
+                typeSymbol = typeSymbol.BaseType;
+            }
+            while (typeSymbol != null);
+            return properties;
+        }
+
+        public static bool IsPublic(this IPropertySymbol p)
+        {
+            return p.DeclaredAccessibility.ToString().ToLower().Equals("public");
+            //return (p.GetMethod != null) && (p.SetMethod != null) && !p.Parameters.Any();
         }
 
 

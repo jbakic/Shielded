@@ -34,21 +34,21 @@ namespace ShieldedTests
                 Assert.AreEqual(1, runCount);
                 Assert.AreEqual(0, insideIfCount);
 
-                cont.InContext(() => Assert.AreEqual(20, a.Value));
-                Assert.AreEqual(5, a.Value);
+                cont.InContext(() => AssertExt.AreEqual(20, a));
+                AssertExt.AreEqual(5, a);
                 var t2 = new Thread(cont.Commit);
                 t2.Start();
                 t2.Join();
                 t.Join();
                 Assert.AreEqual(1, runCount);
                 Assert.AreEqual(0, insideIfCount);
-                Assert.AreEqual(20, a.Value);
+                AssertExt.AreEqual(20, a);
 
                 Assert.IsFalse(cont.TryCommit());
                 Assert.IsFalse(cont.TryRollback());
                 Assert.IsTrue(cont.Committed);
             }
-            Assert.AreEqual(20, a.Value);
+            AssertExt.AreEqual(20, a);
         }
 
         [Test]
@@ -69,7 +69,7 @@ namespace ShieldedTests
                 var sw = Stopwatch.StartNew();
                 // this causes a simple deadlock! the a field is fully locked, even reading blocks on it.
                 // but the locks are released after 200 ms, and this transaction just continues..
-                Shield.InTransaction(() => Assert.AreEqual(5, a.Value));
+                Shield.InTransaction(() => AssertExt.AreEqual(5, a));
 
                 var time = sw.ElapsedMilliseconds;
                 Assert.Greater(time, 150);
@@ -82,7 +82,7 @@ namespace ShieldedTests
                 Assert.IsFalse(cont.TryRollback());
                 Assert.IsFalse(cont.Committed);
             }
-            Assert.AreEqual(5, a.Value);
+            AssertExt.AreEqual(5, a);
         }
 
         [Test]

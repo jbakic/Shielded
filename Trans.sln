@@ -9,9 +9,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleTests", "ConsoleTest
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExternRefForProxyTest", "ExternRefForProxyTest\ExternRefForProxyTest.csproj", "{F19F07EF-5D0A-4DE0-BD23-983BD1D15921}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeGenerator", "CodeGenerator\CodeGenerator.csproj", "{76524822-09D7-4F84-9449-8F6476E61268}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shielded.SourceGenerator", "Shielded.SourceGenerator\Shielded.SourceGenerator.csproj", "{76524822-09D7-4F84-9449-8F6476E61268}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShieldedTests", "ShieldedTests\ShieldedTests.csproj", "{B8B17650-90A5-4128-83EB-EFD1E30CE130}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ShieldedTests", "ShieldedTests\ShieldedTests.csproj", "{B8B17650-90A5-4128-83EB-EFD1E30CE130}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

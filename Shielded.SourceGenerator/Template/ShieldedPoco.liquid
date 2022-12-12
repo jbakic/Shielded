@@ -4,11 +4,11 @@ using {{use}};
 
 namespace {{space}}
 {
-    internal class @{{name}} : {{super}}
+    internal class {{name}} : {{super}}
     { 
-		private Shielded.Shielded<@{{structname}}> _data;
+		private Shielded.Shielded<{{structname}}> _data;
         
-        public @{{name}}()
+        public {{name}}()
         {
             this._data = new Shielded.Shielded<{{structname}}>(this);
         }
@@ -16,14 +16,14 @@ namespace {{space}}
         {{~for prop in props~}}
         {{prop.declare}}
         {
-            get
+            {{prop.gettermodifier}} get
             {
                 return this._data.Value.{{prop.name}};
             }
-            set
+            {{prop.settermodifier}} set
             {
                 base.{{prop.name}} = value;
-                _data.Modify((ref @{{structname}} a) => a.@{{prop.name}} = value);
+                _data.Modify((ref {{structname}} a) => a.{{prop.name}} = value);
                 {{~if ischangednotify~}}
                 this.OnChanged("{{prop.name}}");
                 {{~end~}}
@@ -38,7 +38,7 @@ namespace {{space}}
         }
         {{~end~}}
         
-        private struct @{{structname}}
+        private struct {{structname}}
         {
             {{~for prop in props~}}
             {{prop.structdeclare}};
