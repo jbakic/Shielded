@@ -100,10 +100,10 @@ namespace CodeGenerator.Shielded
                     var props = agent.GetAllProperties(semanticModel);
                     foreach (var p in props)
                     {
-                        string getterModifer = p.GetMethod.DeclaredAccessibility.ToString().ToLower();
+                        string getterModifer = p.GetMethod.GetModifier();
                         if (getterModifer.Equals("public"))
                             getterModifer = "";
-                        string setterModifer = p.SetMethod.DeclaredAccessibility.ToString().ToLower();
+                        string setterModifer = p.SetMethod.GetModifier();
                         if (setterModifer.Equals("public"))
                             setterModifer = "";
 

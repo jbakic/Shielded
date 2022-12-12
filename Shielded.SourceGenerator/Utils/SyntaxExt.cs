@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace CodeGenerator.Utils
 {
-    public static class ClassDeclarationSyntaxExt
+    public static class SyntaxExt
     {
         public const string NESTED_CLASS_DELIMITER = "+";
         public const string NAMESPACE_CLASS_DELIMITER = ".";
@@ -114,12 +114,15 @@ namespace CodeGenerator.Utils
             return properties;
         }
 
-        public static bool IsPublic(this IPropertySymbol p)
+        public static bool IsPublic(this ISymbol symbol)
         {
-            return p.DeclaredAccessibility.ToString().ToLower().Equals("public");
-            //return (p.GetMethod != null) && (p.SetMethod != null) && !p.Parameters.Any();
+            return symbol.DeclaredAccessibility.ToString().ToLower().Equals("public");
         }
 
+        public static string GetModifier(this ISymbol symbol)
+        {
+            return symbol.DeclaredAccessibility.ToString().ToLower();
+        }
 
     }
 }

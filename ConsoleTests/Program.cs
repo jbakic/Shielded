@@ -28,6 +28,17 @@ namespace ConsoleTests
         public virtual int Value { get; set; }
     }
 
+    /// <summary>
+    /// Test for non insist getter setter
+    /// </summary>
+    [Shielded]
+    public class SmallEntity2
+    {
+        public virtual int Id { get; set; }
+        public virtual int Value { get; protected set; }
+    }
+
+
     class MainClass
     {
         private static Stopwatch _timer;
