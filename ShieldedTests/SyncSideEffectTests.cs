@@ -20,11 +20,11 @@ namespace ShieldedTests
                     var t = new Thread(() => {
                         Assert.IsFalse(Shield.IsInTransaction);
                         // attempting to do this in a transaction would cause a deadlock!
-                        Assert.AreEqual(0, a);
+                        AssertExt.AreEqual(0, a);
                     });
                     t.Start();
                     t.Join();
-                    Assert.AreEqual(10, a);
+                    AssertExt.AreEqual(10, a);
                 });
             });
         }

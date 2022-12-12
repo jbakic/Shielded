@@ -11,21 +11,33 @@ using Shielded.ProxyGen;
 
 namespace ConsoleTests
 {
-    public class SimpleEntity
+    [Shielded]
+    public class SimpleEntity : ICommutable, IChangedNotify
     {
         public virtual int Id { get; set; }
-        // by convention, overriden to execute the action as a commutable, non-conflicting operation
+
         public virtual void Commute(Action a) { a(); }
-        // ...and this one gets called on every change. also called from commutes, in which case trying
-        // to access any other shielded field will throw.
-        protected void OnChanged(string property) { }
+
+        public void OnChanged(string property) { }
     }
 
+    [Shielded]
     public class SmallEntity
     {
         public virtual int Id { get; set; }
         public virtual int Value { get; set; }
     }
+
+    /// <summary>
+    /// Test for non insist getter setter
+    /// </summary>
+    [Shielded]
+    public class SmallEntity2
+    {
+        public virtual int Id { get; set; }
+        public virtual int Value { get; protected set; }
+    }
+
 
     class MainClass
     {
@@ -1203,9 +1215,9 @@ namespace ConsoleTests
 
             //ControlledRace();
 
-            DictionaryTest();
+            //DictionaryTest();
 
-            //BetShopTest();
+            BetShopTest();
 
             //BetShopPoolTest();
 

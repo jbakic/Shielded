@@ -17,7 +17,7 @@ namespace ShieldedTests
         public void TransactionSafetyTest()
         {
             var a = new Shielded<int>(5);
-            Assert.AreEqual(5, a);
+            AssertExt.AreEqual(5, a);
 
             Assert.Throws<InvalidOperationException>(() =>
                 a.Modify((ref int n) => n = 10));
@@ -37,8 +37,8 @@ namespace ShieldedTests
                 t.Join();
 
                 Assert.IsTrue(Shield.IsInTransaction);
-                Assert.AreEqual(5, x1);
-                Assert.AreEqual(20, a);
+                AssertExt.AreEqual(5, x1);
+                AssertExt.AreEqual(20, a);
             });
             Assert.IsFalse(Shield.IsInTransaction);
 
@@ -50,8 +50,8 @@ namespace ShieldedTests
             });
             t2.Start();
             t2.Join();
-            Assert.AreEqual(20, x2);
-            Assert.AreEqual(20, a);
+            AssertExt.AreEqual(20, x2);
+            AssertExt.AreEqual(20, a);
         }
 
         [Test]
@@ -75,17 +75,17 @@ namespace ShieldedTests
                             if (i == 100)
                                 throw new InvalidOperationException();
                         });
-                        Assert.AreNotEqual(100, i);
+                        AssertExt.AreNotEqual(100, i);
                         Assert.IsTrue(committed);
                     }
                     catch
                     {
-                        Assert.AreEqual(100, i);
+                        AssertExt.AreEqual(100, i);
                         Assert.IsFalse(committed);
                     }
                 }, TaskCreationOptions.LongRunning)).ToArray());
 
-            Assert.AreEqual(4950, x);
+            AssertExt.AreEqual(4950, x);
             if (transactionCount == 100)
                 Assert.Inconclusive();
         }
@@ -110,8 +110,8 @@ namespace ShieldedTests
                                 dogs.Modify((ref int n) => n++);
                         }
                     }), TaskCreationOptions.LongRunning)).ToArray());
-            Assert.AreEqual(3, cats + dogs);
-            Assert.AreEqual(3, transactionCount);
+            AssertExt.AreEqual(3, cats + dogs);
+            AssertExt.AreEqual(3, transactionCount);
         }
 
         class IgnoreMe : Exception {}
@@ -142,7 +142,7 @@ namespace ShieldedTests
             }
             catch (AggregateException aggr)
             {
-                Assert.AreEqual(1, aggr.InnerExceptions.Count);
+                AssertExt.AreEqual(1, aggr.InnerExceptions.Count);
                 Assert.AreEqual(typeof(IgnoreMe), aggr.InnerException.GetType());
             }
 
@@ -251,12 +251,12 @@ namespace ShieldedTests
                 t2.Start();
                 t2.Join();
             });
-            Assert.AreEqual(0, eventCount);
+            AssertExt.AreEqual(0, eventCount);
 
             Shield.InTransaction(() => {
                 a.Modify((ref int x) => x++);
             });
-            Assert.AreEqual(1, eventCount);
+            AssertExt.AreEqual(1, eventCount);
 
             Thread tUnsub = null;
             Shield.InTransaction(() => {
@@ -277,10 +277,10 @@ namespace ShieldedTests
                 }
             });
             // the other thread must still see the subscription...
-            Assert.AreEqual(3, eventCount);
+            AssertExt.AreEqual(3, eventCount);
 
             Shield.InTransaction(() => a.Modify((ref int x) => x++));
-            Assert.AreEqual(3, eventCount);
+            AssertExt.AreEqual(3, eventCount);
         }
 
         [Test]
@@ -326,7 +326,7 @@ namespace ShieldedTests
 
                 Assert.IsTrue(cont.Completed);
                 Assert.IsTrue(cont.Committed);
-                Assert.AreEqual(1, a);
+                AssertExt.AreEqual(1, a);
             }
         }
 
@@ -347,7 +347,7 @@ namespace ShieldedTests
 
                 Assert.IsTrue(cont.Completed);
                 Assert.IsFalse(cont.Committed);
-                Assert.AreEqual(0, a);
+                AssertExt.AreEqual(0, a);
             }
         }
 
@@ -366,7 +366,7 @@ namespace ShieldedTests
 
                 Assert.IsTrue(cont.Completed);
                 Assert.IsFalse(cont.Committed);
-                Assert.AreEqual(0, a);
+                AssertExt.AreEqual(0, a);
             }
         }
     }
